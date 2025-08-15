@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Building, Clock, Package, ShoppingCart, Calendar, Settings } from "lucide-react";
 import { Spreadsheet } from "@/components/Spreadsheet";
 
@@ -102,10 +103,8 @@ const sampleStores = {
 export default function StoreManagement() {
   const { storeId } = useParams<{ storeId: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('hours');
 
   const store = storeId ? sampleStores[storeId as keyof typeof sampleStores] : null;
-  const currentTab = tabs.find(tab => tab.id === activeTab);
 
   if (!store || !storeId) {
     return (
@@ -147,39 +146,44 @@ export default function StoreManagement() {
         </div>
       </header>
 
-      {/* Tabs */}
-      <div className="border-b bg-card/30 backdrop-blur-sm">
-        <div className="container mx-auto px-6">
-          <div className="flex space-x-1 overflow-x-auto">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`tab-button whitespace-nowrap ${
-                    activeTab === tab.id ? 'active' : ''
-                  }`}
-                >
-                  <Icon className="w-4 h-4 mr-2" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
       {/* Content */}
       <main className="container mx-auto px-6 py-8">
-        {currentTab && (
-          <Spreadsheet
-            storeId={storeId}
-            tabName={currentTab.id}
-            columns={currentTab.columns}
-            initialData={currentTab.initialData}
-          />
-        )}
+        <Tabs defaultValue="hours" className="w-full">
+          {/* Tab List - Google Sheets style bottom tabs */}
+          <div className="bg-background border border-border rounded-lg overflow-hidden">
+            <div className="h-[600px]">
+              {tabs.map((tab) => (
+                <TabsContent key={tab.id} value={tab.id} className="mt-0 h-full">
+                  <Spreadsheet
+                    storeId={storeId || ''}
+                    tabName={tab.id}
+                    columns={tab.columns}
+                    initialData={tab.initialData}
+                  />
+                </TabsContent>
+              ))}
+            </div>
+            
+            {/* Bottom tab navigation - Google Sheets style */}
+            <div className="border-t border-border bg-muted/30">
+              <TabsList className="h-auto bg-transparent p-0 w-full justify-start">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <TabsTrigger
+                      key={tab.id}
+                      value={tab.id}
+                      className="h-10 rounded-none border-r border-border last:border-r-0 data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-b-primary gap-2 px-4"
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="text-sm font-medium">{tab.label}</span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </div>
+          </div>
+        </Tabs>
       </main>
     </div>
   );

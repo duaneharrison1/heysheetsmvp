@@ -103,12 +103,25 @@
   }
 
   .spreadsheet-cell {
-    @apply border border-border bg-background min-h-[40px] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+    @apply border-0 bg-background min-h-[36px] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
     transition: var(--transition-smooth);
   }
 
   .spreadsheet-header {
-    @apply bg-muted font-medium text-muted-foreground border border-border px-3 py-2 text-sm;
+    @apply bg-muted/80 font-medium text-muted-foreground border-0 px-3 py-2 text-xs;
+  }
+
+  .spreadsheet-container {
+    @apply bg-background border border-border rounded-lg overflow-hidden;
+    box-shadow: var(--shadow-spreadsheet);
+  }
+
+  .spreadsheet-row {
+    @apply flex hover:bg-muted/20 border-b border-border;
+  }
+
+  .spreadsheet-row:last-child {
+    @apply border-b-0;
   }
 
   .tab-button {
