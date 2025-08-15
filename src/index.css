@@ -2,95 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Business Management Platform Design System */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 240 10% 98%;
     --foreground: 222.2 84% 4.9%;
+    
+    /* Business theme colors */
+    --primary: 250 70% 60%;
+    --primary-glow: 250 80% 75%;
+    --primary-dark: 250 60% 45%;
+    --primary-foreground: 0 0% 100%;
 
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
+    --card-hover: 250 20% 96%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
+    --secondary: 240 15% 94%;
     --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 210 40% 96.1%;
+    --muted: 240 10% 92%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 250 100% 95%;
+    --accent-foreground: 250 70% 30%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 250 70% 60%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Business specific colors */
+    --business-salon: 320 65% 60%;
+    --business-coach: 200 70% 55%;
+    --business-craft: 25 80% 60%;
+    --business-education: 150 60% 50%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(250 70% 60%) 0%, hsl(250 80% 75%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(250 70% 60%) 0%, hsl(280 60% 65%) 50%, hsl(250 80% 75%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(250 20% 98%) 100%);
+    
+    /* Shadows */
+    --shadow-card: 0 4px 20px -2px hsl(250 70% 60% / 0.1);
+    --shadow-card-hover: 0 8px 30px -4px hsl(250 70% 60% / 0.2);
+    --shadow-spreadsheet: 0 2px 10px -2px hsl(0 0% 0% / 0.1);
+    
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 240 10% 8%;
     --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
+    --card: 240 10% 10%;
     --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
+    --card-hover: 240 15% 12%;
+    --primary: 250 70% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 10% 15%;
     --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 240 10% 12%;
     --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --accent: 250 30% 15%;
+    --accent-foreground: 250 70% 80%;
+    --border: 240 10% 18%;
+    --input: 240 10% 18%;
+    --ring: 250 70% 60%;
   }
 }
 
@@ -101,5 +85,41 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(240 15% 96%) 100%);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .business-card {
+    @apply bg-card border border-border rounded-xl p-6 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-card-hover)];
+    background: var(--gradient-card);
+    transition: var(--transition-smooth);
+  }
+
+  .business-card:hover {
+    @apply scale-[1.02] bg-card-hover;
+    transform: translateY(-4px) scale(1.02);
+  }
+
+  .spreadsheet-cell {
+    @apply border border-border bg-background min-h-[40px] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+    transition: var(--transition-smooth);
+  }
+
+  .spreadsheet-header {
+    @apply bg-muted font-medium text-muted-foreground border border-border px-3 py-2 text-sm;
+  }
+
+  .tab-button {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200;
+  }
+
+  .tab-button.active {
+    @apply bg-primary text-primary-foreground shadow-sm;
+  }
+
+  .tab-button:not(.active) {
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted;
   }
 }
