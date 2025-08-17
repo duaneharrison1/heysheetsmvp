@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ArrowLeft, Send, MapPin, Clock, Mail, Globe, Instagram, Music, ShoppingBag, Calendar, MessageCircle, Target } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 // Sample store data with enhanced details
 const sampleStores = {
@@ -197,23 +198,18 @@ export default function StorePage() {
         content: userInput
       });
 
-      const response = await fetch('/functions/v1/chat-completion', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('chat-completion', {
+        body: {
           messages: apiMessages,
-          storeContext: storeData
-        }),
+          storeContext: storeData,
+        },
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
+      if (error) {
+        throw new Error(error.message || 'Failed to get AI response');
       }
 
-      const data = await response.json();
-      return data.response;
+      return data?.response;
     } catch (error) {
       console.error('Error getting AI response:', error);
       // Fallback to simple responses
