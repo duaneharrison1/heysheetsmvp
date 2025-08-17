@@ -51,7 +51,7 @@ Keep responses conversational but professional, and always try to be helpful whi
         'X-Title': 'HeySheets Chat Assistant',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-4o',
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
         messages: [systemMessage, ...messages],
         temperature: 0.7,
         max_tokens: 1000,
