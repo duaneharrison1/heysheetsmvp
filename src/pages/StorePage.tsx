@@ -155,39 +155,84 @@ export default function StorePage() {
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate bot response
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: getBotResponse(content, store!),
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, botResponse]);
-      setIsTyping(false);
-    }, 1500);
+    // Get AI response
+    setTimeout(async () => {
+      try {
+        const aiResponse = await getBotResponse(content, store!);
+        const botResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'bot',
+          content: aiResponse,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botResponse]);
+      } catch (error) {
+        console.error('Error getting bot response:', error);
+        const fallbackResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'bot',
+          content: "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.",
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, fallbackResponse]);
+      } finally {
+        setIsTyping(false);
+      }
+    }, 1000);
   };
 
-  const getBotResponse = (userInput: string, storeData: any): string => {
-    const input = userInput.toLowerCase();
-    
-    if (input.includes('book') || input.includes('appointment') || input.includes('schedule')) {
-      return `I'd be happy to help you book an appointment! Our ${storeData.type === 'education' ? 'enrollment' : 'booking'} system is available ${storeData.hours}. What service interests you most?`;
+  const getBotResponse = async (userInput: string, storeData: any): Promise<string> => {
+    try {
+      // Prepare messages for the AI API
+      const apiMessages = messages
+        .filter(msg => msg.type === 'user' || msg.type === 'bot')
+        .map(msg => ({
+          role: msg.type === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }));
+
+      // Add the current user message
+      apiMessages.push({
+        role: 'user',
+        content: userInput
+      });
+
+      const response = await fetch('/functions/v1/chat-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: apiMessages,
+          storeContext: storeData
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+      return data.response;
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      // Fallback to simple responses
+      const input = userInput.toLowerCase();
+      
+      if (input.includes('book') || input.includes('appointment') || input.includes('schedule')) {
+        return `I'd be happy to help you book an appointment! Our ${storeData.type === 'education' ? 'enrollment' : 'booking'} system is available ${storeData.hours}. What service interests you most?`;
+      }
+      
+      if (input.includes('hours') || input.includes('time') || input.includes('open')) {
+        return `We're open ${storeData.hours}. Feel free to visit us or book online anytime!`;
+      }
+      
+      if (input.includes('location') || input.includes('address') || input.includes('where')) {
+        return `You can find us at ${storeData.address}. We're easily accessible and look forward to seeing you!`;
+      }
+      
+      return `I'm here to help with all your ${storeData.type} needs. Feel free to ask about our services, booking, pricing, or anything else you'd like to know about ${storeData.name}!`;
     }
-    
-    if (input.includes('hours') || input.includes('time') || input.includes('open')) {
-      return `We're open ${storeData.hours}. Feel free to visit us or book online anytime!`;
-    }
-    
-    if (input.includes('location') || input.includes('address') || input.includes('where')) {
-      return `You can find us at ${storeData.address}. We're easily accessible and look forward to seeing you!`;
-    }
-    
-    if (input.includes('price') || input.includes('cost') || input.includes('how much')) {
-      return `Our pricing varies depending on the service you choose. I'd love to give you a personalized quote! What specific service are you interested in?`;
-    }
-    
-    return `That's a great question! I'm here to help with all your ${storeData.type} needs. Feel free to ask about our services, booking, pricing, or anything else you'd like to know about ${storeData.name}!`;
   };
 
   const quickActions = store ? [
@@ -211,7 +256,7 @@ export default function StorePage() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Business Profile Section - Desktop */}
-      <div className="hidden md:flex w-[350px] lg:w-[400px] xl:w-[450px] flex-col bg-card border-r border-border p-6">
+      <div className="hidden md:flex w-[30%] flex-col bg-card border-r border-border p-6">
         <div className="flex items-center gap-4 mb-8 pb-6 border-b border-border">
           <div className="w-15 h-15 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold text-xl">
             {store.logo}
@@ -355,7 +400,7 @@ export default function StorePage() {
       </div>
 
       {/* Chat Section */}
-      <div className="flex-1 flex flex-col bg-background md:border-l border-border">
+      <div className="w-full md:w-[70%] flex flex-col bg-background md:border-l border-border">
         <div className="p-6 border-b border-border bg-card">
           <h2 className="text-xl font-semibold text-foreground mb-1">Your Chat Assistant</h2>
           <p className="text-muted-foreground text-sm">I'm here to help you with services, bookings, and questions</p>
