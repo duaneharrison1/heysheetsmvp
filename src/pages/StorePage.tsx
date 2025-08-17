@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ArrowLeft, Send, MapPin, Clock, Mail, Globe, Instagram, Music, ShoppingBag, Calendar, MessageCircle, Target } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { ChatMessage } from "@/components/chat/ChatMessage";
 
 // Sample store data with enhanced details
 const sampleStores = {
@@ -112,7 +113,34 @@ interface Message {
   type: 'bot' | 'user';
   content: string;
   timestamp: Date;
+  richContent?: {
+    type: string;
+    data: any;
+  };
 }
+
+// Function to load spreadsheet data from localStorage
+const loadSpreadsheetData = (storeId: string) => {
+  const spreadsheetData: { [key: string]: any[] } = {};
+  
+  // Define the tab names that should be loaded
+  const tabNames = ['hours', 'products', 'orders', 'services', 'bookings'];
+  
+  tabNames.forEach(tabName => {
+    const storageKey = `spreadsheet_${storeId}_${tabName}`;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        spreadsheetData[tabName] = JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error(`Error loading ${tabName} data:`, error);
+      spreadsheetData[tabName] = [];
+    }
+  });
+  
+  return spreadsheetData;
+};
 
 export default function StorePage() {
   const { storeId } = useParams<{ storeId: string }>();
@@ -152,21 +180,106 @@ export default function StorePage() {
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    // Update messages state
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInputValue('');
     setIsTyping(true);
 
-    // Get AI response
+    // Get AI response with the updated conversation history
     setTimeout(async () => {
       try {
-        const aiResponse = await getBotResponse(content, store!);
+        const aiResponse = await getBotResponse(content, store!, updatedMessages);
+        
+        // Parse response for rich content
+        let messageContent = aiResponse;
+        let richContent = undefined;
+        
+        // Check if response contains JSON for rich content - look for the start and try to parse
+        const richContentStart = aiResponse.indexOf('{"richContent":');
+        if (richContentStart !== -1) {
+          try {
+            // Extract everything from the start of the JSON to the end
+            const jsonPart = aiResponse.substring(richContentStart);
+            console.log('Found potential rich content JSON:', jsonPart);
+            
+            // Try to find the end of the JSON object by counting braces
+            let braceCount = 0;
+            let endIndex = 0;
+            for (let i = 0; i < jsonPart.length; i++) {
+              if (jsonPart[i] === '{') braceCount++;
+              if (jsonPart[i] === '}') braceCount--;
+              if (braceCount === 0) {
+                endIndex = i + 1;
+                break;
+              }
+            }
+            
+            if (endIndex > 0) {
+              const fullJsonString = jsonPart.substring(0, endIndex);
+              console.log('Extracted JSON string:', fullJsonString);
+              const parsedJson = JSON.parse(fullJsonString);
+              richContent = parsedJson.richContent;
+              // Remove JSON from display text
+              messageContent = aiResponse.substring(0, richContentStart).trim();
+              console.log('Parsed rich content:', richContent);
+            }
+          } catch (e) {
+            console.error('Failed to parse rich content:', e);
+            console.log('Raw response:', aiResponse);
+          }
+        } else {
+          console.log('No rich content JSON found in response:', aiResponse);
+        }
+        
+        // Fallback: If AI didn't use rich content format, detect intent and create rich content manually
+        if (!richContent && storeId) {
+          const userInput = content.toLowerCase();
+          const spreadsheetData = loadSpreadsheetData(storeId);
+          
+          console.log('User input:', userInput);
+          console.log('Available spreadsheet data keys:', Object.keys(spreadsheetData));
+          
+          if ((userInput.includes('product') || userInput.includes('show me products')) && spreadsheetData.products?.length > 0) {
+            richContent = {
+              type: 'products',
+              data: spreadsheetData.products
+            };
+            messageContent = 'Here are our available products:';
+            console.log('Created fallback products rich content with', spreadsheetData.products.length, 'items');
+          } else if ((userInput.includes('service') || userInput.includes('show me services')) && spreadsheetData.services?.length > 0) {
+            richContent = {
+              type: 'services', 
+              data: spreadsheetData.services
+            };
+            messageContent = 'Here are our services:';
+            console.log('Created fallback services rich content with', spreadsheetData.services.length, 'items');
+          } else if ((userInput.includes('hour') || userInput.includes('operating hours')) && spreadsheetData.hours?.length > 0) {
+            richContent = {
+              type: 'hours',
+              data: spreadsheetData.hours
+            };
+            messageContent = 'Here are our operating hours:';
+            console.log('Created fallback hours rich content');
+          } else if ((userInput.includes('booking') || userInput.includes('appointment')) && spreadsheetData.bookings?.length > 0) {
+            richContent = {
+              type: 'bookings',
+              data: spreadsheetData.bookings
+            };
+            messageContent = 'Here are the current bookings:';
+            console.log('Created fallback bookings rich content');
+          }
+        }
+        
         const botResponse: Message = {
           id: (Date.now() + 1).toString(),
           type: 'bot',
-          content: aiResponse,
-          timestamp: new Date()
+          content: messageContent,
+          timestamp: new Date(),
+          richContent
         };
         setMessages(prev => [...prev, botResponse]);
+        console.log('Updated messages state with bot response');
       } catch (error) {
         console.error('Error getting bot response:', error);
         const fallbackResponse: Message = {
@@ -182,26 +295,34 @@ export default function StorePage() {
     }, 1000);
   };
 
-  const getBotResponse = async (userInput: string, storeData: any): Promise<string> => {
+  const getBotResponse = async (userInput: string, storeData: any, currentMessages: Message[]): Promise<string> => {
     try {
-      // Prepare messages for the AI API
-      const apiMessages = messages
+      // Load spreadsheet data for this store
+      const spreadsheetData = loadSpreadsheetData(storeId!);
+      
+      // Prepare complete conversation history for the AI API
+      // Use the passed currentMessages (which includes the just-added user message)
+      const conversationHistory = currentMessages
         .filter(msg => msg.type === 'user' || msg.type === 'bot')
         .map(msg => ({
           role: msg.type === 'user' ? 'user' : 'assistant',
           content: msg.content
         }));
 
-      // Add the current user message
-      apiMessages.push({
-        role: 'user',
-        content: userInput
-      });
+      console.log('Sending conversation history:', conversationHistory.length, 'messages');
+      console.log('Conversation history:', conversationHistory.map(msg => `${msg.role}: ${msg.content.substring(0, 50)}...`));
+
+      // Enhanced store context with spreadsheet data
+      // The backend will automatically trim the conversation history to manage context window limitations
+      const enhancedStoreContext = {
+        ...storeData,
+        spreadsheetData: spreadsheetData
+      };
 
       const { data, error } = await supabase.functions.invoke('chat-completion', {
         body: {
-          messages: apiMessages,
-          storeContext: storeData,
+          messages: conversationHistory,
+          storeContext: enhancedStoreContext,
         },
       });
 
@@ -209,10 +330,50 @@ export default function StorePage() {
         throw new Error(error.message || 'Failed to get AI response');
       }
 
-      return data?.response;
+      let response = data?.response;
+      
+      // Post-process response to inject actual spreadsheet data
+      if (response && response.includes('{"richContent":')) {
+        const spreadsheetData = loadSpreadsheetData(storeId!);
+        
+        // Replace placeholders with actual data
+        if (response.includes('"type": "products"')) {
+          const products = spreadsheetData.products || [];
+          response = response.replace(
+            /"data": \[product objects from spreadsheet\]/,
+            `"data": ${JSON.stringify(products)}`
+          );
+        }
+        
+        if (response.includes('"type": "services"')) {
+          const services = spreadsheetData.services || [];
+          response = response.replace(
+            /"data": \[service objects from spreadsheet\]/,
+            `"data": ${JSON.stringify(services)}`
+          );
+        }
+        
+        if (response.includes('"type": "hours"')) {
+          const hours = spreadsheetData.hours || [];
+          response = response.replace(
+            /"data": \[hours objects from spreadsheet\]/,
+            `"data": ${JSON.stringify(hours)}`
+          );
+        }
+        
+        if (response.includes('"type": "bookings"')) {
+          const bookings = spreadsheetData.bookings || [];
+          response = response.replace(
+            /"data": \[booking objects from spreadsheet\]/,
+            `"data": ${JSON.stringify(bookings)}`
+          );
+        }
+      }
+
+      return response;
     } catch (error) {
       console.error('Error getting AI response:', error);
-      // Fallback to simple responses
+      // Fallback to simple responses with basic context awareness
       const input = userInput.toLowerCase();
       
       if (input.includes('book') || input.includes('appointment') || input.includes('schedule')) {
@@ -227,14 +388,56 @@ export default function StorePage() {
         return `You can find us at ${storeData.address}. We're easily accessible and look forward to seeing you!`;
       }
       
+      // Check if user is asking about a product mentioned earlier in conversation
+      const spreadsheetData = loadSpreadsheetData(storeId!);
+      if (spreadsheetData.products && input.includes('product')) {
+        return `I'd be happy to help you with our products! We have ${spreadsheetData.products.length} products available. Would you like me to show you our product catalog?`;
+      }
+      
       return `I'm here to help with all your ${storeData.type} needs. Feel free to ask about our services, booking, pricing, or anything else you'd like to know about ${storeData.name}!`;
     }
   };
 
+  const handleChatAction = (action: string, data?: any) => {
+    switch (action) {
+      case 'add_to_cart':
+        sendMessage(`I'd like to add ${data.name} to my cart. How can I proceed with the purchase?`);
+        break;
+      case 'view_details':
+        sendMessage(`Can you tell me more details about ${data.name}?`);
+        break;
+      case 'book_service':
+        sendMessage(`I'd like to book ${data.serviceName}. What times are available?`);
+        break;
+      case 'reschedule':
+        sendMessage(`I need to reschedule my appointment for ${data.service} on ${data.date}. What other times are available?`);
+        break;
+      case 'cancel':
+        sendMessage(`I need to cancel my appointment for ${data.service} on ${data.date}.`);
+        break;
+      case 'Show me products':
+        sendMessage('Show me products');
+        break;
+      case 'Show me services':
+        sendMessage('Show me services');
+        break;
+      case 'Operating hours':
+        sendMessage('What are your operating hours?');
+        break;
+      case 'Book appointment':
+        sendMessage('I want to book an appointment');
+        break;
+      default:
+        sendMessage(action);
+        break;
+    }
+  };
+
   const quickActions = store ? [
+    'Show me products',
     'Show me services',
+    'Operating hours',
     'Book appointment', 
-    'Pricing info',
     'Store location'
   ] : [];
 
@@ -252,7 +455,7 @@ export default function StorePage() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Business Profile Section - Desktop */}
-      <div className="hidden md:flex w-[30%] flex-col bg-card border-r border-border p-6">
+      <div className="hidden md:flex w-[35%] flex-col bg-card border-r border-border p-6">
         <div className="flex items-center gap-4 mb-8 pb-6 border-b border-border">
           <div className="w-15 h-15 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold text-xl">
             {store.logo}
@@ -311,7 +514,7 @@ export default function StorePage() {
         <Button 
           variant="ghost" 
           onClick={() => navigate('/')}
-          className="mt-4 gap-2 justify-start"
+          className="mt-4 gap-2 justify-start z-50 relative"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Stores
@@ -319,9 +522,9 @@ export default function StorePage() {
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden w-full bg-card border-b border-border p-4">
+      <div className="md:hidden w-full bg-card border-b border-border p-4 relative z-50">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="p-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="p-2 relative z-50">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold">
@@ -396,7 +599,7 @@ export default function StorePage() {
       </div>
 
       {/* Chat Section */}
-      <div className="w-full md:w-[70%] flex flex-col bg-background md:border-l border-border">
+      <div className="w-full md:w-[65%] flex flex-col bg-background md:border-l border-border">
         <div className="p-6 border-b border-border bg-card">
           <h2 className="text-xl font-semibold text-foreground mb-1">Your Chat Assistant</h2>
           <p className="text-muted-foreground text-sm">I'm here to help you with services, bookings, and questions</p>
@@ -404,23 +607,12 @@ export default function StorePage() {
 
         <div className="flex-1 p-6 overflow-y-auto bg-muted/30 space-y-4 max-h-[calc(100vh-200px)]">
           {messages.map((message) => (
-            <div key={message.id} className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {message.type === 'bot' && (
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                  {store.logo}
-                </div>
-              )}
-              <div className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-                message.type === 'user' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-card text-card-foreground shadow-sm border border-border'
-              }`}>
-                <div className="text-sm leading-relaxed">{message.content}</div>
-                <div className="text-xs opacity-70 mt-2">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
-            </div>
+            <ChatMessage
+              key={message.id}
+              message={message}
+              storeLogo={store.logo}
+              onActionClick={handleChatAction}
+            />
           ))}
 
           {quickActions.length > 0 && messages.length === 1 && (
@@ -430,7 +622,7 @@ export default function StorePage() {
                   key={index}
                   variant="outline"
                   size="sm"
-                  onClick={() => sendMessage(action)}
+                  onClick={() => handleChatAction(action)}
                   className="text-xs h-8"
                 >
                   {action}

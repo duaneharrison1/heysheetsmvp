@@ -99,18 +99,18 @@ export default function StoresList() {
         {/* Search and Filters */}
         <div className="mb-8">
           <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            {/* <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search stores and services..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
-            />
+            /> */}
           </div>
         </div>
 
         {/* Store Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredStores.map((store) => (
             <StoreCard key={store.id} store={store} />
           ))}
@@ -126,7 +126,7 @@ export default function StoresList() {
         )}
 
         {/* Stats Footer */}
-        <div className="mt-12 p-6 rounded-xl bg-card/50 backdrop-blur-sm">
+        {/* <div className="mt-12 p-6 rounded-xl bg-card/50 backdrop-blur-sm">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
               <div className="text-2xl font-bold text-primary">{stores.length}</div>
@@ -151,7 +151,7 @@ export default function StoresList() {
               <div className="text-sm text-muted-foreground">Business Types</div>
             </div>
           </div>
-        </div>
+        </div> */}
       </main>
     </div>
   );

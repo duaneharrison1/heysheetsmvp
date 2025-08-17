@@ -46,9 +46,9 @@ export function StoreCard({ store }: StoreCardProps) {
 
   return (
     <Card className="business-card group cursor-pointer">
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div 
-          className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
           style={{ backgroundColor: `${typeColors[store.type]}20` }}
         >
           {typeIcons[store.type]}
@@ -61,15 +61,15 @@ export function StoreCard({ store }: StoreCardProps) {
         </div>
       </div>
 
-      <h3 className="text-xl font-semibold mb-2 group-hover:text-primary transition-colors">
+      <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors">
         {store.name}
       </h3>
       
-      <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
+      <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
         {store.description}
       </p>
 
-      <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
+      <div className="flex items-center gap-4 mb-3 text-sm text-muted-foreground">
         <div className="flex items-center gap-1">
           <MapPin className="w-4 h-4" />
           {store.location}
@@ -80,7 +80,7 @@ export function StoreCard({ store }: StoreCardProps) {
         </div>
       </div>
 
-      <div className="flex gap-2 pt-4 border-t border-border">
+      <div className="flex gap-2 pt-3 border-t border-border">
         <Button 
           onClick={handleViewClick}
           variant="outline" 
