@@ -83,6 +83,53 @@ serve(async (req) => {
 
     const servicesList = (storeContext?.services || []).map((s: any) => `- ${s.text}`).join('\n')
 
+    // Check if this is a follow-up/detail question about specific items
+    const lastUserMessage = trimmedMessages[trimmedMessages.length - 1]?.content?.toLowerCase() || ''
+    const isFollowUpQuestion = lastUserMessage.includes('tell me more') || 
+                              lastUserMessage.includes('details') || 
+                              lastUserMessage.includes('detail') ||
+                              lastUserMessage.includes('more about') ||
+                              lastUserMessage.includes('information about') ||
+                              lastUserMessage.includes('what about') ||
+                              lastUserMessage.includes('how about') ||
+                              lastUserMessage.includes('specific') ||
+                              (trimmedMessages.length > 1 && (
+                                lastUserMessage.includes('that') || 
+                                lastUserMessage.includes('this') || 
+                                lastUserMessage.includes('it')
+                              ))
+
+    const isGeneralQuery = lastUserMessage.includes('what products') || 
+                          lastUserMessage.includes('what services') || 
+                          lastUserMessage.includes('show me') ||
+                          lastUserMessage.includes('list') ||
+                          lastUserMessage.includes('available') ||
+                          lastUserMessage.includes('what do you have') ||
+                          lastUserMessage.includes('what are your') ||
+                          lastUserMessage.includes('hours') ||
+                          lastUserMessage.includes('when are you open')
+
+    let richContentInstructions = ''
+    
+    // Only show cards for general queries, not follow-up questions
+    if (isGeneralQuery && !isFollowUpQuestion) {
+      richContentInstructions = `
+CARD DISPLAY RULES:
+- ONLY show product/service/hours cards when users ask general questions like "What products do you have?", "Show me your services", "What are your hours?"
+- DO NOT show cards for follow-up questions, specific details, or when user asks about individual items
+- For detail questions, provide detailed text response only
+
+When showing cards, end response with:
+Products: {"richContent": {"type": "products", "data": [product objects from spreadsheet]}}
+Services: {"richContent": {"type": "services", "data": [service objects from spreadsheet]}}  
+Hours: {"richContent": {"type": "hours", "data": [hours objects from spreadsheet]}}
+
+CRITICAL: Use exact placeholder text "[product objects from spreadsheet]" - do NOT replace with actual data.`
+    } else {
+      richContentInstructions = `
+RESPONSE RULE: This appears to be a follow-up or specific question. Provide a detailed text response ONLY. Do NOT include any richContent JSON.`
+    }
+
     const systemMessage = {
       role: 'system',
       content: `You are a helpful chat assistant for ${storeContext?.name || 'the store'}, a ${storeContext?.type || 'business'} business.
@@ -100,20 +147,7 @@ ${servicesList}
 
 ${spreadsheetInfo}
 
-MANDATORY: When discussing products, you MUST end your response with exactly this JSON (copy the placeholder text exactly):
-{"richContent": {"type": "products", "data": [product objects from spreadsheet]}}
-
-When discussing services, you MUST end your response with exactly this JSON (copy the placeholder text exactly):
-{"richContent": {"type": "services", "data": [service objects from spreadsheet]}}
-
-When discussing hours, you MUST end your response with exactly this JSON (copy the placeholder text exactly):
-{"richContent": {"type": "hours", "data": [hours objects from spreadsheet]}}
-
-Example for products question:
-User: "What products do you have?"
-You: "Here are our available products: {"richContent": {"type": "products", "data": [product objects from spreadsheet]}}"
-
-CRITICAL: Use the exact placeholder text "[product objects from spreadsheet]" - do NOT replace it with actual data or empty arrays.`
+${richContentInstructions}`
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
