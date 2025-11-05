@@ -9,7 +9,7 @@ import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "luc
 
 interface Message {
   id: string;
-  type: 'bot' | 'user';
+  type: 'assistant' | 'user';
   content: string;
   timestamp: Date;
   richContent?: any;
@@ -317,7 +317,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
 
   return (
     <div className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-      {message.type === 'bot' && (
+      {message.type === 'assistant' && (
         <div className="mt-1 flex-shrink-0">
           <Avatar className="w-9 h-9" variant="bot">
             <AvatarFallback className="avatar-fallback">

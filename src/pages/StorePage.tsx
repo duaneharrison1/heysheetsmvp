@@ -118,7 +118,7 @@ const typeIcons: Record<string, string> = {
 
 interface Message {
   id: string;
-  type: 'bot' | 'user';
+  type: 'assistant' | 'user';
   content: string;
   timestamp: Date;
   richContent?: {
@@ -166,7 +166,7 @@ export default function StorePage() {
       // Initial bot message
       const initialMessage: Message = {
         id: '1',
-        type: 'bot',
+        type: 'assistant',
         content: `Hey there! 👋 I'm your ${store.type} assistant at ${store.name}. ${store.description} What can I help you with today?`,
         timestamp: new Date()
       };
@@ -279,20 +279,20 @@ export default function StorePage() {
           }
         }
         
-        const botResponse: Message = {
+        const assistantResponse: Message = {
           id: (Date.now() + 1).toString(),
-          type: 'bot',
+          type: 'assistant',
           content: messageContent,
           timestamp: new Date(),
           richContent
         };
-        setMessages(prev => [...prev, botResponse]);
+        setMessages(prev => [...prev, assistantResponse]);
         console.log('Updated messages state with bot response');
       } catch (error) {
-        console.error('Error getting bot response:', error);
+        console.error('Error getting assistant response:', error);
         const fallbackResponse: Message = {
           id: (Date.now() + 1).toString(),
-          type: 'bot',
+          type: 'assistant',
           content: "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.",
           timestamp: new Date()
         };
@@ -308,17 +308,21 @@ export default function StorePage() {
       // Load spreadsheet data for this store
       const spreadsheetData = loadSpreadsheetData(storeId!);
       
+      // Limit the conversation history to the last 30 messages as requested
+      const recentMessages = currentMessages.slice(-30);
+
       // Prepare complete conversation history for the AI API
-      // Use the passed currentMessages (which includes the just-added user message)
-      const conversationHistory = currentMessages
-        .filter(msg => msg.type === 'user' || msg.type === 'bot')
+      // Use the limited recentMessages
+            // Use the passed currentMessages (which includes the just-added user message)
+      const conversationHistory = recentMessages
+        .filter(msg => msg.type === 'user' || msg.type === 'assistant')
         .map(msg => ({
           role: msg.type === 'user' ? 'user' : 'assistant',
           content: msg.content
         }));
 
-      console.log('Sending conversation history:', conversationHistory.length, 'messages');
-      console.log('Conversation history:', conversationHistory.map(msg => `${msg.role}: ${msg.content.substring(0, 50)}...`));
+      console.log(`Sending ${conversationHistory.length} messages to the assistant. Full history below:`);
+      console.log(conversationHistory);
 
       // Enhanced store context with spreadsheet data
       // The backend will automatically trim the conversation history to manage context window limitations
@@ -645,7 +649,7 @@ export default function StorePage() {
 
           {isTyping && (
             <div className="flex gap-3">
-              <Avatar className="w-9 h-9" variant="bot">
+              <Avatar className="w-9 h-9" variant="assistant">
                 <AvatarFallback className="avatar-fallback text-white font-bold text-sm">
                   <Bot className="w-4 h-4" />
                 </AvatarFallback>
