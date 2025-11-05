@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Send, MapPin, Clock, Mail, Globe, Instagram, Music, ShoppingBag, Calendar, MessageCircle, Target } from "lucide-react";
+import { ArrowLeft, Send, MapPin, Clock, Mail, Globe, Instagram, Music, ShoppingBag, Calendar, MessageCircle, Target, Bot } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 
@@ -107,6 +108,13 @@ const sampleStores = {
     ]
   },
 };
+
+const typeIcons: Record<string, string> = {
+  salon: '💇‍♀️',
+  coach: '🏋️‍♂️',
+  craft: '🎨',
+  education: '📚',
+}
 
 interface Message {
   id: string;
@@ -457,9 +465,11 @@ export default function StorePage() {
       {/* Business Profile Section - Desktop */}
       <div className="hidden md:flex w-[35%] flex-col bg-card border-r border-border p-6">
         <div className="flex items-center gap-4 mb-8 pb-6 border-b border-border">
-          <div className="w-15 h-15 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold text-xl">
-            {store.logo}
-          </div>
+          <Avatar className="w-15 h-15" variant={store.type}>
+            <AvatarFallback className="avatar-fallback text-white font-bold text-xl">
+              <span className="text-xl">{typeIcons[store.type]}</span>
+            </AvatarFallback>
+          </Avatar>
           <div className="flex-1">
             <h1 className="text-2xl font-semibold text-foreground mb-2">{store.name}</h1>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-3">
@@ -527,9 +537,11 @@ export default function StorePage() {
           <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="p-2 relative z-50">
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold">
-            {store.logo}
-          </div>
+          <Avatar className="w-12 h-12" variant={store.type}>
+            <AvatarFallback className="avatar-fallback text-white font-bold">
+              <span className="text-xl">{typeIcons[store.type]}</span>
+            </AvatarFallback>
+          </Avatar>
           <div className="flex-1">
             <h1 className="text-lg font-semibold">{store.name}</h1>
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -633,9 +645,11 @@ export default function StorePage() {
 
           {isTyping && (
             <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold text-sm">
-                {store.logo}
-              </div>
+              <Avatar className="w-9 h-9" variant="bot">
+                <AvatarFallback className="avatar-fallback text-white font-bold text-sm">
+                  <Bot className="w-4 h-4" />
+                </AvatarFallback>
+              </Avatar>
               <div className="bg-card rounded-2xl px-4 py-3 border border-border">
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>

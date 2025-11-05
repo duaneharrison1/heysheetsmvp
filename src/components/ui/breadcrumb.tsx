@@ -1,8 +1,21 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+
+const Slot = React.forwardRef<any, any>(({ children, ...props }, ref) => {
+  if (React.isValidElement(children)) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - intentionally merge props into child
+    return React.cloneElement(children, { ref, ...props, className: cn(children.props.className, props.className) })
+  }
+  return (
+    <span ref={ref} {...props}>
+      {children}
+    </span>
+  )
+})
+Slot.displayName = "Slot"
 
 const Breadcrumb = React.forwardRef<
   HTMLElement,
@@ -44,15 +57,20 @@ const BreadcrumbLink = React.forwardRef<
   React.ComponentPropsWithoutRef<"a"> & {
     asChild?: boolean
   }
->(({ asChild, className, ...props }, ref) => {
-  const Comp = asChild ? Slot : "a"
+>(({ asChild, className, children, ...props }, ref) => {
+  if (asChild && React.isValidElement(children)) {
+    // @ts-ignore
+    return React.cloneElement(children, {
+      ref,
+      className: cn("transition-colors hover:text-foreground", className, (children as any).props.className),
+      ...props,
+    })
+  }
 
   return (
-    <Comp
-      ref={ref}
-      className={cn("transition-colors hover:text-foreground", className)}
-      {...props}
-    />
+    <a ref={ref} className={cn("transition-colors hover:text-foreground", className)} {...props}>
+      {children}
+    </a>
   )
 })
 BreadcrumbLink.displayName = "BreadcrumbLink"

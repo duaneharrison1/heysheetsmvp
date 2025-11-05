@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Bot, User } from 'lucide-react';
 import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "lucide-react";
 
 interface Message {
@@ -316,15 +318,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
   return (
     <div className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
       {message.type === 'bot' && (
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center text-white font-bold text-sm flex-shrink-0 mt-1">
-          {storeLogo}
+        <div className="mt-1 flex-shrink-0">
+          <Avatar className="w-9 h-9" variant="bot">
+            <AvatarFallback className="avatar-fallback">
+              <Bot className="w-4 h-4" />
+            </AvatarFallback>
+          </Avatar>
         </div>
       )}
+
       <div className={`max-w-[85%] ${message.type === 'user' ? 'max-w-[70%]' : ''}`}>
         <div className={`rounded-2xl px-4 py-3 ${
-          message.type === 'user' 
-            ? 'bg-primary text-primary-foreground' 
-            : 'bg-card text-card-foreground shadow-sm border border-border'
+          message.type === 'user'
+            ? 'bg-primary text-primary-foreground' : 'bg-card text-card-foreground shadow-sm border border-border'
         }`}>
           <div className="text-sm leading-relaxed">{message.content}</div>
           <div className="text-xs opacity-70 mt-2">
@@ -333,6 +339,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
         </div>
         {renderRichContent()}
       </div>
+
+      {message.type === 'user' && (
+        <div className="mt-1 flex-shrink-0">
+          <Avatar className="w-9 h-9" variant="user">
+            <AvatarFallback className="avatar-fallback">
+              <User className="w-4 h-4" />
+            </AvatarFallback>
+          </Avatar>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
 
@@ -44,6 +43,21 @@ function useSidebar() {
 
   return context
 }
+
+// Minimal Slot implementation to emulate Radix's asChild behavior
+const Slot = React.forwardRef<any, any>(({ children, ...props }, ref) => {
+  if (React.isValidElement(children)) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return React.cloneElement(children, { ref, ...props, className: cn(children.props.className, props.className) })
+  }
+  return (
+    <span ref={ref} {...props}>
+      {children}
+    </span>
+  )
+})
+Slot.displayName = "Slot"
 
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,

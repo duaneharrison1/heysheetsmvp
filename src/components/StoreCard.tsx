@@ -1,6 +1,7 @@
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Clock, MapPin, Star, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -26,13 +27,6 @@ const typeIcons = {
   education: '📚'
 };
 
-const typeColors = {
-  salon: 'hsl(320 65% 60%)',
-  coach: 'hsl(200 70% 55%)',
-  craft: 'hsl(25 80% 60%)',
-  education: 'hsl(150 60% 50%)'
-};
-
 export function StoreCard({ store }: StoreCardProps) {
   const navigate = useNavigate();
 
@@ -46,41 +40,45 @@ export function StoreCard({ store }: StoreCardProps) {
 
   return (
     <Card className="business-card group cursor-pointer">
-      <div className="flex items-start justify-between mb-3">
-        <div 
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
-          style={{ backgroundColor: `${typeColors[store.type]}20` }}
-        >
-          {typeIcons[store.type]}
+      <CardHeader className="flex items-start justify-between mb-2 p-4">
+        <div className="flex items-center gap-3">
+          <Avatar className="w-10 h-10" variant={store.type}>
+            <AvatarFallback className="avatar-fallback">
+              <span className="text-xl">{typeIcons[store.type]}</span>
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <CardTitle className="text-lg font-semibold mb-0 group-hover:text-primary transition-colors">{store.name}</CardTitle>
+            <p className="text-xs text-muted-foreground">{store.type}</p>
+          </div>
         </div>
+
         <div className="flex items-center gap-2">
           <Badge variant={store.isOpen ? "default" : "secondary"} className="text-xs">
             <Clock className="w-3 h-3 mr-1" />
             {store.isOpen ? 'Open' : 'Closed'}
           </Badge>
         </div>
-      </div>
+      </CardHeader>
 
-      <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors">
-        {store.name}
-      </h3>
-      
-      <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
-        {store.description}
-      </p>
+      <CardContent className="p-4 pt-0">
+        <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
+          {store.description}
+        </p>
 
-      <div className="flex items-center gap-4 mb-3 text-sm text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <MapPin className="w-4 h-4" />
-          {store.location}
+        <div className="flex items-center gap-4 mb-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <MapPin className="w-4 h-4" />
+            {store.location}
+          </div>
+          <div className="flex items-center gap-1">
+            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+            {store.rating}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-          {store.rating}
-        </div>
-      </div>
+      </CardContent>
 
-      <div className="flex gap-2 pt-3 border-t border-border">
+      <CardFooter className="p-4 pt-0 flex gap-2">
         <Button 
           onClick={handleViewClick}
           variant="outline" 
@@ -93,12 +91,12 @@ export function StoreCard({ store }: StoreCardProps) {
         <Button 
           onClick={handleManageClick}
           size="sm" 
+          variant="brand"
           className="flex-1"
-          style={{ backgroundColor: typeColors[store.type] }}
         >
           Manage Data
         </Button>
-      </div>
+      </CardFooter>
     </Card>
   );
 }

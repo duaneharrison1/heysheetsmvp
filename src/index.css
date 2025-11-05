@@ -6,75 +6,79 @@
 
 @layer base {
   :root {
-    --background: 240 10% 98%;
-    --foreground: 222.2 84% 4.9%;
-    
-    /* Business theme colors */
-    --primary: 250 70% 60%;
-    --primary-glow: 250 80% 75%;
-    --primary-dark: 250 60% 45%;
-    --primary-foreground: 0 0% 100%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --card-hover: 250 20% 96%;
-
-    --secondary: 240 15% 94%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 240 10% 92%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 250 100% 95%;
-    --accent-foreground: 250 70% 30%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 250 70% 60%;
-
-    --radius: 0.75rem;
-
-    /* Business specific colors */
-    --business-salon: 320 65% 60%;
-    --business-coach: 200 70% 55%;
-    --business-craft: 25 80% 60%;
-    --business-education: 150 60% 50%;
-    
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(250 70% 60%) 0%, hsl(250 80% 75%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(250 70% 60%) 0%, hsl(280 60% 65%) 50%, hsl(250 80% 75%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(250 20% 98%) 100%);
-    
-    /* Shadows */
-    --shadow-card: 0 4px 20px -2px hsl(250 70% 60% / 0.1);
-    --shadow-card-hover: 0 8px 30px -4px hsl(250 70% 60% / 0.2);
-    --shadow-spreadsheet: 0 2px 10px -2px hsl(0 0% 0% / 0.1);
-    
-    /* Animations */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --ring: 222.2 84% 4.9%;
+    --background-emerald: 152 73% 61%;
+    --background-sky: 204 86% 53%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 240 11.9% 95.7%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --radius: 0.5rem;
+    --radius-sm: calc(var(--radius) - 0.125rem);
+    --radius-md: calc(var(--radius) + 0.125rem);
+    --radius-lg: calc(var(--radius) + 0.25rem);
+    --ring-shadow: 0 0 0 3px hsl(var(--ring) / 0.15);
+    --shadow-drop: 0 10px 38px -10px hsl(0 0% 0% / 0.35), 0 10px 20px -15px hsl(0 0% 0% / 0.2);
+    --shadow-card: 0 4px 16px -6px hsl(0 0% 0% / 0.2), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-card-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.08);
+    --gradient-primary: linear-gradient(135deg, hsl(222.2 47.4% 11.2%) 0%, hsl(210 40% 98%) 100%);
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
   }
 
   .dark {
-    --background: 240 10% 8%;
+    --background: 222.2 47.4% 11.2%;
     --foreground: 210 40% 98%;
-    --card: 240 10% 10%;
-    --card-foreground: 210 40% 98%;
-    --card-hover: 240 15% 12%;
-    --primary: 250 70% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 10% 15%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 240 10% 12%;
+    --muted: 215 16% 15%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 250 30% 15%;
-    --accent-foreground: 250 70% 80%;
-    --border: 240 10% 18%;
-    --input: 240 10% 18%;
-    --ring: 250 70% 60%;
+    --popover: 222.2 47.4% 11.2%;
+    --popover-foreground: 210 40% 98%;
+    --card: 222.2 47.4% 11.2%;
+    --card-foreground: 210 40% 98%;
+    --border: 222.2 47.4% 11.2%;
+    --input: 222.2 47.4% 11.2%;
+    --ring: 210 40% 98%;
+    --background-emerald: 152 73% 61%;
+    --background-sky: 204 86% 53%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 240 11.9% 95.7%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --radius: 0.5rem;
+    --radius-sm: calc(var(--radius) - 0.125rem);
+    --radius-md: calc(var(--radius) + 0.125rem);
+    --radius-lg: calc(var(--radius) + 0.25rem);
+    --ring-shadow: 0 0 0 3px hsl(var(--ring) / 0.15);
+    --shadow-drop: 0 10px 38px -10px hsl(0 0% 0% / 0.35), 0 10px 20px -15px hsl(0 0% 0% / 0.2);
+    --shadow-card: 0 4px 16px -6px hsl(0 0% 0% / 0.2), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-card-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.08);
+    --gradient-primary: linear-gradient(135deg, hsl(222.2 47.4% 11.2%) 0%, hsl(210 40% 98%) 100%);
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
   }
 }
 
@@ -134,5 +138,54 @@
 
   .tab-button:not(.active) {
     @apply text-muted-foreground hover:text-foreground hover:bg-muted;
+  }
+
+  /* Avatar fallback backgrounds for business types (no inline styles) */
+  .avatar-fallback {
+    @apply flex items-center justify-center rounded-full w-full h-full;
+    background: transparent;
+  }
+
+  [data-type="salon"] > .avatar-fallback {
+    background: hsl(320 65% 60% / 0.12);
+  }
+
+  [data-type="coach"] > .avatar-fallback {
+    background: hsl(200 70% 55% / 0.12);
+  }
+
+  [data-type="craft"] > .avatar-fallback {
+    background: hsl(25 80% 60% / 0.12);
+  }
+
+  [data-type="education"] > .avatar-fallback {
+    background: hsl(150 60% 50% / 0.12);
+  }
+
+  /* Bot and User avatar styles used in chat */
+  [data-type="bot"] > .avatar-fallback {
+    /* darker background so bot is visually distinct from user */
+    background: hsl(var(--avatar-bot));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  [data-type="user"] > .avatar-fallback {
+    background: hsl(var(--avatar-user));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Ensure svg/icon contrast inside bot avatar */
+  [data-type="bot"] > .avatar-fallback svg {
+    color: hsl(var(--avatar-bot-icon));
+    opacity: 0.98;
+  }
+
+  [data-type="user"] > .avatar-fallback svg {
+    color: hsl(var(--avatar-user-foreground));
+    opacity: 0.98;
   }
 }
