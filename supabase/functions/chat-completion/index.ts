@@ -1,200 +1,262 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { corsHeaders } from '../_shared/cors.ts'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
-const openaiModel = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini'
+// Import new intelligent chat modules
+import { classifyIntent } from './classifier/classifier.ts';
+import { executeFunction } from './functions/executor.ts';
+import { generateResponse } from './classifier/responder.ts';
 
-// Function to estimate token count (rough approximation)
-function estimateTokenCount(text: string): number {
-  return Math.ceil((text || '').length / 4)
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+console.log('[Chat-Completion] Function started with intelligence system');
+
+function decodeJWT(token: string): { sub: string } {
+  const parts = token.split('.');
+  const payload = parts[1];
+  const padded = payload + '='.repeat(4 - (payload.length % 4));
+  return JSON.parse(new TextDecoder().decode(
+    Uint8Array.from(atob(padded), c => c.charCodeAt(0))
+  ));
 }
 
-// Function to trim messages based on token count
-function trimMessagesByTokens(messages: any[], maxTokens: number = 3000): any[] {
-  let totalTokens = 0
-  const trimmedMessages: any[] = []
-
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const content = messages[i]?.content || ''
-    const messageTokens = estimateTokenCount(content)
-
-    if (totalTokens + messageTokens > maxTokens && trimmedMessages.length > 0) {
-      break
-    }
-
-    trimmedMessages.unshift(messages[i])
-    totalTokens += messageTokens
-  }
-
-  return trimmedMessages
+function getSupabase() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
 }
 
 serve(async (req) => {
+  // ═══════════════════════════════════════════════════════════
+  // CORS PREFLIGHT
+  // ═══════════════════════════════════════════════════════════
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { messages, storeContext } = await req.json()
+    // ═══════════════════════════════════════════════════════════
+    // STEP 0: AUTHENTICATION
+    // ═══════════════════════════════════════════════════════════
 
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured')
+    console.log('[Chat] Step 0: Authenticating...');
+
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
     }
 
-    console.log('Received messages:', messages?.length || 0)
-    console.log('Store context:', storeContext?.name || 'No store context')
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = decodeJWT(token);
+    const userId = decoded.sub;
 
-    const trimmedMessages = trimMessagesByTokens(messages || [], 3000)
-    console.log('Trimmed messages from', messages?.length || 0, 'to', trimmedMessages.length)
+    console.log('[Chat] Authenticated user:', userId);
 
-    // Build spreadsheet info if available
-    let spreadsheetInfo = ''
-    if (storeContext?.spreadsheetData) {
-      const { spreadsheetData } = storeContext
+    // ═══════════════════════════════════════════════════════════
+    // STEP 1: PARSE REQUEST
+    // ═══════════════════════════════════════════════════════════
 
-      if (spreadsheetData.hours && spreadsheetData.hours.length > 0) {
-        spreadsheetInfo += '\n\nOperating Hours:\n'
-        spreadsheetData.hours.forEach((hour: any) => {
-          spreadsheetInfo += `- ${hour.day}: ${hour.isOpen === 'Yes' ? `${hour.openTime} - ${hour.closeTime}` : 'Closed'}${hour.notes ? ` (${hour.notes})` : ''}\n`
-        })
-      }
+    console.log('[Chat] Step 1: Parsing request...');
 
-      if (spreadsheetData.products && spreadsheetData.products.length > 0) {
-        spreadsheetInfo += '\n\nAvailable Products:\n'
-        spreadsheetData.products.forEach((product: any) => {
-          spreadsheetInfo += `- ${product.name} (${product.category}): $${product.price} - ${product.description || 'No description'} - Stock: ${product.stock || 'N/A'}\n`
-        })
-      }
+    const body = await req.json();
+    const { messages, storeId } = body;
 
-      if (spreadsheetData.services && spreadsheetData.services.length > 0) {
-        spreadsheetInfo += '\n\nAvailable Services:\n'
-        spreadsheetData.services.forEach((service: any) => {
-          spreadsheetInfo += `- ${service.serviceName} (${service.category}): $${service.price} - Duration: ${service.duration} minutes - ${service.description || 'No description'}\n`
-        })
-      }
-
-      if (spreadsheetData.bookings && spreadsheetData.bookings.length > 0) {
-        spreadsheetInfo += '\n\nUpcoming Bookings:\n'
-        spreadsheetData.bookings.forEach((booking: any) => {
-          spreadsheetInfo += `- ${booking.date} at ${booking.time}: ${booking.customerName} - ${booking.service} (${booking.status})\n`
-        })
-      }
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      throw new Error('Invalid messages format');
     }
 
-    const servicesList = (storeContext?.services || []).map((s: any) => `- ${s.text}`).join('\n')
-
-    // Check if this is a follow-up/detail question about specific items
-    const lastUserMessage = trimmedMessages[trimmedMessages.length - 1]?.content?.toLowerCase() || ''
-    const isFollowUpQuestion = lastUserMessage.includes('tell me more') || 
-                              lastUserMessage.includes('details') || 
-                              lastUserMessage.includes('detail') ||
-                              lastUserMessage.includes('more about') ||
-                              lastUserMessage.includes('information about') ||
-                              lastUserMessage.includes('what about') ||
-                              lastUserMessage.includes('how about') ||
-                              lastUserMessage.includes('specific') ||
-                              (trimmedMessages.length > 1 && (
-                                lastUserMessage.includes('that') || 
-                                lastUserMessage.includes('this') || 
-                                lastUserMessage.includes('it')
-                              ))
-
-    const isGeneralQuery = lastUserMessage.includes('what products') || 
-                          lastUserMessage.includes('what services') || 
-                          lastUserMessage.includes('show me') ||
-                          lastUserMessage.includes('list') ||
-                          lastUserMessage.includes('available') ||
-                          lastUserMessage.includes('what do you have') ||
-                          lastUserMessage.includes('what are your') ||
-                          lastUserMessage.includes('hours') ||
-                          lastUserMessage.includes('when are you open')
-
-    let richContentInstructions = ''
-    
-    // Only show cards for general queries, not follow-up questions
-    if (isGeneralQuery && !isFollowUpQuestion) {
-      richContentInstructions = `
-CARD DISPLAY RULES:
-- ONLY show product/service/hours cards when users ask general questions like "What products do you have?", "Show me your services", "What are your hours?"
-- DO NOT show cards for follow-up questions, specific details, or when user asks about individual items
-- For detail questions, provide detailed text response only
-
-When showing cards, end response with:
-Products: {"richContent": {"type": "products", "data": [product objects from spreadsheet]}}
-Services: {"richContent": {"type": "services", "data": [service objects from spreadsheet]}}  
-Hours: {"richContent": {"type": "hours", "data": [hours objects from spreadsheet]}}
-
-CRITICAL: Use exact placeholder text "[product objects from spreadsheet]" - do NOT replace with actual data.`
-    } else {
-      richContentInstructions = `
-RESPONSE RULE: This appears to be a follow-up or specific question. Provide a detailed text response ONLY. Do NOT include any richContent JSON.`
+    if (!storeId) {
+      throw new Error('Missing storeId');
     }
 
-    const systemMessage = {
-      role: 'system',
-      content: `You are a helpful chat assistant for ${storeContext?.name || 'the store'}, a ${storeContext?.type || 'business'} business.
+    console.log('[Chat] Processing for store:', storeId);
+    console.log('[Chat] Message count:', messages.length);
 
-Business Details:
-- Name: ${storeContext?.name}
-- Hours: ${storeContext?.hours}
-- Address: ${storeContext?.address}
-- Email: ${storeContext?.email}
-- Website: ${storeContext?.website}
-- Description: ${storeContext?.description}
+    // ═══════════════════════════════════════════════════════════
+    // STEP 2: VERIFY ACCESS
+    // ═══════════════════════════════════════════════════════════
 
-Services offered:
-${servicesList}
+    console.log('[Chat] Step 2: Verifying access...');
 
-${spreadsheetInfo}
+    const supabase = getSupabase();
+    const { data: userStore, error: accessError } = await supabase
+      .from('user_stores')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('store_id', storeId)
+      .single();
 
-${richContentInstructions}`
+    if (accessError || !userStore) {
+      throw new Error('Access denied to this store');
     }
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-        'Referer': 'https://heysheets.com',
-        'X-Title': 'HeySheets Chat Assistant'
-      },
-      body: JSON.stringify({
-        model: openaiModel,
-        messages: [systemMessage, ...trimmedMessages],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    })
+    console.log('[Chat] Access verified');
 
-    if (!response.ok) {
-      let errText = ''
+    // Get store data for context
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', storeId)
+      .single();
+
+    if (storeError || !store) {
+      throw new Error('Store not found');
+    }
+
+    console.log('[Chat] Store loaded:', store.name);
+
+    // ═══════════════════════════════════════════════════════════
+    // STEP 3: FETCH STORE DATA FOR CLASSIFICATION CONTEXT
+    // ═══════════════════════════════════════════════════════════
+
+    console.log('[Chat] Step 3: Fetching store data for context...');
+
+    let storeData: any = {};
+
+    if (store.sheet_id) {
       try {
-        errText = await response.text()
-      } catch (e) {
-        errText = '<failed to read error body>'
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+
+        const loadTab = async (tabName: string) => {
+          try {
+            const response = await fetch(
+              `${supabaseUrl}/functions/v1/google-sheet`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                  'apikey': anonKey || '',
+                },
+                body: JSON.stringify({
+                  operation: 'read',
+                  storeId,
+                  tabName,
+                }),
+              }
+            );
+            const result = await response.json();
+            return result.success ? result.data : [];
+          } catch (error) {
+            return [];
+          }
+        };
+
+        const [products, services, hours] = await Promise.all([
+          loadTab('Products'),
+          loadTab('Services'),
+          loadTab('Hours'),
+        ]);
+
+        storeData = { products, services, hours };
+        console.log('[Chat] Store data loaded successfully');
+      } catch (error) {
+        console.warn('[Chat] Error loading store data:', error.message);
+        // Continue without store data context
       }
-      console.error('OpenAI API returned non-OK', response.status, errText)
-      throw new Error(`OpenAI API error: ${response.status} - ${errText}`)
     }
 
-    const data = await response.json()
-    if (!data || !data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-      console.error('OpenAI response missing choices or empty:', JSON.stringify(data))
-      throw new Error('OpenAI returned an unexpected response shape')
+    // ═══════════════════════════════════════════════════════════
+    // STEP 4: CLASSIFY INTENT
+    // ═══════════════════════════════════════════════════════════
+
+    console.log('[Chat] Step 4: Classifying intent...');
+
+    const classification = await classifyIntent(messages, { storeData });
+
+    console.log('[Chat] Classification result:', {
+      intent: classification.intent,
+      confidence: classification.confidence,
+      functionToCall: classification.functionToCall,
+      params: Object.keys(classification.params || {})
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // STEP 5: EXECUTE FUNCTION (if recommended)
+    // ═══════════════════════════════════════════════════════════
+
+    let functionResult = null;
+
+    if (classification.functionToCall) {
+      console.log('[Chat] Step 5: Executing function:', classification.functionToCall);
+
+      functionResult = await executeFunction(
+        classification.functionToCall,
+        classification.params,
+        {
+          storeId: storeId,
+          userId: userId,
+          authToken: token
+        }
+      );
+
+      console.log('[Chat] Function execution result:', {
+        success: functionResult.success,
+        hasData: !!functionResult.data || !!functionResult.products || !!functionResult.booking
+      });
+    } else {
+      console.log('[Chat] Step 5: No function to execute');
     }
 
-    const aiResponse = data.choices[0]?.message?.content || data.choices[0]?.text || "I apologize, but I'm having trouble processing your request right now. Please try again."
+    // ═══════════════════════════════════════════════════════════
+    // STEP 6: GENERATE RESPONSE
+    // ═══════════════════════════════════════════════════════════
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
-    })
+    console.log('[Chat] Step 6: Generating response...');
+
+    const response = await generateResponse(
+      messages,
+      classification,
+      functionResult,
+      store
+    );
+
+    console.log('[Chat] Response generated successfully');
+    console.log('[Chat] Response length:', response.length);
+
+    // ═══════════════════════════════════════════════════════════
+    // RETURN ENRICHED RESPONSE
+    // ═══════════════════════════════════════════════════════════
+
+    return new Response(
+      JSON.stringify({
+        text: response,
+        intent: classification.intent,
+        confidence: classification.confidence,
+        functionCalled: classification.functionToCall || null,
+        functionResult: functionResult
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
   } catch (error) {
-    console.error('Error in chat-completion function:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-    return new Response(JSON.stringify({ error: 'Internal server error', message: errorMessage }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500
-    })
+    console.error('[Chat] Error:', error);
+    console.error('[Chat] Error stack:', error.stack);
+
+    return new Response(
+      JSON.stringify({
+        error: error.message || 'Internal server error',
+        details: error.stack
+      }),
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   }
-})
+});
+
+console.log('[Chat-Completion] Handler registered');
