@@ -83,29 +83,19 @@ serve(async (req) => {
     console.log('[Chat] Step 2: Verifying access...');
 
     const supabase = getSupabase();
-    const { data: userStore, error: accessError } = await supabase
-      .from('user_stores')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('store_id', storeId)
-      .single();
-
-    if (accessError || !userStore) {
-      throw new Error('Access denied to this store');
-    }
-
-    console.log('[Chat] Access verified');
-
-    // Get store data for context
     const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('*')
       .eq('id', storeId)
+      .eq('user_id', userId)
       .single();
 
     if (storeError || !store) {
-      throw new Error('Store not found');
+      console.error('[Chat] Access error:', storeError);
+      throw new Error('Store not found or access denied');
     }
+
+    console.log('[Chat] Access verified');
 
     console.log('[Chat] Store loaded:', store.name);
 
