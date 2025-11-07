@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { JWT } from 'https://deno.land/x/google_auth_library@v0.1.0/mod.ts';
+import { JWT } from 'https://esm.sh/google-auth-library@9.6.3';
 import { GoogleSpreadsheet } from 'https://esm.sh/google-spreadsheet@4.1.3';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
