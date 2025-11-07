@@ -86,23 +86,15 @@ async function verifyAccess(req: Request, storeId: string): Promise<{ userId: st
 
   const supabase = getSupabase();
 
-  // Verify ownership
-  const { data: userStore } = await supabase
-    .from('user_stores')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('store_id', storeId)
-    .single();
-
-  if (!userStore) throw new Error('Access denied');
-
-  // Get sheet ID
-  const { data: store } = await supabase
+  // Verify ownership and get sheet ID
+  const { data: store, error } = await supabase
     .from('stores')
-    .select('sheet_id')
+    .select('sheet_id, user_id')
     .eq('id', storeId)
+    .eq('user_id', userId)
     .single();
 
+  if (error || !store) throw new Error('Access denied');
   if (!store?.sheet_id) throw new Error('No sheet connected');
 
   return { userId, sheetId: store.sheet_id };
@@ -140,14 +132,14 @@ serve(async (req) => {
       const userId = decoded.sub;
 
       const supabase = getSupabase();
-      const { data: userStore } = await supabase
-        .from('user_stores')
+      const { data: store, error: storeError } = await supabase
+        .from('stores')
         .select('id')
+        .eq('id', storeId)
         .eq('user_id', userId)
-        .eq('store_id', storeId)
         .single();
 
-      if (!userStore) {
+      if (storeError || !store) {
         return new Response(
           JSON.stringify({ error: 'Access denied' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

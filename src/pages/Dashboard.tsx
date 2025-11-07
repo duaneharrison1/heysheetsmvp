@@ -28,11 +28,18 @@ const Dashboard = () => {
   const loadStores = async (userId: string) => {
     try {
       setLoading(true);
-      const { data } = await supabase
-        .from('user_stores')
-        .select('store_id, stores(id, name, type, logo, sheet_id, created_at)')
-        .eq('user_id', userId);
-      setStores(data?.map((item: any) => item.stores).filter(Boolean) || []);
+      const { data, error } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading stores:', error);
+        toast({ title: 'Error', description: 'Failed to load stores', variant: 'destructive' });
+      }
+
+      setStores(data || []);
     } finally {
       setLoading(false);
     }
@@ -43,15 +50,19 @@ const Dashboard = () => {
     if (!name?.trim()) return;
     try {
       setCreating(true);
-      const { data: store } = await supabase
+      const { data: store, error } = await supabase
         .from('stores')
-        .insert({ name: name.trim() })
+        .insert({ name: name.trim(), user_id: user.id })
         .select()
         .single();
+
+      if (error) {
+        console.error('Error creating store:', error);
+        toast({ title: 'Error', description: 'Failed to create store', variant: 'destructive' });
+        return;
+      }
+
       if (store) {
-        await supabase
-          .from('user_stores')
-          .insert({ user_id: user.id, store_id: store.id, role: 'owner' });
         toast({ title: 'Success', description: 'Store created!' });
         await loadStores(user.id);
       }
