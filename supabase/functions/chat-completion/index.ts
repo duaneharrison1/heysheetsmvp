@@ -1,11 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// Import new intelligent chat modules
-import { classifyIntent } from './classifier.ts';
-import { executeFunction } from './executor.ts';
-import { generateResponse } from './responder.ts';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -14,205 +9,398 @@ const corsHeaders = {
 
 console.log('[Chat-Completion] Function started with intelligence system');
 
+const OPENROUTER_API_KEY = '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';
+
+// ═══════════════════════════════════════════════════════════
+// TYPES & INTERFACES
+// ═══════════════════════════════════════════════════════════
+
+interface Classification {
+  intent: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  params: Record<string, any>;
+  functionToCall?: string | null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLASSIFIER - Intent classification with parameter extraction
+// ═══════════════════════════════════════════════════════════
+
+async function classifyIntent(
+  messages: Array<{ role: string; content: string }>,
+  context?: any
+): Promise<Classification> {
+  const lastMessage = messages[messages.length - 1]?.content || '';
+  const conversationHistory = messages.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n');
+
+  let storeContext = '';
+  if (context?.storeData) {
+    const services = context.storeData.services || [];
+    const products = context.storeData.products || [];
+    const hours = context.storeData.hours || [];
+    if (services.length > 0) storeContext += `\nAVAILABLE SERVICES:\n${JSON.stringify(services, null, 2)}`;
+    if (products.length > 0) storeContext += `\nAVAILABLE PRODUCTS:\n${JSON.stringify(products, null, 2)}`;
+    if (hours.length > 0) storeContext += `\nSTORE HOURS:\n${JSON.stringify(hours, null, 2)}`;
+  }
+
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+  const classificationPrompt = `You are an intent classifier for a business chat assistant.
+
+CONVERSATION HISTORY:
+${conversationHistory}
+
+${storeContext}
+
+CURRENT MESSAGE: "${lastMessage}"
+TODAY'S DATE: ${today}
+TOMORROW'S DATE: ${tomorrowStr}
+
+Your job is to:
+1. Classify the user's intent
+2. Extract any parameters mentioned
+3. Recommend which function to call
+
+INTENTS:
+- BOOKING: User wants to schedule/book
+- PRODUCT: User wants to browse/buy products
+- INFO: User wants store information
+- GREETING: Greeting or small talk
+- OTHER: Unclear intent
+
+FUNCTIONS:
+- get_store_info: Get store details
+- check_availability: Check time slots
+- create_booking: Create booking (only when ALL info present)
+- get_products: Get product catalog
+
+RESPOND WITH JSON ONLY:
+{
+  "intent": "BOOKING|PRODUCT|INFO|GREETING|OTHER",
+  "confidence": "HIGH|MEDIUM|LOW",
+  "params": {
+    "service_name": "string or null",
+    "date": "YYYY-MM-DD or null",
+    "time": "HH:MM or null",
+    "customer_name": "string or null",
+    "email": "string or null",
+    "phone": "string or null"
+  },
+  "functionToCall": "function_name or null"
+}`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://heysheets.com',
+        'X-Title': 'HeySheets'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [{ role: 'user', content: classificationPrompt }],
+        temperature: 0.3
+      })
+    });
+
+    if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    if (!content) throw new Error('No response from classification LLM');
+
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/```json\n?/, '').replace(/\n?```$/, '');
+    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/```\n?/, '').replace(/\n?```$/, '');
+
+    const classification: Classification = JSON.parse(jsonStr);
+    console.log('[Classifier] Result:', { intent: classification.intent, confidence: classification.confidence, function: classification.functionToCall });
+    return classification;
+  } catch (error) {
+    console.error('[Classifier] Error:', error);
+    return { intent: 'OTHER', confidence: 'LOW', params: {}, functionToCall: null };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESPONDER - Generate conversational responses
+// ═══════════════════════════════════════════════════════════
+
+async function generateResponse(
+  messages: Array<{ role: string; content: string }>,
+  classification: Classification,
+  functionResult: any,
+  storeContext?: any
+): Promise<string> {
+  const conversationHistory = messages.map(m => `${m.role}: ${m.content}`).join('\n');
+
+  let contextInfo = '';
+  if (storeContext) {
+    contextInfo = `STORE CONTEXT:\nStore Name: ${storeContext.name || 'Unknown'}\nStore Type: ${storeContext.type || 'general'}\n`;
+  }
+
+  let functionContext = '';
+  if (functionResult && functionResult.success) {
+    functionContext = `FUNCTION RESULT (Use this data in your response):\n${JSON.stringify(functionResult, null, 2)}\n\nIMPORTANT: Present this data naturally and conversationally.`;
+  } else if (functionResult && !functionResult.success) {
+    functionContext = `FUNCTION ERROR:\n${functionResult.error}\n\nIMPORTANT: Apologize politely and guide the user.`;
+  }
+
+  const responsePrompt = `You are a helpful business assistant for this store.
+
+${contextInfo}
+
+CONVERSATION HISTORY:
+${conversationHistory}
+
+USER INTENT: ${classification.intent}
+
+${functionContext}
+
+Generate a helpful, natural, conversational response. Be friendly, use the function result data if available, and keep it under 200 words.
+
+RESPOND NATURALLY:`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://heysheets.com',
+        'X-Title': 'HeySheets'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [{ role: 'user', content: responsePrompt }],
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    if (!content) throw new Error('No response from LLM');
+    return content;
+  } catch (error) {
+    console.error('[Responder] Error:', error);
+    return 'I apologize, but I encountered an error. Please try again.';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXECUTOR - Execute functions based on classification
+// ═══════════════════════════════════════════════════════════
+
+async function executeFunction(
+  functionName: string,
+  params: Record<string, any>,
+  context: { storeId: string; userId: string; authToken: string }
+): Promise<any> {
+  console.log(`[Executor] Calling function: ${functionName}`, params);
+  const { storeId, authToken } = context;
+
+  try {
+    switch (functionName) {
+      case 'get_store_info': return await getStoreInfo(params, storeId, authToken);
+      case 'check_availability': return await checkAvailability(params, storeId, authToken);
+      case 'create_booking': return await createBooking(params, storeId, authToken);
+      case 'get_products': return await getProducts(params, storeId, authToken);
+      default: throw new Error(`Unknown function: ${functionName}`);
+    }
+  } catch (error) {
+    console.error(`[Executor] Error in ${functionName}:`, error);
+    return { success: false, error: error.message || 'Function execution failed' };
+  }
+}
+
+async function getStoreInfo(params: { info_type: string }, storeId: string, authToken: string): Promise<any> {
+  const tabs = params.info_type === 'all' ? ['hours', 'services', 'products'] : [params.info_type];
+  const result: any = { success: true, data: {}, type: params.info_type };
+
+  for (const tab of tabs) {
+    try {
+      const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
+        body: JSON.stringify({ operation: 'read', storeId, tabName: tab.charAt(0).toUpperCase() + tab.slice(1) })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        result.data[tab] = data.data || [];
+      }
+    } catch (error) {
+      result.data[tab] = [];
+    }
+  }
+  return result;
+}
+
+async function checkAvailability(params: { service_name: string; date: string }, storeId: string, authToken: string): Promise<any> {
+  const { service_name, date } = params;
+
+  const servicesResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
+    body: JSON.stringify({ operation: 'read', storeId, tabName: 'Services' })
+  });
+
+  if (!servicesResponse.ok) throw new Error('Failed to fetch services');
+  const servicesData = await servicesResponse.json();
+  const services = servicesData.data || [];
+
+  const service = services.find((s: any) => s.serviceName?.toLowerCase() === service_name.toLowerCase() || s.name?.toLowerCase() === service_name.toLowerCase());
+  if (!service) {
+    return { success: false, error: `Service "${service_name}" not found. Available: ${services.map((s: any) => s.serviceName || s.name).join(', ')}` };
+  }
+
+  const allPossibleSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
+  return {
+    success: true,
+    service: service_name,
+    date,
+    day: new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
+    available_slots: allPossibleSlots,
+    duration: service.duration || '60 minutes'
+  };
+}
+
+async function createBooking(params: { service_name: string; date: string; time: string; customer_name: string; email: string; phone?: string }, storeId: string, authToken: string): Promise<any> {
+  const required = ['service_name', 'date', 'time', 'customer_name', 'email'];
+  const missing = required.filter(field => !params[field as keyof typeof params]);
+  if (missing.length > 0) return { success: false, error: `Missing: ${missing.join(', ')}` };
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(params.email)) return { success: false, error: 'Invalid email format' };
+
+  const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
+    body: JSON.stringify({
+      operation: 'append',
+      storeId,
+      tabName: 'Bookings',
+      data: {
+        service: params.service_name,
+        date: params.date,
+        time: params.time,
+        customerName: params.customer_name,
+        email: params.email,
+        phone: params.phone || '',
+        status: 'confirmed',
+        createdAt: new Date().toISOString()
+      }
+    })
+  });
+
+  if (!response.ok) throw new Error('Failed to create booking');
+
+  return {
+    success: true,
+    booking: { ...params, status: 'confirmed', confirmation: 'CONFIRMED-' + Date.now() },
+    message: `Booking confirmed for ${params.service_name} on ${params.date} at ${params.time}`
+  };
+}
+
+async function getProducts(params: { category?: string }, storeId: string, authToken: string): Promise<any> {
+  const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
+    body: JSON.stringify({ operation: 'read', storeId, tabName: 'Products' })
+  });
+
+  if (!response.ok) throw new Error('Failed to fetch products');
+  const data = await response.json();
+  let products = data.data || [];
+
+  if (params.category) {
+    products = products.filter((p: any) => p.category?.toLowerCase() === params.category?.toLowerCase());
+    if (products.length === 0) return { success: false, error: `No products in category "${params.category}"` };
+  }
+
+  return { success: true, products, category: params.category || 'all', count: products.length };
+}
+
+// ═══════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+
 function decodeJWT(token: string): { sub: string } {
   const parts = token.split('.');
   const payload = parts[1];
   const padded = payload + '='.repeat(4 - (payload.length % 4));
-  return JSON.parse(new TextDecoder().decode(
-    Uint8Array.from(atob(padded), c => c.charCodeAt(0))
-  ));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), c => c.charCodeAt(0))));
 }
 
 function getSupabase() {
-  return createClient(
-    Deno.env.get('SUPABASE_URL') || '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  );
+  return createClient(Deno.env.get('SUPABASE_URL') || '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
 }
 
-serve(async (req) => {
-  // ═══════════════════════════════════════════════════════════
-  // CORS PREFLIGHT
-  // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════════════
 
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // ═══════════════════════════════════════════════════════════
-    // STEP 0: AUTHENTICATION
-    // ═══════════════════════════════════════════════════════════
-
-    console.log('[Chat] Step 0: Authenticating...');
-
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
+    if (!authHeader) throw new Error('Missing authorization header');
 
     const token = authHeader.replace('Bearer ', '');
     const decoded = decodeJWT(token);
     const userId = decoded.sub;
 
-    console.log('[Chat] Authenticated user:', userId);
-
-    // ═══════════════════════════════════════════════════════════
-    // STEP 1: PARSE REQUEST
-    // ═══════════════════════════════════════════════════════════
-
-    console.log('[Chat] Step 1: Parsing request...');
-
     const body = await req.json();
     const { messages, storeId } = body;
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      throw new Error('Invalid messages format');
-    }
-
-    if (!storeId) {
-      throw new Error('Missing storeId');
-    }
+    if (!messages || !Array.isArray(messages) || messages.length === 0) throw new Error('Invalid messages format');
+    if (!storeId) throw new Error('Missing storeId');
 
     console.log('[Chat] Processing for store:', storeId);
-    console.log('[Chat] Message count:', messages.length);
-
-    // ═══════════════════════════════════════════════════════════
-    // STEP 2: VERIFY ACCESS
-    // ═══════════════════════════════════════════════════════════
-
-    console.log('[Chat] Step 2: Verifying access...');
 
     const supabase = getSupabase();
-    const { data: store, error: storeError } = await supabase
-      .from('stores')
-      .select('*')
-      .eq('id', storeId)
-      .eq('user_id', userId)
-      .single();
-
-    if (storeError || !store) {
-      console.error('[Chat] Access error:', storeError);
-      throw new Error('Store not found or access denied');
-    }
-
-    console.log('[Chat] Access verified');
+    const { data: store, error: storeError } = await supabase.from('stores').select('*').eq('id', storeId).eq('user_id', userId).single();
+    if (storeError || !store) throw new Error('Store not found or access denied');
 
     console.log('[Chat] Store loaded:', store.name);
 
-    // ═══════════════════════════════════════════════════════════
-    // STEP 3: FETCH STORE DATA FOR CLASSIFICATION CONTEXT
-    // ═══════════════════════════════════════════════════════════
-
-    console.log('[Chat] Step 3: Fetching store data for context...');
-
     let storeData: any = {};
-
     if (store.sheet_id) {
       try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL');
-        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-
         const loadTab = async (tabName: string) => {
           try {
-            const response = await fetch(
-              `${supabaseUrl}/functions/v1/google-sheet`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                  'apikey': anonKey || '',
-                },
-                body: JSON.stringify({
-                  operation: 'read',
-                  storeId,
-                  tabName,
-                }),
-              }
-            );
+            const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
+              body: JSON.stringify({ operation: 'read', storeId, tabName })
+            });
             const result = await response.json();
             return result.success ? result.data : [];
-          } catch (error) {
-            return [];
-          }
+          } catch { return []; }
         };
 
-        const [products, services, hours] = await Promise.all([
-          loadTab('Products'),
-          loadTab('Services'),
-          loadTab('Hours'),
-        ]);
-
+        const [products, services, hours] = await Promise.all([loadTab('Products'), loadTab('Services'), loadTab('Hours')]);
         storeData = { products, services, hours };
-        console.log('[Chat] Store data loaded successfully');
       } catch (error) {
         console.warn('[Chat] Error loading store data:', error.message);
-        // Continue without store data context
       }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // STEP 4: CLASSIFY INTENT
-    // ═══════════════════════════════════════════════════════════
-
-    console.log('[Chat] Step 4: Classifying intent...');
-
     const classification = await classifyIntent(messages, { storeData });
-
-    console.log('[Chat] Classification result:', {
-      intent: classification.intent,
-      confidence: classification.confidence,
-      functionToCall: classification.functionToCall,
-      params: Object.keys(classification.params || {})
-    });
-
-    // ═══════════════════════════════════════════════════════════
-    // STEP 5: EXECUTE FUNCTION (if recommended)
-    // ═══════════════════════════════════════════════════════════
+    console.log('[Chat] Classification:', { intent: classification.intent, function: classification.functionToCall });
 
     let functionResult = null;
-
     if (classification.functionToCall) {
-      console.log('[Chat] Step 5: Executing function:', classification.functionToCall);
-
-      functionResult = await executeFunction(
-        classification.functionToCall,
-        classification.params,
-        {
-          storeId: storeId,
-          userId: userId,
-          authToken: token
-        }
-      );
-
-      console.log('[Chat] Function execution result:', {
-        success: functionResult.success,
-        hasData: !!functionResult.data || !!functionResult.products || !!functionResult.booking
-      });
-    } else {
-      console.log('[Chat] Step 5: No function to execute');
+      functionResult = await executeFunction(classification.functionToCall, classification.params, { storeId, userId, authToken: token });
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // STEP 6: GENERATE RESPONSE
-    // ═══════════════════════════════════════════════════════════
-
-    console.log('[Chat] Step 6: Generating response...');
-
-    const response = await generateResponse(
-      messages,
-      classification,
-      functionResult,
-      store
-    );
-
-    console.log('[Chat] Response generated successfully');
-    console.log('[Chat] Response length:', response.length);
-
-    // ═══════════════════════════════════════════════════════════
-    // RETURN ENRICHED RESPONSE
-    // ═══════════════════════════════════════════════════════════
+    const response = await generateResponse(messages, classification, functionResult, store);
 
     return new Response(
       JSON.stringify({
@@ -220,32 +408,16 @@ serve(async (req) => {
         intent: classification.intent,
         confidence: classification.confidence,
         functionCalled: classification.functionToCall || null,
-        functionResult: functionResult
+        functionResult
       }),
-      {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('[Chat] Error:', error);
-    console.error('[Chat] Error stack:', error.stack);
-
     return new Response(
-      JSON.stringify({
-        error: error.message || 'Internal server error',
-        details: error.stack
-      }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ error: error.message || 'Internal server error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
