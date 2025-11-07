@@ -308,22 +308,47 @@ async function createBooking(params: { service_name: string; date: string; time:
 }
 
 async function getProducts(params: { category?: string }, storeId: string, authToken: string): Promise<any> {
-  const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
-    body: JSON.stringify({ operation: 'read', storeId, tabName: 'Products' })
-  });
+  console.log('[getProducts] Fetching products, category:', params.category || 'all');
+  console.log('[getProducts] StoreId:', storeId);
 
-  if (!response.ok) throw new Error('Failed to fetch products');
-  const data = await response.json();
-  let products = data.data || [];
+  try {
+    const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`;
+    console.log('[getProducts] Calling URL:', url);
 
-  if (params.category) {
-    products = products.filter((p: any) => p.category?.toLowerCase() === params.category?.toLowerCase());
-    if (products.length === 0) return { success: false, error: `No products in category "${params.category}"` };
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        'apikey': Deno.env.get('SUPABASE_ANON_KEY') || ''
+      },
+      body: JSON.stringify({ operation: 'read', storeId, tabName: 'Products' })
+    });
+
+    console.log('[getProducts] Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[getProducts] Error response:', errorText);
+      throw new Error(`Failed to fetch products: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('[getProducts] Got data, product count:', data.data?.length || 0);
+
+    let products = data.data || [];
+
+    if (params.category) {
+      products = products.filter((p: any) => p.category?.toLowerCase() === params.category?.toLowerCase());
+      if (products.length === 0) return { success: false, error: `No products in category "${params.category}"` };
+    }
+
+    console.log('[getProducts] Returning', products.length, 'products');
+    return { success: true, products, category: params.category || 'all', count: products.length };
+  } catch (error) {
+    console.error('[getProducts] Caught error:', error);
+    return { success: false, error: `Failed to fetch products: ${error.message}` };
   }
-
-  return { success: true, products, category: params.category || 'all', count: products.length };
 }
 
 // ═══════════════════════════════════════════════════════════
