@@ -23,9 +23,22 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
         .single();
 
       if (!error && data?.sheet_id) {
+        // Parse detected_tabs if it's a JSON string
+        let tabs = [];
+        if (data.detected_tabs) {
+          try {
+            tabs = typeof data.detected_tabs === 'string'
+              ? JSON.parse(data.detected_tabs)
+              : data.detected_tabs;
+          } catch (e) {
+            console.error('Failed to parse detected_tabs:', e);
+            tabs = [];
+          }
+        }
+
         setExistingSheet({
           sheetId: data.sheet_id,
-          tabs: data.detected_tabs || [],
+          tabs: tabs,
           systemPrompt: data.system_prompt,
         });
       }
