@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,27 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [existingSheet, setExistingSheet] = useState<any>(null);
+
+  // Load existing sheet connection on mount
+  useEffect(() => {
+    const loadStore = async () => {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('sheet_id, detected_tabs, system_prompt')
+        .eq('id', storeId)
+        .single();
+
+      if (!error && data?.sheet_id) {
+        setExistingSheet({
+          sheetId: data.sheet_id,
+          tabs: data.detected_tabs || [],
+          systemPrompt: data.system_prompt,
+        });
+      }
+    };
+    loadStore();
+  }, [storeId]);
 
   const handleDetect = async () => {
     setError(null);
@@ -64,6 +85,20 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
         <CardDescription>Link your Google Sheet to this store</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Show existing connection */}
+        {existingSheet && !result && (
+          <div className="flex items-start gap-2 p-3 bg-green-50 text-green-700 rounded border border-green-200">
+            <CheckCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <div className="text-sm flex-1">
+              <p className="font-semibold">Sheet Connected</p>
+              <p className="text-green-600">ID: <code className="bg-green-100 px-1 text-xs">{existingSheet.sheetId}</code></p>
+              {existingSheet.tabs && existingSheet.tabs.length > 0 && (
+                <p className="text-green-600 mt-1">Tabs: {existingSheet.tabs.join(', ')}</p>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="bg-blue-50 p-4 rounded text-sm">
           <p className="font-semibold mb-2">Before connecting:</p>
           <ol className="list-decimal list-inside space-y-1">
@@ -80,7 +115,7 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
           disabled={loading}
         />
         <Button onClick={handleDetect} disabled={loading || !sheetUrl.trim()} className="w-full">
-          {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Detecting...</> : 'Detect Sheet Structure'}
+          {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Detecting...</> : existingSheet ? 'Update Sheet Connection' : 'Detect Sheet Structure'}
         </Button>
         {error && (
           <div className="flex items-start gap-2 p-3 bg-red-50 text-red-700 rounded">
@@ -92,7 +127,7 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
           <div className="flex items-start gap-2 p-3 bg-green-50 text-green-700 rounded">
             <CheckCircle className="h-5 w-5 flex-shrink-0" />
             <div className="text-sm">
-              <p className="font-semibold">Connected!</p>
+              <p className="font-semibold">Successfully Updated!</p>
               <p>Tabs: {result.tabs.join(', ')}</p>
             </div>
           </div>
