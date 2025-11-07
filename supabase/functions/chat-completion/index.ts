@@ -2,9 +2,9 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Import new intelligent chat modules
-import { classifyIntent } from './classifier/classifier.ts';
-import { executeFunction } from './functions/executor.ts';
-import { generateResponse } from './classifier/responder.ts';
+import { classifyIntent } from './classifier.ts';
+import { executeFunction } from './executor.ts';
+import { generateResponse } from './responder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
