@@ -9,7 +9,7 @@ const corsHeaders = {
 
 console.log('[Chat-Completion] Function started with intelligence system');
 
-const OPENROUTER_API_KEY = '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';
+const OPENROUTER_API_KEY = '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';
 
 // ═══════════════════════════════════════════════════════════
 // TYPES & INTERFACES
