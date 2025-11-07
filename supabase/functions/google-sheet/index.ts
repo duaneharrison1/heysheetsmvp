@@ -1,13 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { JWT } from 'https://esm.sh/google-auth-library@9.6.3';
-import { GoogleSpreadsheet } from 'https://esm.sh/google-spreadsheet@4.1.3';
+import { JWT } from 'npm:google-auth-library@9.0.0';
+import { GoogleSpreadsheet } from 'npm:google-spreadsheet@5.0.2';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Max-Age': '86400',
 };
 
 // Baked-in credentials (move to Supabase secrets later if desired)
