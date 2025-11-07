@@ -119,7 +119,8 @@ export default function StorePage() {
       }
 
       const data = await response.json();
-      const aiResponse = data.response || "I apologize, I couldn't generate a response.";
+      console.log('Chat response data:', data);
+      const aiResponse = data.text || "I apologize, I couldn't generate a response.";
 
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
