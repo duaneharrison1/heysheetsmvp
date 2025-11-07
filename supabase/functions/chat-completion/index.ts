@@ -145,6 +145,11 @@ async function generateResponse(
   let contextInfo = '';
   if (storeContext) {
     contextInfo = `STORE CONTEXT:\nStore Name: ${storeContext.name || 'Unknown'}\nStore Type: ${storeContext.type || 'general'}\n`;
+
+    // Add custom system prompt if available
+    if (storeContext.system_prompt) {
+      contextInfo += `\nSTORE INSTRUCTIONS:\n${storeContext.system_prompt}\n`;
+    }
   }
 
   let functionContext = '';
