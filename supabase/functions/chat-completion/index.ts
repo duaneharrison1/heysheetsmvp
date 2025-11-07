@@ -137,6 +137,9 @@ async function generateResponse(
   functionResult: any,
   storeContext?: any
 ): Promise<string> {
+  console.log('[Responder] Starting response generation...');
+  console.log('[Responder] Function result:', functionResult ? 'present' : 'null');
+
   const conversationHistory = messages.map(m => `${m.role}: ${m.content}`).join('\n');
 
   let contextInfo = '';
@@ -166,6 +169,8 @@ Generate a helpful, natural, conversational response. Be friendly, use the funct
 
 RESPOND NATURALLY:`;
 
+  console.log('[Responder] Calling OpenRouter API...');
+
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -182,10 +187,24 @@ RESPOND NATURALLY:`;
       })
     });
 
-    if (!response.ok) throw new Error(`OpenRouter API error: ${response.status}`);
+    console.log('[Responder] API response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Responder] API error response:', errorText);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+    }
+
     const data = await response.json();
+    console.log('[Responder] Got response data');
+
     const content = data.choices[0]?.message?.content;
-    if (!content) throw new Error('No response from LLM');
+    if (!content) {
+      console.error('[Responder] No content in response');
+      throw new Error('No response from LLM');
+    }
+
+    console.log('[Responder] Response content length:', content.length);
     return content;
   } catch (error) {
     console.error('[Responder] Error:', error);
@@ -422,10 +441,14 @@ serve(async (req) => {
 
     let functionResult = null;
     if (classification.functionToCall) {
+      console.log('[Chat] Executing function:', classification.functionToCall);
       functionResult = await executeFunction(classification.functionToCall, classification.params, { storeId, userId, authToken: token });
+      console.log('[Chat] Function result:', { success: functionResult?.success, hasData: !!functionResult?.products || !!functionResult?.data });
     }
 
+    console.log('[Chat] Calling generateResponse...');
     const response = await generateResponse(messages, classification, functionResult, store);
+    console.log('[Chat] Response generated, length:', response?.length);
 
     return new Response(
       JSON.stringify({
