@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/store/(.*)", "destination": "/index.html" },
+    { "source": "/settings/(.*)", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

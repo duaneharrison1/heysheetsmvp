@@ -18,9 +18,12 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          {/* Public Routes */}
           <Route path="/auth" element={<Auth />} />
+          <Route path="/store/:storeId" element={<StorePage />} />
+
+          {/* Protected Routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/store/:storeId" element={<ProtectedRoute><StorePage /></ProtectedRoute>} />
           <Route path="/settings/:storeId" element={<ProtectedRoute><StoreSettings /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
