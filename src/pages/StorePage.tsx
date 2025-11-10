@@ -49,13 +49,19 @@ export default function StorePage() {
   const loadStore = async () => {
     try {
       setLoading(true);
+      console.log('[StorePage] Loading store:', storeId);
+
       const { data, error } = await supabase
         .from('stores')
         .select('*')
         .eq('id', storeId)
         .single();
 
+      console.log('[StorePage] Query result:', { data, error });
+
       if (error || !data) {
+        console.error('[StorePage] Failed to load store:', error);
+        console.error('[StorePage] This usually means RLS policies block anonymous access');
         navigate('/');
         return;
       }
