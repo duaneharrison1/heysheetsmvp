@@ -60,8 +60,13 @@ export default function StorePage() {
       console.log('[StorePage] Query result:', { data, error });
 
       if (error || !data) {
-        console.error('[StorePage] Failed to load store:', error);
-        console.error('[StorePage] This usually means RLS policies block anonymous access');
+        if (error?.code === 'PGRST116') {
+          console.error('[StorePage] Store not found - it may not exist in the database');
+        } else if (error?.message?.includes('policy')) {
+          console.error('[StorePage] RLS policy blocked access');
+        } else {
+          console.error('[StorePage] Failed to load store:', error);
+        }
         navigate('/');
         return;
       }
