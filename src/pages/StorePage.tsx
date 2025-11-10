@@ -27,13 +27,20 @@ export default function StorePage() {
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<any>(null);
   const [hasSheet, setHasSheet] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (storeId) {
       loadStore();
+      checkAuth();
     }
   }, [storeId]);
+
+  const checkAuth = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setIsAuthenticated(!!user);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -85,11 +92,6 @@ export default function StorePage() {
     setIsTyping(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Please sign in');
-      }
-
       // Prepare conversation history
       const conversationHistory = updatedMessages
         .filter(msg => msg.type === 'user' || msg.type === 'bot')
@@ -104,7 +106,7 @@ export default function StorePage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({
             messages: conversationHistory,
@@ -179,10 +181,12 @@ export default function StorePage() {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
+            {isAuthenticated && (
+              <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+            )}
             <Avatar className="w-12 h-12">
               <AvatarFallback className="bg-blue-600 text-white font-bold">
                 {store.name.substring(0, 2).toUpperCase()}
@@ -195,15 +199,17 @@ export default function StorePage() {
                 <span>AI Assistant</span>
               </div>
             </div>
-            <Link to={`/settings/${storeId}`}>
-              <Button variant="outline" size="sm">Settings</Button>
-            </Link>
+            {isAuthenticated && (
+              <Link to={`/settings/${storeId}`}>
+                <Button variant="outline" size="sm">Settings</Button>
+              </Link>
+            )}
           </div>
         </div>
       </div>
 
       {/* Warning if no sheet */}
-      {!hasSheet && (
+      {!hasSheet && isAuthenticated && (
         <div className="bg-yellow-50 border-b border-yellow-200">
           <div className="max-w-4xl mx-auto px-4 py-3">
             <div className="flex items-start gap-2">
