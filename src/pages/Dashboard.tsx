@@ -50,20 +50,29 @@ const Dashboard = () => {
     if (!name?.trim()) return;
     try {
       setCreating(true);
+      console.log('[Dashboard] Creating store with user_id:', user.id);
+      console.log('[Dashboard] User object:', user);
+
       const { data: store, error } = await supabase
         .from('stores')
         .insert({ name: name.trim(), user_id: user.id })
         .select()
         .single();
 
+      console.log('[Dashboard] Insert result:', { store, error });
+
       if (error) {
-        console.error('Error creating store:', error);
-        toast({ title: 'Error', description: 'Failed to create store', variant: 'destructive' });
+        console.error('[Dashboard] Error creating store:', error);
+        console.error('[Dashboard] Error code:', error.code);
+        console.error('[Dashboard] Error message:', error.message);
+        console.error('[Dashboard] Error details:', error.details);
+        toast({ title: 'Error', description: `Failed to create store: ${error.message}`, variant: 'destructive' });
         return;
       }
 
       if (store) {
-        toast({ title: 'Success', description: 'Store created!' });
+        console.log('[Dashboard] Store created successfully:', store);
+        toast({ title: 'Success', description: `Store created with ID: ${store.id}` });
         await loadStores(user.id);
       }
     } finally {
