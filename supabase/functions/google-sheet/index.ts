@@ -58,7 +58,7 @@ function getServiceAuth() {
 function getSupabase() {
   return createClient(
     Deno.env.get('SUPABASE_URL') || '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''  // ← Uses SERVICE_ROLE_KEY to bypass RLS
   );
 }
 
@@ -77,6 +77,25 @@ function extractSheetId(input: string): string {
   return match ? match[1] : input;
 }
 
+// Helper to get sheet ID for a store (PUBLIC - NO AUTH REQUIRED)
+async function getStoreSheetId(storeId: string): Promise<string | null> {
+  const supabase = getSupabase();  // Uses SERVICE_ROLE_KEY
+
+  const { data: store, error } = await supabase
+    .from('stores')
+    .select('sheet_id')
+    .eq('id', storeId)
+    .single();
+
+  if (error || !store) {
+    console.error('[google-sheet] Store not found:', storeId, error?.message);
+    return null;
+  }
+
+  return store.sheet_id;
+}
+
+// Legacy function for write operations that still require auth
 async function verifyAccess(req: Request, storeId: string): Promise<{ userId: string; sheetId: string }> {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) throw new Error('Missing authorization');
@@ -110,7 +129,108 @@ serve(async (req) => {
     const body = await req.json();
     const { operation, storeId, tabName, columns, data, sheetId: newSheetId } = body;
 
-    // DETECT operation (no store yet, user providing sheet URL)
+    console.log('[google-sheet] Operation:', operation, 'StoreId:', storeId, 'TabName:', tabName);
+
+    // ========================================
+    // READ OPERATION - FULLY PUBLIC
+    // ========================================
+    if (operation === 'read') {
+      if (!storeId || !tabName) {
+        return new Response(
+          JSON.stringify({ error: 'Missing storeId or tabName' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get sheet ID (NO AUTH CHECK - uses SERVICE_ROLE_KEY)
+      const sheetId = await getStoreSheetId(storeId);
+
+      if (!sheetId) {
+        return new Response(
+          JSON.stringify({ error: 'Store not found or no sheet connected' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check cache (skip for bookings)
+      if (tabName.toLowerCase() !== 'bookings') {
+        const cacheKey = `${sheetId}:${tabName}`;
+        const cached = cache.get(cacheKey);
+        if (cached && Date.now() < cached.expiry) {
+          console.log('[google-sheet] Cache hit:', cacheKey);
+          return new Response(
+            JSON.stringify({ success: true, data: cached.data }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // Access Google Sheet
+      const auth = getServiceAuth();
+      const doc = new GoogleSpreadsheet(sheetId, auth);
+
+      try {
+        await doc.loadInfo();
+      } catch (error) {
+        console.error('[google-sheet] Failed to load sheet:', error);
+        return new Response(
+          JSON.stringify({ error: 'Cannot access Google Sheet' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Find sheet
+      const sheet = doc.sheetsByIndex.find(
+        s => s.title.toLowerCase() === tabName.toLowerCase()
+      );
+
+      if (!sheet) {
+        return new Response(
+          JSON.stringify({ error: `Tab "${tabName}" not found` }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const rows = await sheet.getRows();
+
+      // Convert to JSON
+      const result = rows.map(row => {
+        const obj: any = {};
+
+        if (columns && columns.length > 0) {
+          // Return only specified columns
+          for (const col of columns) {
+            obj[col] = row.get(col) || '';
+          }
+        } else {
+          // Return all columns
+          for (const header of sheet.headerValues) {
+            obj[header] = row.get(header) || '';
+          }
+        }
+
+        return obj;
+      });
+
+      // Cache result
+      if (tabName.toLowerCase() !== 'bookings') {
+        const cacheKey = `${sheetId}:${tabName}`;
+        cache.set(cacheKey, { data: result, expiry: Date.now() + CACHE_TTL });
+      }
+
+      console.log('[google-sheet] Read success:', result.length, 'rows');
+
+      return new Response(
+        JSON.stringify({ success: true, data: result }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========================================
+    // WRITE OPERATIONS - REQUIRE AUTH
+    // ========================================
+
+    // DETECT operation (requires auth)
     if (operation === 'detect') {
       if (!newSheetId || !storeId) {
         return new Response(
@@ -197,7 +317,7 @@ serve(async (req) => {
       );
     }
 
-    // All other operations need verified access
+    // All other write operations need verified access
     if (!storeId) {
       return new Response(
         JSON.stringify({ error: 'Missing storeId' }),
@@ -209,72 +329,6 @@ serve(async (req) => {
     const auth = getServiceAuth();
     const doc = new GoogleSpreadsheet(sheetId, auth);
     await doc.loadInfo();
-
-    // READ operation
-    if (operation === 'read') {
-      if (!tabName) {
-        return new Response(
-          JSON.stringify({ error: 'Missing tabName' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Check cache (skip for bookings)
-      if (tabName.toLowerCase() !== 'bookings') {
-        const cacheKey = `${sheetId}:${tabName}`;
-        const cached = cache.get(cacheKey);
-        if (cached && Date.now() < cached.expiry) {
-          return new Response(
-            JSON.stringify({ success: true, data: cached.data }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
-
-      // Find sheet
-      const sheet = doc.sheetsByIndex.find(
-        s => s.title.toLowerCase() === tabName.toLowerCase()
-      );
-
-      if (!sheet) {
-        return new Response(
-          JSON.stringify({ error: `Tab "${tabName}" not found` }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const rows = await sheet.getRows();
-
-      // Convert to JSON
-      const result = rows.map(row => {
-        const obj: any = {};
-
-        if (columns && columns.length > 0) {
-          // Return only specified columns
-          for (const col of columns) {
-            obj[col] = row.get(col) || '';
-          }
-        } else {
-          // Return all columns
-          for (const header of sheet.headerValues) {
-            obj[header] = row.get(header) || '';
-          }
-        }
-
-        return obj;
-      });
-
-      // Cache result
-      if (tabName.toLowerCase() !== 'bookings') {
-        const cacheKey = `${sheetId}:${tabName}`;
-        cache.set(cacheKey, { data: result, expiry: Date.now() + CACHE_TTL });
-      }
-
-      return new Response(
-        JSON.stringify({ success: true, data: result }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // APPEND operation (write new row)
     if (operation === 'append' || operation === 'write') {
@@ -363,7 +417,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('[google-sheet] Error:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
