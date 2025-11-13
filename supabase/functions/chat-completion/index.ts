@@ -11,12 +11,8 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('Missing authorization header');
-
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = decodeJWT(token);
-    const userId = decoded.sub;
+    // Get anon key for internal API calls (NO USER AUTH REQUIRED)
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
     const body = await req.json();
     const { messages, storeId } = body as { messages: Message[]; storeId?: string };
@@ -25,8 +21,16 @@ serve(async (req) => {
     if (!storeId) throw new Error('Missing storeId');
 
     const supabase = getSupabase();
-    const { data: store, error: storeError } = await supabase.from('stores').select('*').eq('id', storeId).eq('user_id', userId).single();
-    if (storeError || !store) throw new Error('Store not found or access denied');
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', storeId)
+      .single();
+
+    if (storeError || !store) {
+      console.error('[Chat] Store not found:', storeError?.message);
+      throw new Error('Store not found');
+    }
 
     let storeData: any = {};
     if (store.sheet_id) {
@@ -47,8 +51,10 @@ serve(async (req) => {
       storeData = { products, services, hours };
     }
 
+    // Classify user intent
     const classification = await classifyIntent(messages, { storeData });
 
+    // Execute function if needed
     let functionResult = null;
     if (classification.functionToCall) {
       functionResult = await executeFunction(classification.functionToCall, classification.params, { storeId, userId, authToken: token });
