@@ -16,21 +16,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Vercel (Preview)
-        if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
-        uses: amondnet/vercel-action@v25
+      - name: Deploy to Vercel
+        uses: BetaHuhn/deploy-to-vercel-action@v1
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: figmafolio-eab5b76e
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          scope: figmafolio-eab5b76e
-
-      - name: Deploy to Vercel (Production)
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: figmafolio-eab5b76e
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-          scope: figmafolio-eab5b76e
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: figmafolio-eab5b76e
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          PRODUCTION: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
