@@ -14,7 +14,46 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      stores: {
+        Row: {
+          idx: number
+          id: string
+          name: string
+          type: string
+          logo: string | null
+          sheet_id: string | null
+          system_prompt: string | null
+          detected_tabs: string | null
+          user_id: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          type?: string
+          logo?: string | null
+          sheet_id?: string | null
+          system_prompt?: string | null
+          detected_tabs?: string | null
+          user_id: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          idx?: number
+          id?: string
+          name?: string
+          type?: string
+          logo?: string | null
+          sheet_id?: string | null
+          system_prompt?: string | null
+          detected_tabs?: string | null
+          user_id?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
