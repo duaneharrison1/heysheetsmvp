@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 console.log('[Chat-Completion] Function started with intelligence system');
-const OPENROUTER_API_KEY = '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';
+const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
 // ===== Section: Classifier =====
 // Description: Intent classification and parameter extraction using the LLM
 // - `classifyIntent` constructs a deterministic prompt and parses JSON output
