@@ -26,7 +26,7 @@ jobs:
 
       - name: Deploy to Vercel
         env:
-          VERCEL_ORG_ID: figmafolio-eab5b76e
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/master" ]; then
