@@ -7,10 +7,13 @@ export const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Read OpenRouter API key from env first; fallback kept for compatibility (not recommended for prod)
-const FALLBACK_OPENROUTER_KEY = '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';
+// Read OpenRouter API key from environment variable
 export function getOpenRouterApiKey(): string {
-  return Deno.env.get('OPENROUTER_API_KEY') || FALLBACK_OPENROUTER_KEY;
+  const key = Deno.env.get('OPENROUTER_API_KEY');
+  if (!key) {
+    throw new Error('OPENROUTER_API_KEY environment variable is not set');
+  }
+  return key;
 }
 
 export function decodeJWT(token: string): { sub: string } {
