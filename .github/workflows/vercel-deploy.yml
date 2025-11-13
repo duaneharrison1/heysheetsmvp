@@ -25,10 +25,12 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Deploy to Vercel
-        uses: BetaHuhn/deploy-to-vercel-action@v1
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        env:
           VERCEL_ORG_ID: figmafolio-eab5b76e
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          PRODUCTION: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/master" ]; then
+            vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+          else
+            vercel deploy --token=${{ secrets.VERCEL_TOKEN }} --yes
+          fi
