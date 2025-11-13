@@ -386,19 +386,15 @@ function getSupabase() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// MAIN HANDLER
+// MAIN HANDLER - PUBLIC (NO AUTH REQUIRED)
 // ═══════════════════════════════════════════════════════════
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('Missing authorization header');
-
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = decodeJWT(token);
-    const userId = decoded.sub;
+    // Get anon key for internal API calls (NO USER AUTH REQUIRED)
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
     const body = await req.json();
     const { messages, storeId } = body;
@@ -406,14 +402,24 @@ serve(async (req) => {
     if (!messages || !Array.isArray(messages) || messages.length === 0) throw new Error('Invalid messages format');
     if (!storeId) throw new Error('Missing storeId');
 
-    console.log('[Chat] Processing for store:', storeId);
+    console.log('[Chat] Processing for store:', storeId, '(PUBLIC ACCESS)');
 
+    // Load store data (NO OWNERSHIP CHECK - PUBLIC ACCESS)
     const supabase = getSupabase();
-    const { data: store, error: storeError } = await supabase.from('stores').select('*').eq('id', storeId).eq('user_id', userId).single();
-    if (storeError || !store) throw new Error('Store not found or access denied');
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', storeId)
+      .single();
+
+    if (storeError || !store) {
+      console.error('[Chat] Store not found:', storeError?.message);
+      throw new Error('Store not found');
+    }
 
     console.log('[Chat] Store loaded:', store.name);
 
+    // Load store data from sheets if available
     let storeData: any = {};
     if (store.sheet_id) {
       try {
@@ -421,7 +427,11 @@ serve(async (req) => {
           try {
             const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '' },
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${anonKey}`,
+                'apikey': anonKey
+              },
               body: JSON.stringify({ operation: 'read', storeId, tabName })
             });
             const result = await response.json();
@@ -429,23 +439,45 @@ serve(async (req) => {
           } catch { return []; }
         };
 
-        const [products, services, hours] = await Promise.all([loadTab('Products'), loadTab('Services'), loadTab('Hours')]);
+        const [products, services, hours] = await Promise.all([
+          loadTab('Products'),
+          loadTab('Services'),
+          loadTab('Hours')
+        ]);
         storeData = { products, services, hours };
+        console.log('[Chat] Loaded store data:', {
+          products: products.length,
+          services: services.length,
+          hours: hours.length
+        });
       } catch (error) {
         console.warn('[Chat] Error loading store data:', error.message);
       }
     }
 
+    // Classify user intent
     const classification = await classifyIntent(messages, { storeData });
-    console.log('[Chat] Classification:', { intent: classification.intent, function: classification.functionToCall });
+    console.log('[Chat] Classification:', {
+      intent: classification.intent,
+      function: classification.functionToCall
+    });
 
+    // Execute function if needed
     let functionResult = null;
     if (classification.functionToCall) {
       console.log('[Chat] Executing function:', classification.functionToCall);
-      functionResult = await executeFunction(classification.functionToCall, classification.params, { storeId, userId, authToken: token });
-      console.log('[Chat] Function result:', { success: functionResult?.success, hasData: !!functionResult?.products || !!functionResult?.data });
+      functionResult = await executeFunction(
+        classification.functionToCall,
+        classification.params,
+        { storeId, userId: 'anonymous', authToken: anonKey }
+      );
+      console.log('[Chat] Function result:', {
+        success: functionResult?.success,
+        hasData: !!functionResult?.products || !!functionResult?.data
+      });
     }
 
+    // Generate response
     console.log('[Chat] Calling generateResponse...');
     const response = await generateResponse(messages, classification, functionResult, store);
     console.log('[Chat] Response generated, length:', response?.length);
