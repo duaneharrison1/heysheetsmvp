@@ -12,41 +12,52 @@ import { GOOGLE_SHEETS, extractSheetId, buildSheetsEditUrl } from '@/config/cons
 const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (config: any) => void }) => {
   const [sheetUrl, setSheetUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [existingSheet, setExistingSheet] = useState<any>(null);
   const [isChangingSheet, setIsChangingSheet] = useState(false);
 
+  // Store URL for chatbot
+  const storeUrl = `${window.location.origin}/store/${storeId}`;
+
   // Load existing sheet connection on mount
   useEffect(() => {
     const loadStore = async () => {
-      const res = await supabase
-        .from('stores')
-        .select('sheet_id, detected_tabs, system_prompt')
-        .eq('id', storeId)
-        .single() as unknown as { data: any; error: any };
+      setInitialLoading(true);
+      try {
+        const res = await supabase
+          .from('stores')
+          .select('sheet_id, detected_tabs, system_prompt')
+          .eq('id', storeId)
+          .single() as unknown as { data: any; error: any };
 
-      const { data, error } = res;
+        const { data, error } = res;
 
-      if (!error && data?.sheet_id) {
-        // Parse detected_tabs if it's a JSON string
-        let tabs = [];
-        if (data.detected_tabs) {
-          try {
-            tabs = typeof data.detected_tabs === 'string'
-              ? JSON.parse(data.detected_tabs)
-              : data.detected_tabs;
-          } catch (e) {
-            console.error('Failed to parse detected_tabs:', e);
-            tabs = [];
+        if (!error && data?.sheet_id) {
+          // Parse detected_tabs if it's a JSON string
+          let tabs = [];
+          if (data.detected_tabs) {
+            try {
+              tabs = typeof data.detected_tabs === 'string'
+                ? JSON.parse(data.detected_tabs)
+                : data.detected_tabs;
+            } catch (e) {
+              console.error('Failed to parse detected_tabs:', e);
+              tabs = [];
+            }
           }
-        }
 
-        setExistingSheet({
-          sheetId: data.sheet_id,
-          tabs: tabs,
-          systemPrompt: data.system_prompt,
-        });
+          setExistingSheet({
+            sheetId: data.sheet_id,
+            tabs: tabs,
+            systemPrompt: data.system_prompt,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading store:', error);
+      } finally {
+        setInitialLoading(false);
       }
     };
     loadStore();
@@ -139,6 +150,15 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
     if (existingSheet?.sheetId) {
       window.open(buildSheetsEditUrl(existingSheet.sheetId), '_blank');
     }
+  };
+
+  const handleCopyStoreUrl = () => {
+    navigator.clipboard.writeText(storeUrl);
+    toast.success('Store URL copied to clipboard!');
+  };
+
+  const handleOpenStore = () => {
+    window.open(storeUrl, '_blank');
   };
 
   const handleCancelChange = () => {
@@ -252,6 +272,7 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
             variant="outline"
             onClick={handleCancelChange}
             disabled={loading}
+            className="flex-1"
           >
             Cancel
           </Button>
@@ -345,30 +366,75 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
-            <FileText className="h-5 w-5" />
+    <div className="space-y-6">
+      {/* Store URL Card - Always visible */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Store Chatbot</CardTitle>
+          <CardDescription>Share this URL with customers to start conversations</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <h3 className="font-semibold text-sm">Chatbot URL</h3>
+          <div className="flex gap-2">
+            <Input
+              value={storeUrl}
+              readOnly
+              className="font-mono text-sm flex-1"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleOpenStore}
+              title="Open chatbot in new tab"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleCopyStoreUrl}
+              title="Copy URL"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
           </div>
-          <div>
-            <CardTitle>
-              {existingSheet && !isChangingSheet ? 'Connected Sheet' : isChangingSheet ? 'Change Google Sheet' : 'Connect Google Sheet'}
-            </CardTitle>
-            <CardDescription>
-              {existingSheet && !isChangingSheet
-                ? 'Manage your connected Google Sheet'
-                : isChangingSheet
-                ? 'Connect a different sheet to this store'
-                : 'Link your Google Sheet to this store'}
-            </CardDescription>
+        </CardContent>
+      </Card>
+
+      {/* Sheet Connection Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>
+                {existingSheet && !isChangingSheet ? 'Connected Sheet' : isChangingSheet ? 'Change Google Sheet' : 'Connect Google Sheet'}
+              </CardTitle>
+              <CardDescription>
+                {existingSheet && !isChangingSheet
+                  ? 'Manage your connected Google Sheet'
+                  : isChangingSheet
+                  ? 'Connect a different sheet to this store'
+                  : 'Link your Google Sheet to this store'}
+              </CardDescription>
+            </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {existingSheet && !isChangingSheet ? renderConnectedState() : renderInstructions()}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {initialLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : existingSheet && !isChangingSheet ? (
+            renderConnectedState()
+          ) : (
+            renderInstructions()
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
