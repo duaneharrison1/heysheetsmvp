@@ -277,25 +277,57 @@ serve(async (req)=>{
           }
         });
       }
-      // Detect tabs
-      const knownTabs = [
-        'Hours',
-        'Products',
-        'Services',
-        'Bookings',
-        'Orders'
-      ];
+      // Detect ALL tabs (not just known ones) and collect schema
       const detectedTabs = [];
-      for (const sheet of doc.sheetsByIndex){
-        const matchedTab = knownTabs.find((known)=>known.toLowerCase() === sheet.title.toLowerCase());
-        if (matchedTab) detectedTabs.push(matchedTab);
+      const detectedSchema: Record<string, {
+        columns: string[];
+        sample_rows: any[];
+      }> = {};
+
+      for (const sheet of doc.sheetsByIndex) {
+        const tabName = sheet.title;
+
+        // Add tab name to list
+        detectedTabs.push(tabName);
+
+        try {
+          // Load header row to get column names
+          await sheet.loadHeaderRow();
+          const headers = sheet.headerValues || [];
+
+          // Get first 3 rows as sample data
+          const rows = await sheet.getRows({ limit: 3 });
+          const sampleRows = rows.map((row) => {
+            const rowData: Record<string, any> = {};
+            headers.forEach((header) => {
+              rowData[header] = row.get(header) || '';
+            });
+            return rowData;
+          });
+
+          // Store schema for this tab
+          detectedSchema[tabName] = {
+            columns: headers,
+            sample_rows: sampleRows,
+          };
+        } catch (error) {
+          console.error(`[google-sheet] Error loading schema for tab "${tabName}":`, error);
+          // Store minimal schema if error occurs
+          detectedSchema[tabName] = {
+            columns: [],
+            sample_rows: [],
+          };
+        }
       }
+
       const systemPrompt = `You are a helpful assistant for a store. Available data: ${detectedTabs.join(', ')}`;
-      // Save to database
+
+      // Save to database with enhanced schema
       await supabase.from('stores').update({
         sheet_id: sheetId,
         system_prompt: systemPrompt,
-        detected_tabs: JSON.stringify(detectedTabs)
+        detected_tabs: JSON.stringify(detectedTabs),
+        detected_schema: JSON.stringify(detectedSchema)
       }).eq('id', storeId);
       return new Response(JSON.stringify({
         success: true,
