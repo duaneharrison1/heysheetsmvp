@@ -3,9 +3,11 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { H2, Lead } from "@/components/ui/heading";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
-import { ArrowLeft, Send, Clock, Loader2, Bot, AlertCircle } from "lucide-react";
+import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, Phone, Mail, MapPin, Calendar } from "lucide-react";
 
 interface Message {
   id: string;
@@ -18,6 +20,25 @@ interface Message {
   };
 }
 
+// Store type for typing the supabase response used in this component
+interface Store {
+  id: string;
+  name: string;
+  type?: string;
+  logo?: string | null;
+  sheet_id?: string | null;
+  created_at?: string;
+  description?: string;
+  location?: string;
+  website?: string;
+  instagram?: string;
+  twitter?: string;
+  facebook?: string;
+  phone?: string;
+  email?: string;
+  [key: string]: any;
+}
+
 export default function StorePage() {
   const { storeId } = useParams<{ storeId: string }>();
   const navigate = useNavigate();
@@ -25,7 +46,7 @@ export default function StorePage() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [store, setStore] = useState<any>(null);
+  const [store, setStore] = useState<Store | null>(null);
   const [hasSheet, setHasSheet] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -71,14 +92,17 @@ export default function StorePage() {
         return;
       }
 
-      setStore(data);
-      setHasSheet(!!data.sheet_id);
+      // Cast supabase result into our local Store type (supabase client typings vary)
+      const storeData = data as unknown as Store;
+
+      setStore(storeData);
+      setHasSheet(!!storeData?.sheet_id);
 
       // Initial bot message
       const initialMessage: Message = {
         id: '1',
         type: 'bot',
-        content: `Hey there! 👋 I'm your assistant at ${data.name}. How can I help you today?`,
+        content: `Hey there! 👋 I'm your assistant at ${storeData?.name ?? 'this store'}. How can I help you today?`,
         timestamp: new Date()
       };
       setMessages([initialMessage]);
@@ -188,41 +212,11 @@ export default function StorePage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            {isAuthenticated && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-            )}
-            <Avatar className="w-12 h-12">
-              <AvatarFallback className="bg-blue-600 text-white font-bold">
-                {store.name.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <h1 className="text-lg font-semibold">{store.name}</h1>
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Clock className="w-3 h-3" />
-                <span>AI Assistant</span>
-              </div>
-            </div>
-            {isAuthenticated && (
-              <Link to={`/settings/${storeId}`}>
-                <Button variant="outline" size="sm">Settings</Button>
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Warning if no sheet */}
       {!hasSheet && isAuthenticated && (
-        <div className="bg-yellow-50 border-b border-yellow-200">
-          <div className="max-w-4xl mx-auto px-4 py-3">
+        <div className="bg-yellow-50">
+          <div className="w-full px-4 py-3">
             <div className="flex items-start gap-2">
               <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-yellow-800">
@@ -239,75 +233,199 @@ export default function StorePage() {
         </div>
       )}
 
-      {/* Chat Section */}
-      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
-        <div className="flex-1 p-6 overflow-y-auto space-y-4">
-          {messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              storeLogo={store.name.substring(0, 2).toUpperCase()}
-              onActionClick={handleChatAction}
-            />
-          ))}
-
-          {quickActions.length > 0 && messages.length === 1 && (
-            <div className="flex flex-wrap gap-2">
-              {quickActions.map((action, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleChatAction(action)}
-                  className="text-xs h-8"
-                >
-                  {action}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {isTyping && (
-            <div className="flex gap-3">
-              <Avatar className="w-9 h-9">
-                <AvatarFallback className="bg-blue-600 text-white">
-                  <Bot className="w-4 h-4" />
+  {/* Main Content: Two Column Layout */}
+  <div className="flex-1 flex w-full">
+        {/* Store Profile Side Panel */}
+  <Card className="w-96 rounded-none bg-transparent border border-border/10 shadow-[var(--shadow-card-sm)]">
+          <CardContent className="p-6 flex-1 overflow-y-auto">
+            {/* Store Avatar and Name */}
+            <div className="flex flex-col items-center text-center mb-6">
+              <Avatar className="w-20 h-20 mb-4">
+                <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white font-bold text-xl">
+                  {store.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="bg-card rounded-2xl px-4 py-3 border border-border">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <CardTitle className="text-xl font-bold mb-1">{store.name}</CardTitle>
+              {store.type && (
+                <span className="text-sm text-muted-foreground capitalize">{store.type}</span>
+              )}
+            </div>
+
+            {/* Description */}
+            {store.description && (
+              <div className="mb-6">
+                <h3 className="font-semibold mb-2">About</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{store.description}</p>
+              </div>
+            )}
+
+            {/* Contact Information */}
+            <div className="mb-6 space-y-3">
+              <h3 className="font-semibold">Contact</h3>
+              
+              {store.location && (
+                <div className="flex items-center gap-3 text-sm">
+                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span>{store.location}</span>
+                </div>
+              )}
+              
+              {store.phone && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <a href={`tel:${store.phone}`} className="hover:text-primary">{store.phone}</a>
+                </div>
+              )}
+              
+              {store.email && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <a href={`mailto:${store.email}`} className="hover:text-primary">{store.email}</a>
+                </div>
+              )}
+              
+              {store.website && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <a href={store.website} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
+                    Website
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Social Links */}
+            {(store.instagram || store.twitter || store.facebook) && (
+              <div className="mb-6">
+                <h3 className="font-semibold mb-3">Follow Us</h3>
+                <div className="flex gap-3">
+                  {store.instagram && (
+                    <a 
+                      href={`https://instagram.com/${store.instagram}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 text-white hover:opacity-90 transition-opacity"
+                    >
+                      <Instagram className="w-4 h-4" />
+                    </a>
+                  )}
+                  {store.twitter && (
+                    <a 
+                      href={`https://twitter.com/${store.twitter}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-full bg-blue-500 text-white hover:opacity-90 transition-opacity"
+                    >
+                      <Twitter className="w-4 h-4" />
+                    </a>
+                  )}
+                  {store.facebook && (
+                    <a 
+                      href={`https://facebook.com/${store.facebook}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-full bg-blue-600 text-white hover:opacity-90 transition-opacity"
+                    >
+                      <Facebook className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+            )}
 
-        <div className="p-6 border-t border-border bg-card">
-          <div className="flex gap-3 items-center">
-            <Input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage(inputValue);
-                }
-              }}
-              placeholder="Type your message..."
-              className="flex-1 rounded-full"
-            />
-            <Button
-              onClick={() => sendMessage(inputValue)}
-              size="sm"
-              className="rounded-full w-11 h-11 p-0"
-              disabled={!inputValue.trim()}
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+            {/* Store Created Date */}
+            {store.created_at && (
+              <div className="text-xs text-muted-foreground flex items-center gap-2">
+                <Calendar className="w-3 h-3" />
+                <span>Active since {new Date(store.created_at).toLocaleDateString()}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+  {/* Chat Section */}
+  <div className="flex-1 flex flex-col bg-muted">
+          {/* Chat header (bot profile) */}
+          <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
+            <Avatar className="w-10 h-10">
+              <AvatarFallback className="bg-blue-600 text-white">
+                <Bot className="w-4 h-4" />
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <H2 className="text-base">Store Assistant</H2>
+              <Lead>I am your virtual assistant — ask me anything about this store.</Lead>
+            </div>
+          </div>
+
+          <div className="flex-1 p-6 overflow-y-auto space-y-4">
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                storeLogo={store.name.substring(0, 2).toUpperCase()}
+                onActionClick={handleChatAction}
+              />
+            ))}
+
+            {quickActions.length > 0 && messages.length === 1 && (
+              <div className="flex flex-wrap gap-2">
+                {quickActions.map((action, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleChatAction(action)}
+                    className="text-xs h-8"
+                  >
+                    {action}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {isTyping && (
+              <div className="flex gap-3">
+                <Avatar className="w-9 h-9">
+                  <AvatarFallback className="bg-blue-600 text-white">
+                    <Bot className="w-4 h-4" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="bg-card rounded-2xl px-4 py-3 border border-border">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+            <div className="flex gap-3 items-center">
+              <Input
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage(inputValue);
+                    }
+                  }}
+                  placeholder="Type your message..."
+                  className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                />
+              <Button
+                onClick={() => sendMessage(inputValue)}
+                size="sm"
+                className="rounded-full w-11 h-11 p-0"
+                disabled={!inputValue.trim()}
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

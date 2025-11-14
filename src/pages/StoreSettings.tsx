@@ -1,26 +1,52 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import StoreSetup from '@/components/store/StoreSetup';
+import { H1, Lead } from '@/components/ui/heading';
+import { supabase } from '@/lib/supabase';
+import { Loader2 } from 'lucide-react';
 
 const StoreSettings = () => {
   const { storeId } = useParams();
-  const navigate = useNavigate();
+  const [store, setStore] = useState<any | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!storeId) return;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('id', storeId)
+          .single();
+        if (error) {
+          console.error('Error loading store:', error);
+          setStore(null);
+        } else {
+          setStore(data);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [storeId]);
+
   if (!storeId) return <div>Invalid store ID</div>;
 
+  if (loading) return <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
+  if (!store) return <div className="py-8 text-center text-muted-foreground">Store not found</div>;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={() => navigate('/')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />Back
-          </Button>
-          <h1 className="text-2xl font-bold mt-2">Store Settings</h1>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <H1>{store.name}</H1>
+        <Lead>Settings &amp; integration for <span className="font-medium">{store.name}</span></Lead>
       </div>
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <StoreSetup storeId={storeId} />
-      </div>
+
+      <StoreSetup storeId={storeId} />
     </div>
   );
 };

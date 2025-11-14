@@ -16,11 +16,14 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
   // Load existing sheet connection on mount
   useEffect(() => {
     const loadStore = async () => {
-      const { data, error } = await supabase
+      // cast response to any to avoid strict generated types in this helper
+      const res = await supabase
         .from('stores')
         .select('sheet_id, detected_tabs, system_prompt')
         .eq('id', storeId)
-        .single();
+        .single() as unknown as { data: any; error: any };
+
+      const { data, error } = res;
 
       if (!error && data?.sheet_id) {
         // Parse detected_tabs if it's a JSON string
@@ -112,12 +115,12 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
           </div>
         )}
 
-        <div className="bg-blue-50 p-4 rounded text-sm">
+        <div className="bg-muted/50 p-4 rounded text-sm">
           <p className="font-semibold mb-2">Before connecting:</p>
           <ol className="list-decimal list-inside space-y-1">
             <li>Open your Google Sheet</li>
             <li>Click "Share"</li>
-            <li>Add: <code className="bg-blue-100 px-1">heysheets-backend@heysheets-mvp.iam.gserviceaccount.com</code></li>
+            <li>Add: <code className="bg-primary/10 text-primary px-1 rounded font-medium text-[13px]">heysheets-backend@heysheets-mvp.iam.gserviceaccount.com</code></li>
             <li>Grant "Editor" permission</li>
           </ol>
         </div>
