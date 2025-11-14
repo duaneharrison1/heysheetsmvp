@@ -77,9 +77,9 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
               Show only first name to avoid long text breaking layout. */}
           <SidebarHeader className="border-b border-border h-16">
             <div className="flex items-center gap-3 px-4 h-full">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-10 w-10" variant="user">
                 <AvatarImage src={user?.user_metadata?.avatar_url} />
-                <AvatarFallback>
+                <AvatarFallback className="avatar-fallback">
                   {user?.email?.charAt(0).toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>

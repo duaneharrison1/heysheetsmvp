@@ -73,9 +73,9 @@ export function StoreCard({ store, create, onCreate }: StoreCardProps) {
 
       <CardHeader className="flex items-start justify-between mb-2 p-4">
         <div className="flex items-center gap-3">
-          <Avatar className="w-10 h-10" >
+          <Avatar className="w-10 h-10" variant="user">
             <AvatarFallback className="avatar-fallback">
-              <span className="text-xl">{typeIcons[store.type]}</span>
+              <span className="text-lg font-bold">{store.name.substring(0, 2).toUpperCase()}</span>
             </AvatarFallback>
           </Avatar>
           <div>

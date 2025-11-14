@@ -8,6 +8,8 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import StorePage from "./pages/StorePage";
 import StoreSettings from "./pages/StoreSettings";
+// Correct import for the chat components showcase page
+import ChatComponentsShowcase from "./pages/ChatComponents";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +22,7 @@ const App = () => (
         <Routes>
           {/* Public Routes */}
           <Route path="/auth" element={<Auth />} />
+          <Route path="/components/chat" element={<ChatComponentsShowcase />} />
           <Route path="/store/:storeId" element={<StorePage />} />
 
           {/* Protected Routes with Sidebar Layout */}

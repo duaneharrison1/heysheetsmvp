@@ -188,4 +188,27 @@
     color: hsl(var(--avatar-user-foreground));
     opacity: 0.98;
   }
+
+  /* Ensure text initials inside avatar fallback use the correct foreground color.
+     Apply color on the fallback container only, and set svg/icon colors explicitly
+     below so icons keep their intended color (bot icon should use --avatar-bot-icon).
+  */
+  [data-type="bot"] > .avatar-fallback {
+    color: hsl(var(--avatar-bot-foreground));
+  }
+
+  [data-type="user"] > .avatar-fallback {
+    color: hsl(var(--avatar-user-foreground));
+  }
+
+  /* Explicit svg/icon colors (placed after the fallback color to ensure correct precedence) */
+  [data-type="bot"] > .avatar-fallback svg {
+    color: hsl(var(--avatar-bot-icon));
+    opacity: 0.98;
+  }
+
+  [data-type="user"] > .avatar-fallback svg {
+    color: hsl(var(--avatar-user-foreground));
+    opacity: 0.98;
+  }
 }

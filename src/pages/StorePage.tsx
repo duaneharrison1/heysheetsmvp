@@ -240,8 +240,8 @@ export default function StorePage() {
           <CardContent className="p-6 flex-1 overflow-y-auto">
             {/* Store Avatar and Name */}
             <div className="flex flex-col items-center text-center mb-6">
-              <Avatar className="w-20 h-20 mb-4">
-                <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white font-bold text-xl">
+              <Avatar className="w-20 h-20 mb-4" variant="user">
+                <AvatarFallback className="avatar-fallback font-bold text-xl">
                   {store.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -347,8 +347,8 @@ export default function StorePage() {
   <div className="flex-1 flex flex-col bg-muted">
           {/* Chat header (bot profile) */}
           <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
-            <Avatar className="w-10 h-10">
-              <AvatarFallback className="bg-blue-600 text-white">
+            <Avatar className="w-10 h-10" variant="bot">
+              <AvatarFallback className="avatar-fallback">
                 <Bot className="w-4 h-4" />
               </AvatarFallback>
             </Avatar>
@@ -386,8 +386,8 @@ export default function StorePage() {
 
             {isTyping && (
               <div className="flex gap-3">
-                <Avatar className="w-9 h-9">
-                  <AvatarFallback className="bg-blue-600 text-white">
+                <Avatar className="w-9 h-9" variant="bot">
+                  <AvatarFallback className="avatar-fallback">
                     <Bot className="w-4 h-4" />
                   </AvatarFallback>
                 </Avatar>
