@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import AuthButton from '@/components/AuthButton';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -13,15 +14,26 @@ const Auth = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900">HeySheets</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Transform your Google Sheets into intelligent chatbots
-          </p>
-        </div>
-        <AuthButton />
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-md mx-4">
+        <Card className="shadow-lg">
+          <CardHeader className="items-center text-center">
+            <div className="mx-auto mb-2 w-14 h-14 rounded-full flex items-center justify-center bg-black">
+              <img src="/shop.svg" alt="HeySheets" className="w-8 h-8" />
+            </div>
+            <CardTitle>HeySheets</CardTitle>
+            <CardDescription>Transform your Google Sheets into intelligent chatbots</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 flex flex-col items-center gap-4">
+            <AuthButton />
+            <p className="text-xs text-muted-foreground text-center">
+              Sign in with your Google account to continue.
+            </p>
+          </CardContent>
+          <CardFooter className="pt-0">
+            <p className="text-xs text-muted-foreground mx-auto">No credit card required • Free to try</p>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );

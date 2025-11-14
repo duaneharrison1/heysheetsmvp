@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { FileText } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
@@ -97,8 +98,15 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Connect Google Sheet</CardTitle>
-        <CardDescription>Link your Google Sheet to this store</CardDescription>
+        <div className="flex items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+            <FileText className="h-5 w-5" />
+          </div>
+          <div>
+            <CardTitle>Connect Google Sheet</CardTitle>
+            <CardDescription>Link your Google Sheet to this store</CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Show existing connection */}

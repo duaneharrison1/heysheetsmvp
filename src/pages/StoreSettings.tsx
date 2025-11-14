@@ -46,7 +46,9 @@ const StoreSettings = () => {
         <Lead>Settings &amp; integration for <span className="font-medium">{store.name}</span></Lead>
       </div>
 
-      <StoreSetup storeId={storeId} />
+      <div className="max-w-3xl mx-auto">
+        <StoreSetup storeId={storeId} />
+      </div>
     </div>
   );
 };

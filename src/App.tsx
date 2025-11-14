@@ -10,6 +10,9 @@ import StorePage from "./pages/StorePage";
 import StoreSettings from "./pages/StoreSettings";
 // Correct import for the chat components showcase page
 import ChatComponentsShowcase from "./pages/ChatComponents";
+import Account from "./pages/Account";
+import Billing from './pages/Billing';
+import Help from './pages/Help';
 
 const queryClient = new QueryClient();
 
@@ -28,10 +31,10 @@ const App = () => (
           {/* Protected Routes with Sidebar Layout */}
           <Route path="/" element={<SidebarLayout><Dashboard /></SidebarLayout>} />
           <Route path="/settings/:storeId" element={<SidebarLayout><StoreSettings /></SidebarLayout>} />
-          <Route path="/profile" element={<SidebarLayout><div className="text-center py-8">Profile page coming soon</div></SidebarLayout>} />
-          <Route path="/account" element={<SidebarLayout><div className="text-center py-8">Account settings coming soon</div></SidebarLayout>} />
-          <Route path="/billing" element={<SidebarLayout><div className="text-center py-8">Billing page coming soon</div></SidebarLayout>} />
-          <Route path="/help" element={<SidebarLayout><div className="text-center py-8">Help & support coming soon</div></SidebarLayout>} />
+          {/* removed /profile route (no profile page) */}
+          <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
+          <Route path="/billing" element={<SidebarLayout><Billing /></SidebarLayout>} />
+          <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1200" height="1200" role="img" aria-label="Shop icon">
+  <title>Shop</title>
+  <!-- Circle background for contrast (black for favicon) -->
+  <circle cx="12" cy="12" r="12" fill="#000000" />
+
+  <!-- White bag icon centered on the circle -->
+  <path d="M7 9.5c0-.827.672-1.5 1.5-1.5h7c.828 0 1.5.673 1.5 1.5V16a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 7 16V9.5z" fill="#FFFFFF"/>
+  <!-- Handle -->
+  <path d="M9 8a2 2 0 0 1 4 0" fill="none" stroke="#FFFFFF" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Door/line details -->
+  <rect x="11" y="12.2" width="2" height="3.1" rx="0.3" fill="#6366F1" />
+
+</svg>

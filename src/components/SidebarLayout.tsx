@@ -24,7 +24,6 @@ export const UserContext = React.createContext<any>(null);
 // Navigation items configuration
 const navItems = [
   { id: "stores", label: "My Stores", href: "/", icon: Grid },
-  { id: "profile", label: "Profile", href: "/profile", icon: User },
   { id: "account", label: "Account Settings", href: "/account", icon: Settings },
   { id: "billing", label: "Billing", href: "/billing", icon: CreditCard },
   { id: "help", label: "Help & Support", href: "/help", icon: HelpCircle },
