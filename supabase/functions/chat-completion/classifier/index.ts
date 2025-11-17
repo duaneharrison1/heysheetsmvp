@@ -151,9 +151,22 @@ CRITICAL RULES:
 6. If confidence < 70, provide a specific clarification_question
 7. Never hallucinate information - only extract what user actually said
 
+REQUIRED OUTPUT FORMAT (exact field names):
+{
+  "intent": "SERVICE_INQUIRY" | "PRODUCT_INQUIRY" | "INFO_REQUEST" | "BOOKING_REQUEST" | "LEAD_GENERATION" | "GREETING" | "OTHER",
+  "confidence": 0-100,
+  "needs_clarification": true | false,
+  "clarification_question": "string or null",
+  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | null,
+  "extracted_params": { /* object with extracted parameters */ },
+  "reasoning": "string"
+}
+
+CRITICAL: Use "function_to_call" NOT "function", and "extracted_params" NOT "parameters"!
+
 RESPOND WITH JSON ONLY (no markdown, no explanations):`;
 
-  // Call OpenRouter API with structured outputs
+  // Call OpenRouter API with JSON mode (more compatible than strict schema)
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -165,14 +178,7 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
     body: JSON.stringify({
       model: 'anthropic/claude-3.5-sonnet',
       messages: [{ role: 'user', content: classificationPrompt }],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "classification",
-          schema: ClassificationSchema,
-          strict: true // Guarantees 100% schema compliance
-        }
-      },
+      response_format: { type: "json_object" }, // More compatible than json_schema
       temperature: 0.3 // Lower temperature for more consistent classification
     })
   });
@@ -184,9 +190,26 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
   }
 
   const result = await response.json();
-  const classification = JSON.parse(result.choices[0].message.content) as Classification;
+  let classification = JSON.parse(result.choices[0].message.content);
+
+  // Fallback: Transform old field names to new ones if needed
+  if (!classification.function_to_call && classification.function) {
+    console.warn('[Classifier] Detected old schema format, transforming...');
+    classification.function_to_call = classification.function;
+    delete classification.function;
+  }
+  if (!classification.extracted_params && classification.parameters) {
+    classification.extracted_params = classification.parameters;
+    delete classification.parameters;
+  }
+
+  // Validate required fields
+  if (!classification.function_to_call || !classification.extracted_params) {
+    console.error('[Classifier] Invalid classification format:', classification);
+    throw new Error('Classification missing required fields: function_to_call or extracted_params');
+  }
 
   console.log('[Classifier] Result:', JSON.stringify(classification, null, 2));
 
-  return classification;
+  return classification as Classification;
 }
