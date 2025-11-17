@@ -449,7 +449,7 @@ serve(async (req)=>{
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${anonKey}`,
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
                 'apikey': anonKey
               },
               body: JSON.stringify({
@@ -499,7 +499,7 @@ serve(async (req)=>{
       functionResult = await executeFunction(classification.functionToCall, classification.params, {
         storeId,
         userId: 'anonymous',
-        authToken: anonKey
+        authToken: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
       });
       console.log('[Chat] Function result:', {
         success: functionResult?.success,
