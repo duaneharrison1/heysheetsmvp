@@ -238,6 +238,7 @@ async function getStoreInfo(params, storeId, authToken) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
           'apikey': Deno.env.get('SUPABASE_ANON_KEY') || ''
         },
         body: JSON.stringify({
@@ -262,6 +263,7 @@ async function checkAvailability(params, storeId, authToken) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
       'apikey': Deno.env.get('SUPABASE_ANON_KEY') || ''
     },
     body: JSON.stringify({
@@ -362,6 +364,7 @@ async function getProducts(params, storeId, authToken) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
         'apikey': Deno.env.get('SUPABASE_ANON_KEY') || ''
       },
       body: JSON.stringify({
@@ -446,6 +449,7 @@ serve(async (req)=>{
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${anonKey}`,
                 'apikey': anonKey
               },
               body: JSON.stringify({
