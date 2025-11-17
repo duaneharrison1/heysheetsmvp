@@ -1,5 +1,5 @@
-import type { Message, Classification } from '../types.ts';
-import { getOpenRouterApiKey } from '../utils.ts';
+import type { Message, Classification } from '../chat-completion/types.ts';
+import { getOpenRouterApiKey } from '../chat-completion/utils.ts';
 
 /** generateResponse: create a friendly LLM reply using optional function results */
 export async function generateResponse(

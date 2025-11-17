@@ -1,5 +1,5 @@
 // All LLM-executable tools in one module: getStoreInfo, checkAvailability, createBooking, getProducts
-import { } from '../types.ts';
+import { } from '../chat-completion/types.ts';
 
 export async function executeFunction(
   functionName: string,

@@ -1,5 +1,5 @@
-import type { Message, Classification } from '../types.ts';
-import { getOpenRouterApiKey } from '../utils.ts';
+import type { Message, Classification } from '../chat-completion/types.ts';
+import { getOpenRouterApiKey } from '../chat-completion/utils.ts';
 
 /** classifyIntent: send a deterministic prompt to OpenRouter to extract intent and params */
 export async function classifyIntent(
