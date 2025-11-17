@@ -1,0 +1,192 @@
+import { Classification, Message, StoreData } from '../types.ts';
+
+// ============================================================================
+// STRUCTURED OUTPUT SCHEMA
+// ============================================================================
+
+const ClassificationSchema = {
+  type: "object",
+  properties: {
+    intent: {
+      type: "string",
+      enum: ["SERVICE_INQUIRY", "PRODUCT_INQUIRY", "INFO_REQUEST", "BOOKING_REQUEST", "LEAD_GENERATION", "GREETING", "OTHER"]
+    },
+    confidence: {
+      type: "number",
+      minimum: 0,
+      maximum: 100,
+      description: "Confidence level: 0-70 low (ask clarification), 70-85 medium (confirm), 85-100 high (proceed)"
+    },
+    needs_clarification: {
+      type: "boolean",
+      description: "True if confidence < 70 or missing required info"
+    },
+    clarification_question: {
+      type: "string",
+      description: "Specific question to ask if needs_clarification is true"
+    },
+    function_to_call: {
+      type: "string",
+      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "null"],
+      description: "Function to execute based on intent"
+    },
+    extracted_params: {
+      type: "object",
+      properties: {
+        info_type: { type: "string" },
+        query: { type: "string" },
+        category: { type: "string" },
+        tab_name: { type: "string" },
+        name: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" }
+      },
+      description: "Parameters extracted from user message for function calling"
+    },
+    reasoning: {
+      type: "string",
+      description: "Brief explanation of classification decision"
+    }
+  },
+  required: ["intent", "confidence", "needs_clarification", "function_to_call", "extracted_params", "reasoning"],
+  additionalProperties: false
+} as const;
+
+// ============================================================================
+// CLASSIFIER FUNCTION
+// ============================================================================
+
+export async function classifyIntent(
+  messages: Message[],
+  context?: { storeData?: StoreData }
+): Promise<Classification> {
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not configured');
+  }
+
+  // Get last message
+  const lastMessage = messages[messages.length - 1]?.content || '';
+
+  // Build conversation history (last 3 turns for context windowing)
+  const recentMessages = messages.slice(-6); // Last 3 user + 3 assistant messages
+  const conversationHistory = recentMessages
+    .map(m => `${m.role}: ${m.content}`)
+    .join('\n');
+
+  // Build store context
+  let storeContext = '';
+  if (context?.storeData) {
+    const { services = [], products = [], hours = [] } = context.storeData;
+
+    // Context windowing: Only include high-level overview
+    storeContext = `
+AVAILABLE SERVICES (${services.length} total):
+${services.slice(0, 5).map(s => `- ${s.serviceName} (${s.category || 'General'}): $${s.price || 'N/A'}`).join('\n')}
+${services.length > 5 ? `... and ${services.length - 5} more services` : ''}
+
+AVAILABLE PRODUCTS (${products.length} total):
+${products.slice(0, 5).map(p => `- ${p.name} (${p.category || 'General'}): $${p.price || 'N/A'}`).join('\n')}
+${products.length > 5 ? `... and ${products.length - 5} more products` : ''}
+
+BUSINESS HOURS:
+${hours.map(h => `${h.day}: ${h.isOpen ? `${h.openTime} - ${h.closeTime}` : 'Closed'}`).join('\n')}
+`;
+  }
+
+  // Get today's date
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+  // Build classification prompt
+  const classificationPrompt = `You are an intent classifier for a business chat assistant.
+
+CONVERSATION HISTORY (recent turns only):
+${conversationHistory}
+
+${storeContext}
+
+CURRENT MESSAGE: "${lastMessage}"
+TODAY'S DATE: ${todayStr}
+TOMORROW'S DATE: ${tomorrowStr}
+
+INTENTS:
+- SERVICE_INQUIRY: User asking about services/classes (wants details or to browse)
+- PRODUCT_INQUIRY: User asking about products for sale (wants details or to browse)
+- INFO_REQUEST: User wants general store information (hours, location, contact, policies)
+- BOOKING_REQUEST: User wants to book/schedule a service
+- LEAD_GENERATION: User wants to be contacted or leave their information
+- GREETING: Greeting, small talk, or social niceties
+- OTHER: Unclear intent or off-topic
+
+FUNCTIONS:
+- get_store_info: Get store details, hours, general info (returns overview with all services/products)
+- get_services: Search and filter services with semantic matching (user wants service details)
+- get_products: Search and filter products with semantic matching (user wants product details)
+- submit_lead: Capture user contact information and interest
+- get_misc_data: Access custom tabs like FAQ, Policies, etc. (if user asks about topics not in standard tabs)
+
+PARAMETER EXTRACTION RULES:
+- info_type: 'hours' | 'services' | 'products' | 'all' (for get_store_info)
+- query: User's search term or description (for get_services, get_products) - can be vague like "sake" or "beginner pottery"
+- category: Specific category name if mentioned explicitly (for get_products)
+- tab_name: Custom tab name if user asks about FAQ, Policies, etc. (for get_misc_data)
+- name, email, phone: Contact details (for submit_lead)
+
+CONFIDENCE SCORING:
+- 0-70 (LOW): Ambiguous intent, missing information, or unclear what user wants → needs_clarification = true
+- 70-85 (MEDIUM): Likely intent identified but could use confirmation → needs_clarification = false, but suggest confirmation
+- 85-100 (HIGH): Crystal clear intent and all required information present → needs_clarification = false
+
+CRITICAL RULES:
+1. Only call submit_lead if user EXPLICITLY offers contact info or asks to be contacted
+2. Use get_services/get_products for browsing/searching (they handle semantic matching)
+3. Use get_store_info for general questions ("what do you offer?", "tell me about your studio")
+4. Parse relative dates ("tomorrow", "next Monday") into YYYY-MM-DD format
+5. Extract query parameter generously - even vague terms like "sake", "beginner", "functional" are useful
+6. If confidence < 70, provide a specific clarification_question
+7. Never hallucinate information - only extract what user actually said
+
+RESPOND WITH JSON ONLY (no markdown, no explanations):`;
+
+  // Call OpenRouter API with structured outputs
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://heysheets.com',
+      'X-Title': 'HeySheets MVP'
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-3.5-sonnet',
+      messages: [{ role: 'user', content: classificationPrompt }],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "classification",
+          schema: ClassificationSchema,
+          strict: true // Guarantees 100% schema compliance
+        }
+      },
+      temperature: 0.3 // Lower temperature for more consistent classification
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[Classifier] OpenRouter API error:', error);
+    throw new Error(`Classification failed: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  const classification = JSON.parse(result.choices[0].message.content) as Classification;
+
+  console.log('[Classifier] Result:', JSON.stringify(classification, null, 2));
+
+  return classification;
+}
