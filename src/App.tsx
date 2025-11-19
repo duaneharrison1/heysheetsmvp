@@ -14,6 +14,8 @@ import ChatComponentsShowcase from "./pages/ChatComponents";
 import Account from "./pages/Account";
 import Billing from './pages/Billing';
 import Help from './pages/Help';
+import AdminUsers from './pages/AdminUsers';
+import AdminStores from './pages/AdminStores';
 
 const queryClient = new QueryClient();
 
@@ -37,6 +39,8 @@ const App = () => (
           <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
           <Route path="/billing" element={<SidebarLayout><Billing /></SidebarLayout>} />
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
+          <Route path="/admin/users" element={<SidebarLayout><AdminUsers /></SidebarLayout>} />
+          <Route path="/admin/stores" element={<SidebarLayout><AdminStores /></SidebarLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AuthButton from "@/components/AuthButton";
-import { Home, Grid, User, Settings, CreditCard, HelpCircle, Loader2 } from "lucide-react";
+import { Home, Grid, User, Settings, CreditCard, HelpCircle, Loader2, Shield } from "lucide-react";
 
 // Create a context to share user data with child components
 export const UserContext = React.createContext<any>(null);
@@ -116,7 +116,37 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
                   </SidebarMenuItem>
                 );
               })}
-            </SidebarMenu>
+              
+              {/* Admin Section */}
+              <div className="my-3 border-t border-sidebar-border" />
+              <div className="px-2 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Admin
+              </div>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === "/admin/users"}
+                  tooltip="Manage Users"
+                >
+                  <Link to="/admin/users">
+                    <User className="h-4 w-4" />
+                    <span>All Users</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === "/admin/stores"}
+                  tooltip="Manage Stores"
+                >
+                  <Link to="/admin/stores">
+                    <Grid className="h-4 w-4" />
+                    <span>All Stores</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              </SidebarMenu>
           </SidebarContent>
 
           <SidebarFooter className="border-t border-border">
