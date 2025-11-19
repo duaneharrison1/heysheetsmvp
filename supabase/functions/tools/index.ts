@@ -5,9 +5,12 @@ import {
   GetServicesSchema,
   GetProductsSchema,
   SubmitLeadSchema,
-  GetMiscDataSchema
+  GetMiscDataSchema,
+  CheckAvailabilitySchema,
+  CreateBookingSchema
 } from './validators.ts';
 import { semanticMatch } from './semantic-matcher.ts';
+import { checkAvailability, createBooking } from './calendar-booking.ts';
 
 // ============================================================================
 // FUNCTION EXECUTOR
@@ -32,6 +35,10 @@ export async function executeFunction(
         return await submitLead(params, context);
       case 'get_misc_data':
         return await getMiscData(params, context);
+      case 'check_availability':
+        return await checkAvailability(params, context);
+      case 'create_booking':
+        return await createBooking(params, context);
       default:
         return {
           success: false,

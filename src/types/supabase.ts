@@ -22,6 +22,8 @@ export type Database = {
           type: string
           logo: string | null
           sheet_id: string | null
+          calendar_mappings: string | null
+          invite_calendar_id: string | null
           system_prompt: string | null
           detected_tabs: string | null
           user_id: string
@@ -34,6 +36,8 @@ export type Database = {
           type?: string
           logo?: string | null
           sheet_id?: string | null
+          calendar_mappings?: string | null
+          invite_calendar_id?: string | null
           system_prompt?: string | null
           detected_tabs?: string | null
           user_id: string
@@ -47,6 +51,8 @@ export type Database = {
           type?: string
           logo?: string | null
           sheet_id?: string | null
+          calendar_mappings?: string | null
+          invite_calendar_id?: string | null
           system_prompt?: string | null
           detected_tabs?: string | null
           user_id?: string
