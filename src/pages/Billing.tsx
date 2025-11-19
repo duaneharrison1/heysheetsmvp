@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { H1, Lead } from '@/components/ui/heading';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Loader2, CreditCard, Zap, Trash } from 'lucide-react';
 
 const Billing = () => {
@@ -39,6 +39,7 @@ const Billing = () => {
       setPaymentMethods(data?.methods || []);
     } catch (err: any) {
       console.error('Failed to load payment methods', err);
+      toast.error('Failed to load payment methods');
     } finally {
       setMethodsLoading(false);
     }
@@ -72,9 +73,9 @@ const Billing = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Could not open portal');
       window.location.href = data.url;
-    } catch (err: any) {
-      toast({ title: 'Error', description: err?.message ?? 'Failed to open billing portal', variant: 'destructive' });
-    } finally {
+      } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to open billing portal');
+      } finally {
       setPortalLoading(false);
     }
   };
@@ -91,11 +92,11 @@ const Billing = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Cancel failed');
-      toast({ title: 'Canceled', description: 'Subscription canceled.' });
+      toast.success('Subscription canceled.');
       setSubscription(null);
-    } catch (err: any) {
-      toast({ title: 'Error', description: err?.message ?? 'Could not cancel subscription', variant: 'destructive' });
-    } finally {
+      } catch (err: any) {
+      toast.error(err?.message ?? 'Could not cancel subscription');
+      } finally {
       setPortalLoading(false);
     }
   };

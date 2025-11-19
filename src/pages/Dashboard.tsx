@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { H1, Lead } from '@/components/ui/heading';
 import { StoreCard } from '@/components/StoreCard';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Plus, MessageSquare, Settings, Loader2 } from 'lucide-react';
 import { UserContext } from '@/components/SidebarLayout';
 
