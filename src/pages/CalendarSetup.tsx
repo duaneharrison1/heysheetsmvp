@@ -11,6 +11,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [calendars, setCalendars] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
+  const [calendarIdInput, setCalendarIdInput] = useState('');
+  const [subscribing, setSubscribing] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -156,6 +158,47 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   }
 
+  async function subscribeToCalendar() {
+    if (!calendarIdInput.trim()) {
+      toast({
+        title: 'Calendar ID required',
+        description: 'Please enter a calendar ID',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubscribing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('link-calendar', {
+        body: {
+          storeId,
+          calendarId: calendarIdInput.trim(),
+          action: 'subscribe',
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Calendar subscribed!',
+        description: data.message || 'Calendar has been added to your list',
+      });
+
+      setCalendarIdInput('');
+      // Reload calendars to show the newly subscribed one
+      loadCalendars();
+    } catch (error: any) {
+      toast({
+        title: 'Subscribe failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSubscribing(false);
+    }
+  }
+
   function getLinkedCalendar(serviceId: string): string | null {
     for (const [calId, svcId] of Object.entries(mappings)) {
       if (svcId === serviceId) return calId;
@@ -215,12 +258,54 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Link Service Calendars</h3>
 
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded">
-          <p className="text-sm text-blue-900">
-            <strong>How it works:</strong> Create calendars in Google Calendar for your services,
-            share them with <code className="bg-blue-100 px-1">heysheets-backend@heysheets-mvp.iam.gserviceaccount.com</code>,
-            then link them here.
-          </p>
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded space-y-3">
+          <div>
+            <p className="text-sm text-blue-900 mb-3">
+              <strong>How it works:</strong>
+            </p>
+            <ol className="text-sm text-blue-900 space-y-2 list-decimal list-inside">
+              <li>Create a calendar in Google Calendar for your service</li>
+              <li>Share it with <code className="bg-blue-100 px-1 py-0.5 rounded">heysheets-backend@heysheets-mvp.iam.gserviceaccount.com</code> (permission: "Make changes to events")</li>
+              <li>Copy the calendar ID from Google Calendar Settings → "Integrate calendar"</li>
+              <li>Paste the calendar ID below and click "Subscribe"</li>
+              <li>Link the calendar to a service from the dropdown</li>
+            </ol>
+          </div>
+
+          <div className="pt-3 border-t border-blue-300">
+            <label className="text-sm font-medium text-blue-900 block mb-2">
+              Add Calendar by ID
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="flex-1 px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Paste calendar ID here (e.g., abc123@group.calendar.google.com)"
+                value={calendarIdInput}
+                onChange={(e) => setCalendarIdInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    subscribeToCalendar();
+                  }
+                }}
+                disabled={subscribing}
+              />
+              <Button
+                onClick={subscribeToCalendar}
+                disabled={subscribing || !calendarIdInput.trim()}
+                size="sm"
+              >
+                {subscribing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Subscribing...
+                  </>
+                ) : (
+                  'Subscribe'
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
 
         {services.length === 0 ? (

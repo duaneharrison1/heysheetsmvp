@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { listCalendars, updateEventProperties, listEvents } from '../_shared/google-calendar.ts';
+import { listCalendars, updateEventProperties, listEvents, subscribeToCalendar } from '../_shared/google-calendar.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -63,6 +63,41 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // ACTION: Subscribe to a shared calendar
+    if (action === 'subscribe') {
+      if (!calendarId) {
+        throw new Error('calendarId is required for subscribe action');
+      }
+
+      console.log(`Subscribing service account to calendar: ${calendarId}`);
+
+      try {
+        await subscribeToCalendar(calendarId);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Calendar subscribed successfully. Refresh the calendar list to see it.',
+            calendarId
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error: any) {
+        console.error('Subscribe error:', error);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error.message,
+            hint: 'Make sure the calendar is shared with heysheets-backend@heysheets-mvp.iam.gserviceaccount.com with "Make changes to events" permission'
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
     }
 
     // ACTION: Link calendar to service
@@ -187,7 +222,7 @@ serve(async (req) => {
       );
     }
 
-    throw new Error('Invalid action. Use: list, link, or unlink');
+    throw new Error('Invalid action. Use: list, subscribe, link, or unlink');
 
   } catch (error) {
     console.error('Link calendar error:', error);
