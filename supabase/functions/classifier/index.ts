@@ -166,7 +166,8 @@ CRITICAL: Use "function_to_call" NOT "function", and "extracted_params" NOT "par
 
 RESPOND WITH JSON ONLY (no markdown, no explanations):`;
 
-  // Call OpenRouter API with JSON mode (more compatible than strict schema)
+  // Call OpenRouter API with JSON object mode (more reliable than strict schema)
+  // Strict json_schema mode can cause gibberish responses with OpenRouter
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -178,15 +179,9 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
     body: JSON.stringify({
       model: 'anthropic/claude-3.5-sonnet',
       messages: [{ role: 'user', content: classificationPrompt }],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "classification",
-          schema: ClassificationSchema,
-          strict: true // Guarantees 100% schema compliance and valid JSON
-        }
-      },
-      temperature: 0.3 // Lower temperature for more consistent classification
+      response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
+      temperature: 0.1, // Very low temp for consistency
+      max_tokens: 500 // Limit response size
     })
   });
 
@@ -197,9 +192,30 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
   }
 
   const result = await response.json();
-  const rawContent = result.choices[0].message.content;
 
-  console.log('[Classifier] Raw LLM response:', rawContent.substring(0, 500));
+  // Validate API response structure
+  if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+    console.error('[Classifier] Invalid API response structure:', JSON.stringify(result, null, 2));
+    throw new Error('OpenRouter API returned unexpected response format');
+  }
+
+  let rawContent = result.choices[0].message.content;
+
+  // Check for empty or null content
+  if (!rawContent) {
+    console.error('[Classifier] Empty response from API');
+    throw new Error('OpenRouter API returned empty response');
+  }
+
+  console.log('[Classifier] Raw LLM response (first 200 chars):', rawContent.substring(0, 200));
+
+  // Clean up response - remove markdown code blocks if present
+  rawContent = rawContent.trim();
+  if (rawContent.startsWith('```json')) {
+    rawContent = rawContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (rawContent.startsWith('```')) {
+    rawContent = rawContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
 
   let classification;
   try {
@@ -208,6 +224,12 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
     console.error('[Classifier] Failed to parse JSON response');
     console.error('[Classifier] Raw content:', rawContent);
     console.error('[Classifier] Parse error:', parseError);
+
+    // Check if response is completely garbled
+    if (rawContent.length < 50 || !rawContent.includes('{')) {
+      throw new Error(`LLM returned invalid response (possible API issue): ${rawContent.substring(0, 100)}`);
+    }
+
     throw new Error(`Invalid JSON from LLM: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
   }
 
@@ -222,8 +244,8 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
     delete classification.parameters;
   }
 
-  // Validate required fields
-  if (!classification.function_to_call || !classification.extracted_params) {
+  // Validate required fields exist (function_to_call can be null for greetings, extracted_params can be empty {})
+  if (!('function_to_call' in classification) || !('extracted_params' in classification)) {
     console.error('[Classifier] Invalid classification format:', classification);
     throw new Error('Classification missing required fields: function_to_call or extracted_params');
   }
