@@ -65,7 +65,8 @@ async function getStoreInfo(
     };
   }
 
-  const { info_type } = validation.data;
+  const validated = validation.data as Record<string, any>;
+  const { info_type } = validated;
   const { storeId, authToken, store } = context;
 
   // Determine which tabs to load based on info_type
@@ -131,7 +132,7 @@ async function getServices(
     };
   }
 
-  const { query, category } = validation.data;
+  const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
   // Find services tab
@@ -191,7 +192,7 @@ async function getProducts(
     };
   }
 
-  const { query, category } = validation.data;
+  const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
   // Find products tab
@@ -320,7 +321,7 @@ async function getMiscData(
     };
   }
 
-  const { tab_name, query } = validation.data;
+  const { tab_name, query } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
   // Find the requested tab
