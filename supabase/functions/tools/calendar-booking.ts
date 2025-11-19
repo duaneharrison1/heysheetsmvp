@@ -404,7 +404,8 @@ If you need to reschedule or cancel, please contact us.
           dateTime: endTime.toISOString(),
           timeZone: 'Asia/Hong_Kong',
         },
-        attendees: [{ email: customer_email }],
+        // Note: Service accounts cannot add attendees without Domain-Wide Delegation
+        // Customer info is stored in description and extendedProperties instead
         extendedProperties: {
           private: {
             booking_id: bookingId,
@@ -416,7 +417,7 @@ If you need to reschedule or cancel, please contact us.
           },
         },
       },
-      'all' // Send email to customer
+      'none' // Don't send email updates (service account cannot send invites)
     );
 
     console.log('[create_booking] ✅ Booking created successfully:', bookingId);
@@ -432,7 +433,7 @@ If you need to reschedule or cancel, please contact us.
       customer_name,
       customer_email,
       available_spots_remaining: capacity - bookedCount - 1,
-      message: `Booking confirmed! You'll receive a calendar invite at ${customer_email} with all the details. See you on ${date} at ${time}!`,
+      message: `Booking confirmed for ${service.serviceName} on ${date} at ${time}! Your confirmation details have been saved. See you there!`,
     };
 
   } catch (error) {
