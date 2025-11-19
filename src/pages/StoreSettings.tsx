@@ -8,6 +8,14 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const StoreSettings = () => {
   const { storeId } = useParams();
@@ -16,6 +24,9 @@ const StoreSettings = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [deleting, setDeleting] = useState(false);
   const [updatingActive, setUpdatingActive] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!storeId) return;
@@ -46,6 +57,45 @@ const StoreSettings = () => {
 
   if (!store) return <div className="py-8 text-center text-muted-foreground">Store not found</div>;
 
+  const handleStatusChange = async () => {
+    if (pendingStatusChange === null) return;
+    try {
+      setUpdatingActive(true);
+      const { error } = await supabase
+        .from('stores')
+        .update({ is_active: pendingStatusChange })
+        .eq('id', storeId);
+      if (error) throw error;
+      setStore({ ...store, is_active: pendingStatusChange });
+      toast.success(`Store is now ${pendingStatusChange ? 'active' : 'inactive'}.`);
+      setStatusDialogOpen(false);
+      setPendingStatusChange(null);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Could not update store status');
+      setPendingStatusChange(null);
+    } finally {
+      setUpdatingActive(false);
+    }
+  };
+
+  const handleDeleteStore = async () => {
+    try {
+      setDeleting(true);
+      const { error } = await supabase
+        .from('stores')
+        .delete()
+        .eq('id', storeId);
+      if (error) throw error;
+      toast.success(`${store.name} has been deleted.`);
+      navigate('/dashboard');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Could not delete store');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -71,21 +121,9 @@ const StoreSettings = () => {
               <Switch
                 checked={store.is_active ?? true}
                 disabled={updatingActive}
-                onCheckedChange={async (checked) => {
-                  try {
-                    setUpdatingActive(true);
-                    const { error } = await supabase
-                      .from('stores')
-                      .update({ is_active: checked })
-                      .eq('id', storeId);
-                    if (error) throw error;
-                    setStore({ ...store, is_active: checked });
-                    toast.success(`Store is now ${checked ? 'active' : 'inactive'}.`);
-                  } catch (err: any) {
-                    toast.error(err?.message ?? 'Could not update store status');
-                  } finally {
-                    setUpdatingActive(false);
-                  }
+                onCheckedChange={(checked) => {
+                  setPendingStatusChange(checked);
+                  setStatusDialogOpen(true);
                 }}
               />
             </div>
@@ -120,30 +158,72 @@ const StoreSettings = () => {
             <Button
               variant="destructive"
               disabled={deleting}
-              onClick={async () => {
-                const ok = window.confirm(`Are you sure you want to permanently delete "${store.name}"? This action cannot be undone.`);
-                if (!ok) return;
-                try {
-                  setDeleting(true);
-                  const { error } = await supabase
-                    .from('stores')
-                    .delete()
-                    .eq('id', storeId);
-                  if (error) throw error;
-                  toast.success(`${store.name} has been deleted.`);
-                  navigate('/dashboard');
-                } catch (err: any) {
-                  toast.error(err?.message ?? 'Could not delete store');
-                } finally {
-                  setDeleting(false);
-                }
-              }}
+              onClick={() => setDeleteDialogOpen(true)}
             >
               {deleting ? 'Deleting...' : 'Delete store'}
             </Button>
           </CardFooter>
         </Card>
       </div>
+
+      {/* Status Change Confirmation Dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Store Status</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to make this store {pendingStatusChange ? 'active' : 'inactive'}? 
+              {!pendingStatusChange && ' It will be hidden from your dashboard.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStatusDialogOpen(false);
+                setPendingStatusChange(null);
+              }}
+              disabled={updatingActive}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleStatusChange}
+              disabled={updatingActive}
+            >
+              {updatingActive ? 'Updating...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Store</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete "{store.name}"? This action cannot be undone. All settings, data, and associated information will be removed permanently.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteStore}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
