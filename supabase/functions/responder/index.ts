@@ -33,8 +33,10 @@ ${store?.description ? `Description: ${store.description}` : ''}
   let functionContext = '';
   if (functionResult) {
     if (functionResult.success) {
+      // Handle both wrapped {success, data} and direct data formats
+      const resultData = functionResult.data || functionResult;
       functionContext = `FUNCTION RESULT (Use this data in your response):
-${JSON.stringify(functionResult.data, null, 2)}
+${JSON.stringify(resultData, null, 2)}
 
 IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
     } else {
@@ -64,12 +66,12 @@ Generate a helpful, natural, conversational response based on the above context.
 RESPONSE GUIDELINES:
 - Be warm, friendly, and professional
 - Keep responses concise (under 200 words unless explaining complex details)
-- If function data is available, present it in a natural, engaging way
+- If function data is available, USE IT and present it in a natural, engaging way
 - If there was an error, apologize and guide the user
 - For low confidence or needs_clarification, ask the clarification question naturally
 - Use emojis sparingly and appropriately
 - Don't mention internal system details (intents, functions, confidence scores)
-- If user asks about booking but we don't have booking functions, suggest they contact directly or submit their info
+- When availability/booking data is provided, present it clearly and guide the user to next steps
 
 ${classification.needs_clarification ? `CLARIFICATION NEEDED: ${classification.clarification_question}` : ''}
 
