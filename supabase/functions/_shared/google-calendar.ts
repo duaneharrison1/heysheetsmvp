@@ -231,18 +231,35 @@ export async function listEvents(
     params.append('orderBy', 'startTime');
   }
 
-  const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` },
-    }
-  );
+  console.log('🔍 [listEvents] Attempting to access calendar:', calendarId.substring(0, 20) + '...');
+  console.log('🔍 [listEvents] Time range:', { timeMin, timeMax });
+
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`;
+
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
 
   const data = await response.json();
+
   if (!response.ok) {
+    console.error('❌ [listEvents] Failed to access calendar');
+    console.error('❌ [listEvents] Status:', response.status);
+    console.error('❌ [listEvents] Error:', JSON.stringify(data, null, 2));
+    console.error('❌ [listEvents] Calendar ID:', calendarId);
+
+    if (response.status === 404) {
+      throw new Error(
+        `Calendar not accessible. Calendar ID: ${calendarId}. ` +
+        `Make sure it's shared with heysheets-backend@heysheets-mvp.iam.gserviceaccount.com ` +
+        `with "Make changes to events" permission. Error: ${JSON.stringify(data)}`
+      );
+    }
+
     throw new Error(`Failed to list events: ${JSON.stringify(data)}`);
   }
 
+  console.log('✅ [listEvents] Successfully retrieved', data.items?.length || 0, 'events');
   return data.items || [];
 }
 
