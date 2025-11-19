@@ -73,6 +73,13 @@ serve(async (req) => {
         : store.detected_schema
     };
 
+    console.log('[Orchestrator] Store config:', {
+      id: storeConfig.id,
+      name: storeConfig.name,
+      hasDetectedSchema: !!storeConfig.detected_schema,
+      schemaKeys: storeConfig.detected_schema ? Object.keys(storeConfig.detected_schema) : []
+    });
+
     // Pre-load store data for classification context (using detected schema)
     let storeData: StoreData = {
       services: [],
