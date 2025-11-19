@@ -137,12 +137,17 @@ async function getServices(
 
   // Find services tab
   const detectedSchema = store?.detected_schema || {};
+  console.log('[getServices] Store:', store?.name);
+  console.log('[getServices] Detected schema keys:', Object.keys(detectedSchema));
+  console.log('[getServices] Full detected schema:', JSON.stringify(detectedSchema, null, 2));
+
   const servicesTab = findActualTabName('services', detectedSchema);
+  console.log('[getServices] Services tab found:', servicesTab);
 
   if (!servicesTab) {
     return {
       success: false,
-      error: 'Services data not available. Please ensure your sheet has a services tab.'
+      error: `Services data not available. Schema has tabs: ${Object.keys(detectedSchema).join(', ')}`
     };
   }
 
@@ -400,11 +405,14 @@ async function loadTabData(
 ): Promise<any[]> {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
+  console.log(`[loadTabData] Loading tab: ${tabName} for store: ${storeId}`);
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/google-sheet`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`
+      'Authorization': `Bearer ${authToken}`,
+      'apikey': authToken
     },
     body: JSON.stringify({
       operation: 'read',
@@ -414,10 +422,13 @@ async function loadTabData(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load ${tabName}: ${response.statusText}`);
+    const errorText = await response.text();
+    console.error(`[loadTabData] Failed to load ${tabName}:`, errorText);
+    throw new Error(`Failed to load ${tabName}: ${response.statusText} - ${errorText}`);
   }
 
   const result = await response.json();
+  console.log(`[loadTabData] Loaded ${result.data?.length || 0} rows from ${tabName}`);
   return result.data || [];
 }
 
