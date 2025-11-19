@@ -222,8 +222,8 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
     delete classification.parameters;
   }
 
-  // Validate required fields
-  if (!classification.function_to_call || !classification.extracted_params) {
+  // Validate required fields exist (function_to_call can be null for greetings, extracted_params can be empty {})
+  if (!('function_to_call' in classification) || !('extracted_params' in classification)) {
     console.error('[Classifier] Invalid classification format:', classification);
     throw new Error('Classification missing required fields: function_to_call or extracted_params');
   }
