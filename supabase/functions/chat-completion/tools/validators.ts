@@ -30,6 +30,21 @@ export const GetMiscDataSchema = z.object({
   query: z.string().optional()
 });
 
+export const CheckAvailabilitySchema = z.object({
+  service_name: z.string().optional(),
+  date: z.string().optional(), // YYYY-MM-DD
+  time: z.string().optional()  // HH:MM
+});
+
+export const CreateBookingSchema = z.object({
+  service_name: z.string(),
+  date: z.string(), // YYYY-MM-DD
+  time: z.string(), // HH:MM
+  customer_name: z.string(),
+  customer_email: z.string().email(),
+  customer_phone: z.string().optional()
+});
+
 // ============================================================================
 // VALIDATION HELPERS
 // ============================================================================

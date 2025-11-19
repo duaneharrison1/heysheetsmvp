@@ -27,7 +27,7 @@ const ClassificationSchema = {
     },
     function_to_call: {
       type: "string",
-      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "null"],
+      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "null"],
       description: "Function to execute based on intent"
     },
     extracted_params: {
@@ -39,7 +39,13 @@ const ClassificationSchema = {
         tab_name: { type: "string" },
         name: { type: "string" },
         email: { type: "string" },
-        phone: { type: "string" }
+        phone: { type: "string" },
+        service_name: { type: "string" },
+        date: { type: "string" },
+        time: { type: "string" },
+        customer_name: { type: "string" },
+        customer_email: { type: "string" },
+        customer_phone: { type: "string" }
       },
       description: "Parameters extracted from user message for function calling"
     },
@@ -129,6 +135,8 @@ FUNCTIONS:
 - get_products: Search and filter products with semantic matching (user wants product details)
 - submit_lead: Capture user contact information and interest
 - get_misc_data: Access custom tabs like FAQ, Policies, etc. (if user asks about topics not in standard tabs)
+- check_availability: Check if a service is available at a specific date/time (requires service_name, date, time)
+- create_booking: Create an actual booking with calendar invite (requires service_name, date, time, customer_name, customer_email)
 
 PARAMETER EXTRACTION RULES:
 - info_type: 'hours' | 'services' | 'products' | 'all' (for get_store_info)
@@ -136,6 +144,10 @@ PARAMETER EXTRACTION RULES:
 - category: Specific category name if mentioned explicitly (for get_products)
 - tab_name: Custom tab name if user asks about FAQ, Policies, etc. (for get_misc_data)
 - name, email, phone: Contact details (for submit_lead)
+- service_name: Service name for booking (for check_availability, create_booking)
+- date: Date in YYYY-MM-DD format (for check_availability, create_booking) - parse relative dates like "tomorrow" or "next Monday"
+- time: Time in HH:MM format (for check_availability, create_booking)
+- customer_name, customer_email, customer_phone: Customer details (for create_booking)
 
 CONFIDENCE SCORING:
 - 0-70 (LOW): Ambiguous intent, missing information, or unclear what user wants → needs_clarification = true
@@ -151,13 +163,20 @@ CRITICAL RULES:
 6. If confidence < 70, provide a specific clarification_question
 7. Never hallucinate information - only extract what user actually said
 
+BOOKING FLOW:
+- If user expresses interest in booking but lacks details → get_services (show available options)
+- If user asks "is X available on Y at Z?" → check_availability (need: service_name, date, time)
+- If user provides ALL booking details (service, date, time, name, email) → create_booking
+- NEVER call create_booking without customer_name AND customer_email
+- If user says "I want to book X tomorrow at 2pm" but hasn't provided contact info → check_availability first, then ask for contact details
+
 REQUIRED OUTPUT FORMAT (exact field names):
 {
   "intent": "SERVICE_INQUIRY" | "PRODUCT_INQUIRY" | "INFO_REQUEST" | "BOOKING_REQUEST" | "LEAD_GENERATION" | "GREETING" | "OTHER",
   "confidence": 0-100,
   "needs_clarification": true | false,
   "clarification_question": "string or null",
-  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | null,
+  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | null,
   "extracted_params": { /* object with extracted parameters */ },
   "reasoning": "string"
 }
