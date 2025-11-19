@@ -22,13 +22,34 @@ serve(async (req) => {
 
     // ACTION: List available calendars
     if (action === 'list') {
+      console.log('=== LIST CALENDARS DEBUG ===');
+      console.log('Store ID:', storeId);
       console.log('Listing calendars shared with service account...');
+
       const calendars = await listCalendars();
+
+      console.log('Total calendars found:', calendars.length);
+      console.log('Calendar details:', JSON.stringify(calendars.map(cal => ({
+        id: cal.id,
+        name: cal.summary,
+        accessRole: cal.accessRole,
+        primary: cal.primary,
+        selected: cal.selected,
+      })), null, 2));
 
       // Filter to calendars service account can write to
       const writableCalendars = calendars.filter(cal =>
         cal.accessRole === 'owner' || cal.accessRole === 'writer'
       );
+
+      console.log('Writable calendars:', writableCalendars.length);
+      console.log('Filtered out calendars:', calendars.filter(cal =>
+        cal.accessRole !== 'owner' && cal.accessRole !== 'writer'
+      ).map(cal => ({
+        name: cal.summary,
+        accessRole: cal.accessRole,
+        reason: 'Not owner/writer'
+      })));
 
       return new Response(
         JSON.stringify({

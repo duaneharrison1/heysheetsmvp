@@ -4,14 +4,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createEvent, listEvents, countBookings } from '../_shared/google-calendar.ts';
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-interface ToolContext {
-  storeId: string;
-  serviceRoleKey: string;
-}
+import { FunctionContext } from '../_shared/types.ts';
 
 /**
  * Load sheet tab data (reuse from existing tools)
@@ -19,14 +12,20 @@ interface ToolContext {
 async function loadSheetTab(
   storeId: string,
   tabName: string,
-  serviceRoleKey: string
+  authToken: string
 ): Promise<any[]> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  if (!supabaseUrl) {
+    console.error('❌ SUPABASE_URL not set');
+    throw new Error('SUPABASE_URL environment variable not set');
+  }
+
   const response = await fetch(
     `${supabaseUrl}/functions/v1/google-sheet`,
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -59,11 +58,13 @@ function findActualTabName(target: string, schema: any): string | null {
  */
 export async function checkAvailability(
   params: { service_name?: string; date?: string; time?: string },
-  context: ToolContext
+  context: FunctionContext
 ): Promise<any> {
   try {
-    const { storeId, serviceRoleKey } = context;
+    const { storeId, authToken } = context;
     const { service_name, date, time } = params;
+
+    console.log('[check_availability] Called with:', { service_name, date, time, storeId });
 
     if (!service_name || !date || !time) {
       return {
@@ -73,8 +74,17 @@ export async function checkAvailability(
       };
     }
 
+    // Get SUPABASE_URL from environment
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    if (!supabaseUrl) {
+      console.error('❌ SUPABASE_URL not set');
+      throw new Error('SUPABASE_URL environment variable not set');
+    }
+
+    console.log('[check_availability] Creating Supabase client...');
+
     // Get store with calendar config
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(supabaseUrl, authToken);
     const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('calendar_mappings, invite_calendar_id, sheet_id, detected_schema')
@@ -82,6 +92,7 @@ export async function checkAvailability(
       .single();
 
     if (storeError || !store) {
+      console.error('[check_availability] Store not found:', storeError);
       return {
         success: false,
         error: 'Store not found',
@@ -89,6 +100,7 @@ export async function checkAvailability(
     }
 
     if (!store.invite_calendar_id) {
+      console.log('[check_availability] Calendar booking not set up');
       return {
         success: false,
         error: 'Calendar booking not set up for this store',
@@ -103,18 +115,22 @@ export async function checkAvailability(
           : store.calendar_mappings)
       : {};
 
+    console.log('[check_availability] Calendar mappings:', mappings);
+
     // Get services from sheet
     const schema = JSON.parse(store.detected_schema);
     const servicesTab = findActualTabName('services', schema);
 
     if (!servicesTab) {
+      console.error('[check_availability] Services tab not found in schema');
       return {
         success: false,
         error: 'Services not configured',
       };
     }
 
-    const servicesData = await loadSheetTab(storeId, servicesTab, serviceRoleKey);
+    const servicesData = await loadSheetTab(storeId, servicesTab, authToken);
+    console.log('[check_availability] Found services:', servicesData.length);
 
     // Find matching service (fuzzy)
     const service = servicesData.find((s: any) =>
@@ -122,6 +138,7 @@ export async function checkAvailability(
     );
 
     if (!service) {
+      console.log('[check_availability] Service not found:', service_name);
       return {
         success: false,
         error: 'Service not found',
@@ -130,6 +147,7 @@ export async function checkAvailability(
     }
 
     const serviceId = service.serviceID || service.serviceName;
+    console.log('[check_availability] Found service:', serviceId);
 
     // Find which calendar this service is linked to
     const calendarId = Object.keys(mappings).find(
@@ -137,12 +155,15 @@ export async function checkAvailability(
     );
 
     if (!calendarId) {
+      console.log('[check_availability] Service not linked to any calendar');
       return {
         success: false,
         error: 'Service not linked to calendar',
         message: `${service.serviceName} is not currently available for booking. Please contact us directly.`,
       };
     }
+
+    console.log('[check_availability] Service linked to calendar:', calendarId);
 
     // Build dateTime for search
     const dateTimeStr = `${date}T${time}:00+08:00`;
@@ -161,6 +182,8 @@ export async function checkAvailability(
       true // singleEvents - expand recurring
     );
 
+    console.log('[check_availability] Found events:', events.length);
+
     // Find event at requested time
     const matchingEvent = events.find((event: any) => {
       const eventTime = new Date(event.start.dateTime);
@@ -168,6 +191,7 @@ export async function checkAvailability(
     });
 
     if (!matchingEvent) {
+      console.log('[check_availability] No event at requested time');
       return {
         success: false,
         available: false,
@@ -186,6 +210,7 @@ export async function checkAvailability(
     );
 
     const availableSpots = capacity - bookedCount;
+    console.log('[check_availability] Capacity:', capacity, 'Booked:', bookedCount, 'Available:', availableSpots);
 
     return {
       success: true,
@@ -204,7 +229,7 @@ export async function checkAvailability(
     };
 
   } catch (error) {
-    console.error('Check availability error:', error);
+    console.error('[check_availability] Error:', error);
     return {
       success: false,
       error: error.message,
@@ -224,11 +249,13 @@ export async function createBooking(
     customer_email: string;
     customer_phone?: string;
   },
-  context: ToolContext
+  context: FunctionContext
 ): Promise<any> {
   try {
-    const { storeId, serviceRoleKey } = context;
+    const { storeId, authToken } = context;
     const { service_name, date, time, customer_name, customer_email, customer_phone } = params;
+
+    console.log('[create_booking] Called with:', { service_name, date, time, customer_name, customer_email });
 
     // Validate required fields
     if (!service_name || !date || !time || !customer_name || !customer_email) {
@@ -239,8 +266,15 @@ export async function createBooking(
       };
     }
 
+    // Get SUPABASE_URL from environment
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    if (!supabaseUrl) {
+      console.error('❌ SUPABASE_URL not set');
+      throw new Error('SUPABASE_URL environment variable not set');
+    }
+
     // Get store
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(supabaseUrl, authToken);
     const { data: store } = await supabase
       .from('stores')
       .select('name, calendar_mappings, invite_calendar_id, sheet_id, detected_schema')
@@ -248,6 +282,7 @@ export async function createBooking(
       .single();
 
     if (!store || !store.invite_calendar_id) {
+      console.error('[create_booking] Calendar not set up');
       return {
         success: false,
         error: 'Calendar booking not set up',
@@ -264,13 +299,14 @@ export async function createBooking(
     // Get service from sheet
     const schema = JSON.parse(store.detected_schema);
     const servicesTab = findActualTabName('services', schema);
-    const servicesData = await loadSheetTab(storeId, servicesTab, serviceRoleKey);
+    const servicesData = await loadSheetTab(storeId, servicesTab, authToken);
 
     const service = servicesData.find((s: any) =>
       s.serviceName?.toLowerCase().includes(service_name.toLowerCase())
     );
 
     if (!service) {
+      console.error('[create_booking] Service not found');
       return {
         success: false,
         error: 'Service not found',
@@ -278,6 +314,7 @@ export async function createBooking(
     }
 
     const serviceId = service.serviceID || service.serviceName;
+    console.log('[create_booking] Found service:', serviceId);
 
     // Find calendar
     const calendarId = Object.keys(mappings).find(
@@ -285,6 +322,7 @@ export async function createBooking(
     );
 
     if (!calendarId) {
+      console.error('[create_booking] Service not linked to calendar');
       return {
         success: false,
         error: 'Service not available for booking',
@@ -306,6 +344,7 @@ export async function createBooking(
     );
 
     if (bookedCount >= capacity) {
+      console.log('[create_booking] Fully booked');
       return {
         success: false,
         error: 'Fully booked',
@@ -332,6 +371,8 @@ ${customer_phone ? `Phone: ${customer_phone}` : ''}
 Thank you for booking with ${store.name}!
 If you need to reschedule or cancel, please contact us.
     `.trim();
+
+    console.log('[create_booking] Creating calendar event...');
 
     const event = await createEvent(
       store.invite_calendar_id,
@@ -362,6 +403,8 @@ If you need to reschedule or cancel, please contact us.
       'all' // Send email to customer
     );
 
+    console.log('[create_booking] ✅ Booking created successfully:', bookingId);
+
     return {
       success: true,
       booking_id: bookingId,
@@ -377,7 +420,7 @@ If you need to reschedule or cancel, please contact us.
     };
 
   } catch (error) {
-    console.error('Create booking error:', error);
+    console.error('[create_booking] Error:', error);
     return {
       success: false,
       error: error.message,
