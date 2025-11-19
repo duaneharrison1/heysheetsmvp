@@ -211,47 +211,6 @@ export async function listCalendars(): Promise<any[]> {
 }
 
 /**
- * Subscribe service account to a shared calendar
- *
- * When a calendar is shared with the service account, it doesn't automatically
- * appear in the calendarList. This function adds it to the service account's
- * calendar list so it will show up in listCalendars().
- *
- * @param calendarId - The ID of the calendar that was shared with the service account
- * @returns The calendar list entry
- */
-export async function subscribeToCalendar(calendarId: string): Promise<any> {
-  const token = await getAccessToken();
-
-  const response = await fetch(
-    'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        id: calendarId,
-      }),
-    }
-  );
-
-  const data = await response.json();
-  if (!response.ok) {
-    // If it's already in the list, that's fine
-    if (data.error?.code === 409) {
-      console.log('Calendar already in list');
-      return data;
-    }
-    throw new Error(`Failed to subscribe to calendar: ${JSON.stringify(data)}`);
-  }
-
-  console.log('✅ Subscribed to calendar:', calendarId);
-  return data;
-}
-
-/**
  * List events in a calendar
  */
 export async function listEvents(
