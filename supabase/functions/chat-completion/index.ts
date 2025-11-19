@@ -12,12 +12,22 @@ const corsHeaders = {
 };
 console.log('[Chat-Completion] Function started with intelligence system');
 const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
+// ===== Type Definitions =====
+type ChatMessage = { role: string; content: string };
+type StoreData = { products?: any[]; services?: any[]; hours?: any[]; [key: string]: any };
+type Classification = {
+  intent: string;
+  confidence: string;
+  params: Record<string, any>;
+  functionToCall: string | null;
+};
+type FunctionResult = { success: boolean; [key: string]: any } | null;
 // ===== Section: Classifier =====
 // Description: Intent classification and parameter extraction using the LLM
 // - `classifyIntent` constructs a deterministic prompt and parses JSON output
-async function classifyIntent(messages, context) {
+async function classifyIntent(messages: ChatMessage[], context?: { storeData?: StoreData }): Promise<Classification> {
   const lastMessage = messages[messages.length - 1]?.content || '';
-  const conversationHistory = messages.slice(0, -1).map((m)=>`${m.role}: ${m.content}`).join('\n');
+  const conversationHistory = messages.slice(0, -1).map((m: ChatMessage)=>`${m.role}: ${m.content}`).join('\n');
   let storeContext = '';
   if (context?.storeData) {
     const services = context.storeData.services || [];
@@ -122,10 +132,10 @@ RESPOND WITH JSON ONLY:
 // ===== Section: Responder =====
 // Description: Generates the user-facing conversational reply using the LLM
 // - `generateResponse` includes context, optional function results, and formats the prompt
-async function generateResponse(messages, classification, functionResult, storeContext) {
+async function generateResponse(messages: ChatMessage[], classification: Classification, functionResult: FunctionResult, storeContext?: any): Promise<string> {
   console.log('[Responder] Starting response generation...');
   console.log('[Responder] Function result:', functionResult ? 'present' : 'null');
-  const conversationHistory = messages.map((m)=>`${m.role}: ${m.content}`).join('\n');
+  const conversationHistory = messages.map((m: ChatMessage)=>`${m.role}: ${m.content}`).join('\n');
   let contextInfo = '';
   if (storeContext) {
     contextInfo = `STORE CONTEXT:\nStore Name: ${storeContext.name || 'Unknown'}\nStore Type: ${storeContext.type || 'general'}\n`;
@@ -194,7 +204,7 @@ RESPOND NATURALLY:`;
 // ===== Section: Executor =====
 // Description: Small, internal function implementations called based on classifier
 // - dispatches to `getStoreInfo`, `checkAvailability`, `createBooking`, `getProducts`
-async function executeFunction(functionName, params, context) {
+async function executeFunction(functionName: string, params: Record<string, any>, context: { storeId: string; authToken?: string; userId?: string }): Promise<any> {
   console.log(`[Executor] Calling function: ${functionName}`, params);
   const { storeId, authToken } = context;
   try {
@@ -219,7 +229,7 @@ async function executeFunction(functionName, params, context) {
     };
   }
 }
-async function getStoreInfo(params, storeId, authToken) {
+async function getStoreInfo(params: Record<string, any>, storeId: string, authToken?: string): Promise<any> {
   const tabs = params.info_type === 'all' ? [
     'hours',
     'services',
@@ -227,7 +237,7 @@ async function getStoreInfo(params, storeId, authToken) {
   ] : [
     params.info_type
   ];
-  const result = {
+  const result: { success: true; data: Record<string, any>; type: any } = {
     success: true,
     data: {},
     type: params.info_type
@@ -256,7 +266,7 @@ async function getStoreInfo(params, storeId, authToken) {
   }
   return result;
 }
-async function checkAvailability(params, storeId, authToken) {
+async function checkAvailability(params: Record<string, any>, storeId: string, authToken?: string): Promise<any> {
   const { service_name, date } = params;
   const servicesResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
     method: 'POST',
@@ -273,11 +283,11 @@ async function checkAvailability(params, storeId, authToken) {
   if (!servicesResponse.ok) throw new Error('Failed to fetch services');
   const servicesData = await servicesResponse.json();
   const services = servicesData.data || [];
-  const service = services.find((s)=>s.serviceName?.toLowerCase() === service_name.toLowerCase() || s.name?.toLowerCase() === service_name.toLowerCase());
+  const service = services.find((s: any)=>s.serviceName?.toLowerCase() === service_name.toLowerCase() || s.name?.toLowerCase() === service_name.toLowerCase());
   if (!service) {
     return {
       success: false,
-      error: `Service "${service_name}" not found. Available: ${services.map((s)=>s.serviceName || s.name).join(', ')}`
+      error: `Service "${service_name}" not found. Available: ${services.map((s: any)=>s.serviceName || s.name).join(', ')}`
     };
   }
   const allPossibleSlots = [
@@ -300,7 +310,7 @@ async function checkAvailability(params, storeId, authToken) {
     duration: service.duration || '60 minutes'
   };
 }
-async function createBooking(params, storeId, authToken) {
+async function createBooking(params: Record<string, any>, storeId: string, authToken?: string): Promise<any> {
   const required = [
     'service_name',
     'date',
@@ -352,7 +362,7 @@ async function createBooking(params, storeId, authToken) {
     message: `Booking confirmed for ${params.service_name} on ${params.date} at ${params.time}`
   };
 }
-async function getProducts(params, storeId, authToken) {
+async function getProducts(params: Record<string, any>, storeId: string, authToken?: string): Promise<any> {
   console.log('[getProducts] Fetching products, category:', params.category || 'all');
   console.log('[getProducts] StoreId:', storeId);
   try {
@@ -378,9 +388,9 @@ async function getProducts(params, storeId, authToken) {
     }
     const data = await response.json();
     console.log('[getProducts] Got data, product count:', data.data?.length || 0);
-    let products = data.data || [];
+    let products: any[] = data.data || [];
     if (params.category) {
-      products = products.filter((p)=>p.category?.toLowerCase() === params.category?.toLowerCase());
+      products = products.filter((p: any)=>p.category?.toLowerCase() === params.category?.toLowerCase());
       if (products.length === 0) return {
         success: false,
         error: `No products in category "${params.category}"`
@@ -404,11 +414,11 @@ async function getProducts(params, storeId, authToken) {
 }
 // ===== Section: Utility Functions =====
 // Description: Lightweight helpers (JWT decode, Supabase client factory) used by the handler
-function decodeJWT(token) {
+function decodeJWT(token: string): any {
   const parts = token.split('.');
   const payload = parts[1];
   const padded = payload + '='.repeat(4 - payload.length % 4);
-  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c)=>c.charCodeAt(0))));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c: string)=>c.charCodeAt(0))));
 }
 function getSupabase() {
   return createClient(Deno.env.get('SUPABASE_URL') || '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
@@ -440,7 +450,7 @@ serve(async (req)=>{
     let storeData = {};
     if (store.sheet_id) {
       try {
-        const loadTab = async (tabName)=>{
+        const loadTab = async (tabName: string): Promise<any[]>=>{
           try {
             const response = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/google-sheet`, {
               method: 'POST',

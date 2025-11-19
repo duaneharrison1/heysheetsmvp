@@ -25,7 +25,7 @@ const App = () => (
         <Routes>
           {/* Public Routes */}
           <Route path="/auth" element={<Auth />} />
-          <Route path="/components/chat" element={<ChatComponentsShowcase />} />
+          <Route path="/components" element={<ChatComponentsShowcase />} />
           <Route path="/store/:storeId" element={<StorePage />} />
 
           {/* Protected Routes with Sidebar Layout */}
