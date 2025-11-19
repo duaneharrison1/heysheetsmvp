@@ -184,20 +184,36 @@ export async function checkAvailability(
 
     console.log('[check_availability] Found events:', events.length);
 
-    // Find event at requested time
+    // Check if requested time falls within any availability window
     const matchingEvent = events.find((event: any) => {
-      const eventTime = new Date(event.start.dateTime);
-      return Math.abs(eventTime.getTime() - requestedTime.getTime()) < 60000; // Within 1 minute
+      const eventStart = new Date(event.start.dateTime || event.start.date);
+      const eventEnd = new Date(event.end.dateTime || event.end.date);
+
+      // Check if requested time is within this event's time range
+      return requestedTime >= eventStart && requestedTime < eventEnd;
     });
 
     if (!matchingEvent) {
-      console.log('[check_availability] No event at requested time');
+      console.log('[check_availability] Requested time not within any availability window');
+      console.log('[check_availability] Requested time:', requestedTime.toISOString());
+
+      // Log event times for debugging
+      events.forEach((event: any, i: number) => {
+        console.log(`[check_availability] Event ${i + 1}:`, {
+          start: event.start.dateTime || event.start.date,
+          end: event.end.dateTime || event.end.date,
+          summary: event.summary
+        });
+      });
+
       return {
         success: false,
         available: false,
-        message: `${service.serviceName} is not scheduled for ${date} at ${time}. Would you like to see available times?`,
+        message: `${service.serviceName} is not available on ${date} at ${time}. Would you like to see available times?`,
       };
     }
+
+    console.log('[check_availability] Found matching availability window:', matchingEvent.summary);
 
     // Get capacity from service
     const capacity = parseInt(service.capacity) || 20;
