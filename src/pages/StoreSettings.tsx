@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import StoreSetup from '@/components/store/StoreSetup';
+import CalendarSetup from './CalendarSetup';
 import { H1, Lead } from '@/components/ui/heading';
 import { supabase } from '@/lib/supabase';
 import { Loader2, Trash, ToggleRight } from 'lucide-react';
@@ -105,6 +106,8 @@ const StoreSettings = () => {
 
       <div className="max-w-3xl mx-auto space-y-4">
         <StoreSetup storeId={storeId} />
+
+        <CalendarSetup storeId={storeId} />
 
         <Card>
           <CardHeader>
