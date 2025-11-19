@@ -4,7 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SidebarLayout from "@/components/SidebarLayout";
+import Home from "./pages/Home";
 import Auth from "./pages/Auth";
+import Pricing from "./pages/Pricing";
 import Dashboard from "./pages/Dashboard";
 import StorePage from "./pages/StorePage";
 import StoreSettings from "./pages/StoreSettings";
@@ -24,12 +26,14 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
+          <Route path="/" element={<Home />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="/components" element={<ChatComponentsShowcase />} />
           <Route path="/store/:storeId" element={<StorePage />} />
 
           {/* Protected Routes with Sidebar Layout */}
-          <Route path="/" element={<SidebarLayout><Dashboard /></SidebarLayout>} />
+          <Route path="/dashboard" element={<SidebarLayout><Dashboard /></SidebarLayout>} />
           <Route path="/settings/:storeId" element={<SidebarLayout><StoreSettings /></SidebarLayout>} />
           {/* removed /profile route (no profile page) */}
           <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
