@@ -1,0 +1,107 @@
+import { Classification, Message, FunctionResult, StoreConfig } from '../types.ts';
+
+// ============================================================================
+// RESPONDER FUNCTION
+// ============================================================================
+
+export async function generateResponse(
+  messages: Message[],
+  classification: Classification,
+  functionResult?: FunctionResult,
+  store?: StoreConfig
+): Promise<string> {
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not configured');
+  }
+
+  // Build conversation history (last 3 turns for context windowing)
+  const recentMessages = messages.slice(-6);
+  const conversationHistory = recentMessages
+    .map(m => `${m.role}: ${m.content}`)
+    .join('\n');
+
+  // Build store context
+  const storeContext = `
+Store Name: ${store?.name || 'Unknown'}
+Store Type: ${store?.type || 'general'}
+${store?.description ? `Description: ${store.description}` : ''}
+`;
+
+  // Build function result context
+  let functionContext = '';
+  if (functionResult) {
+    if (functionResult.success) {
+      functionContext = `FUNCTION RESULT (Use this data in your response):
+${JSON.stringify(functionResult.data, null, 2)}
+
+IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
+    } else {
+      functionContext = `FUNCTION ERROR:
+${functionResult.error || 'Unknown error occurred'}
+
+IMPORTANT: Apologize politely and guide the user on what to do next.`;
+    }
+  }
+
+  // Build response generation prompt
+  const responsePrompt = `You are a helpful, friendly business assistant for this store.
+
+STORE CONTEXT:
+${storeContext}
+
+CONVERSATION HISTORY (recent turns only):
+${conversationHistory}
+
+USER INTENT: ${classification.intent}
+CONFIDENCE: ${classification.confidence}
+
+${functionContext}
+
+Generate a helpful, natural, conversational response based on the above context.
+
+RESPONSE GUIDELINES:
+- Be warm, friendly, and professional
+- Keep responses concise (under 200 words unless explaining complex details)
+- If function data is available, present it in a natural, engaging way
+- If there was an error, apologize and guide the user
+- For low confidence or needs_clarification, ask the clarification question naturally
+- Use emojis sparingly and appropriately
+- Don't mention internal system details (intents, functions, confidence scores)
+- If user asks about booking but we don't have booking functions, suggest they contact directly or submit their info
+
+${classification.needs_clarification ? `CLARIFICATION NEEDED: ${classification.clarification_question}` : ''}
+
+RESPOND NATURALLY:`;
+
+  // Call OpenRouter API
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://heysheets.com',
+      'X-Title': 'HeySheets MVP'
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-3.5-sonnet',
+      messages: [{ role: 'user', content: responsePrompt }],
+      max_tokens: 500,
+      temperature: 0.7 // Higher temperature for more natural, varied responses
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[Responder] OpenRouter API error:', error);
+    throw new Error(`Response generation failed: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  const responseText = result.choices[0].message.content;
+
+  console.log('[Responder] Generated response');
+
+  return responseText;
+}

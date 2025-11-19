@@ -14,7 +14,7 @@ export const GOOGLE_SHEETS = {
    *
    * ⚠️ ACTION REQUIRED: Update this URL to point to your own template sheet
    */
-  TEMPLATE_URL: 'https://docs.google.com/spreadsheets/d/1Bdkwqs1PdJqcTHCxEkFag_VjL234_o4p2z8cxtXHMfk/copy',
+  TEMPLATE_URL: 'https://docs.google.com/spreadsheets/d/1-damJAZ5oHaZ5L-qXVH95Jwa1PHr2lEjxboH7mt_GWQ/copy',
 } as const;
 
 /**
