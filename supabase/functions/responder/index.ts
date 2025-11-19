@@ -1,4 +1,4 @@
-import { Classification, Message, FunctionResult, StoreConfig } from '../types.ts';
+import { Classification, Message, FunctionResult, StoreConfig } from '../_shared/types.ts';
 
 // ============================================================================
 // RESPONDER FUNCTION

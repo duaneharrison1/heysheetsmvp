@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public.stores (
   sheet_id TEXT,
   system_prompt TEXT,
   detected_tabs JSONB DEFAULT '[]'::jsonb,
+  is_active BOOLEAN DEFAULT true,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// @ts-ignore: unresolved npm specifiers in this editor environment
 import { JWT } from 'npm:google-auth-library@9.0.0';
+// @ts-ignore: unresolved npm specifiers in this editor environment
 import { GoogleSpreadsheet } from 'npm:google-spreadsheet@5.0.2';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
@@ -54,19 +56,21 @@ function getSupabase() {
   return createClient(Deno.env.get('SUPABASE_URL') || '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '' // ← Uses SERVICE_ROLE_KEY to bypass RLS
   );
 }
-function decodeJWT(token) {
+function decodeJWT(token: string) {
   const parts = token.split('.');
-  const payload = parts[1];
-  const padded = payload + '='.repeat(4 - payload.length % 4);
-  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c)=>c.charCodeAt(0))));
+  const payload = parts[1] || '';
+  const padLen = (4 - (payload.length % 4)) % 4;
+  const padded = payload + '='.repeat(padLen);
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))));
 }
-function extractSheetId(input) {
+function extractSheetId(input: string) {
+  if (typeof input !== 'string') return null;
   if (input.length === 44 && !input.includes('/')) return input;
   const match = input.match(/\/d\/([a-zA-Z0-9-_]{44})/);
   return match ? match[1] : input;
 }
 // Helper to get sheet ID for a store (PUBLIC - NO AUTH REQUIRED)
-async function getStoreSheetId(storeId) {
+async function getStoreSheetId(storeId: string) {
   const supabase = getSupabase(); // Uses SERVICE_ROLE_KEY
   const { data: store, error } = await supabase.from('stores').select('sheet_id').eq('id', storeId).single();
   if (error || !store) {
@@ -76,7 +80,7 @@ async function getStoreSheetId(storeId) {
   return store.sheet_id;
 }
 // Legacy function for write operations that still require auth
-async function verifyAccess(req, storeId) {
+async function verifyAccess(req: Request, storeId: string) {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) throw new Error('Missing authorization');
   const token = authHeader.replace('Bearer ', '');
@@ -166,7 +170,7 @@ serve(async (req)=>{
         });
       }
       // Find sheet
-      const sheet = doc.sheetsByIndex.find((s)=>s.title.toLowerCase() === tabName.toLowerCase());
+      const sheet = doc.sheetsByIndex.find((s: any) => s.title.toLowerCase() === tabName.toLowerCase());
       if (!sheet) {
         return new Response(JSON.stringify({
           error: `Tab "${tabName}" not found`
@@ -178,18 +182,18 @@ serve(async (req)=>{
           }
         });
       }
-      const rows = await sheet.getRows();
+      const rows: any[] = await sheet.getRows();
       // Convert to JSON
-      const result = rows.map((row)=>{
-        const obj = {};
+      const result = rows.map((row: any) => {
+        const obj: Record<string, any> = {};
         if (columns && columns.length > 0) {
           // Return only specified columns
-          for (const col of columns){
+          for (const col of columns) {
             obj[col] = row.get(col) || '';
           }
         } else {
           // Return all columns
-          for (const header of sheet.headerValues){
+          for (const header of sheet.headerValues as string[]) {
             obj[header] = row.get(header) || '';
           }
         }
@@ -285,21 +289,21 @@ serve(async (req)=>{
       }> = {};
 
       for (const sheet of doc.sheetsByIndex) {
-        const tabName = sheet.title;
+        const tabName = (sheet as any).title;
 
         // Add tab name to list
         detectedTabs.push(tabName);
 
         try {
           // Load header row to get column names
-          await sheet.loadHeaderRow();
-          const headers = sheet.headerValues || [];
+          await (sheet as any).loadHeaderRow();
+          const headers: string[] = (sheet as any).headerValues || [];
 
           // Get first 3 rows as sample data
-          const rows = await sheet.getRows({ limit: 3 });
-          const sampleRows = rows.map((row) => {
+          const rows: any[] = await (sheet as any).getRows({ limit: 3 });
+          const sampleRows = rows.map((row: any) => {
             const rowData: Record<string, any> = {};
-            headers.forEach((header) => {
+            headers.forEach((header: string) => {
               rowData[header] = row.get(header) || '';
             });
             return rowData;
@@ -371,7 +375,7 @@ serve(async (req)=>{
           }
         });
       }
-      const sheet = doc.sheetsByIndex.find((s)=>s.title.toLowerCase() === tabName.toLowerCase());
+      const sheet = doc.sheetsByIndex.find((s: any) => s.title.toLowerCase() === tabName.toLowerCase());
       if (!sheet) {
         return new Response(JSON.stringify({
           error: `Tab "${tabName}" not found`
@@ -412,7 +416,7 @@ serve(async (req)=>{
           }
         });
       }
-      const sheet = doc.sheetsByIndex.find((s)=>s.title.toLowerCase() === tabName.toLowerCase());
+      const sheet = doc.sheetsByIndex.find((s: any) => s.title.toLowerCase() === tabName.toLowerCase());
       if (!sheet) {
         return new Response(JSON.stringify({
           error: `Tab "${tabName}" not found`
@@ -424,8 +428,8 @@ serve(async (req)=>{
           }
         });
       }
-      const rows = await sheet.getRows();
-      const row = rows[data.rowIndex];
+      const rows: any[] = await sheet.getRows();
+      const row: any = rows[data.rowIndex];
       if (!row) {
         return new Response(JSON.stringify({
           error: 'Row not found'
@@ -438,9 +442,9 @@ serve(async (req)=>{
         });
       }
       // Update row
-      for (const [key, value] of Object.entries(data)){
+      for (const [key, value] of Object.entries(data)) {
         if (key !== 'rowIndex') {
-          row.set(key, value);
+          (row as any).set(key, value);
         }
       }
       await row.save();
@@ -467,10 +471,11 @@ serve(async (req)=>{
         'Content-Type': 'application/json'
       }
     });
-  } catch (error) {
-    console.error('[google-sheet] Error:', error);
+  } catch (err: unknown) {
+    const eAny = err as any;
+    console.error('[google-sheet] Error:', eAny);
     return new Response(JSON.stringify({
-      error: error.message || 'Internal error'
+      error: eAny?.message || 'Internal error'
     }), {
       status: 500,
       headers: {

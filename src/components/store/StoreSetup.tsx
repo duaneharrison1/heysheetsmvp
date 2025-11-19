@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { FileText, ExternalLink, Copy, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { FileText, ExternalLink, Copy, CheckCircle, XCircle, Loader2, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { GOOGLE_SHEETS, extractSheetId, buildSheetsEditUrl } from '@/config/constants';
 
@@ -370,8 +370,15 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
       {/* Store URL Card - Always visible */}
       <Card>
         <CardHeader>
-          <CardTitle>Your Store Chatbot</CardTitle>
-          <CardDescription>Share this URL with customers to start conversations</CardDescription>
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+              <MessageCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Your Store Chatbot</CardTitle>
+              <CardDescription>Share this URL with customers to start conversations</CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
           <h3 className="font-semibold text-sm">Chatbot URL</h3>

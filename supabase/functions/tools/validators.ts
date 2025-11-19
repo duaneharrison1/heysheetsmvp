@@ -1,3 +1,6 @@
+// Allow the Deno remote import to be used at runtime while silencing
+// TypeScript's module resolution in this editor environment.
+// @ts-ignore: Deno remote import
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
 
 // ============================================================================
@@ -9,13 +12,13 @@ export const GetStoreInfoSchema = z.object({
 });
 
 export const GetServicesSchema = z.object({
-  query: z.string().optional(),
-  category: z.string().optional()
+  query: z.string().optional().nullable().transform(val => val ?? undefined),
+  category: z.string().optional().nullable().transform(val => val ?? undefined)
 });
 
 export const GetProductsSchema = z.object({
-  query: z.string().optional(),
-  category: z.string().optional()
+  query: z.string().optional().nullable().transform(val => val ?? undefined),
+  category: z.string().optional().nullable().transform(val => val ?? undefined)
 });
 
 export const SubmitLeadSchema = z.object({
@@ -49,23 +52,22 @@ export const CreateBookingSchema = z.object({
 // VALIDATION HELPERS
 // ============================================================================
 
-export function validateParams<T>(
-  schema: z.ZodSchema<T>,
-  params: any
-): { valid: true; data: T } | { valid: false; errors: string[] } {
+export function validateParams<T>(schema: z.ZodSchema<T>, params: any): { valid: true; data: T } | { valid: false; errors: string[] } {
   try {
     const data = schema.parse(params);
     return { valid: true, data };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+  } catch (err: unknown) {
+    // Normalize unknown error shapes to a consistent string[] payload.
+    const eAny = err as any;
+
+    if (eAny && Array.isArray(eAny.errors)) {
       return {
         valid: false,
-        errors: error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        errors: eAny.errors.map((e: any) => `${(e.path || []).join('.')}: ${e.message}`)
       };
     }
-    return {
-      valid: false,
-      errors: [error.message || 'Validation failed']
-    };
+
+    const message = typeof eAny?.message === 'string' ? eAny.message : 'Validation failed';
+    return { valid: false, errors: [message] };
   }
 }

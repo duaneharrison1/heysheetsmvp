@@ -8,6 +8,7 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { H1, Lead } from "@/components/ui/heading";
 import { toast } from "@/hooks/use-toast";
+import { MessageSquare } from "lucide-react";
 
 const Help = () => {
   const [category, setCategory] = useState("feedback");
@@ -70,6 +71,9 @@ const Help = () => {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+                <MessageSquare className="h-5 w-5" />
+              </div>
               <div>
                 <CardTitle>Contact support</CardTitle>
                 <CardDescription>Use the form below to send a message to the team.</CardDescription>

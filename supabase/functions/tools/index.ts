@@ -1,4 +1,4 @@
-import { FunctionContext, FunctionResult, StoreConfig } from '../types.ts';
+import { FunctionContext, FunctionResult, StoreConfig } from '../_shared/types.ts';
 import {
   validateParams,
   GetStoreInfoSchema,
@@ -72,7 +72,8 @@ async function getStoreInfo(
     };
   }
 
-  const { info_type } = validation.data;
+  const validated = validation.data as Record<string, any>;
+  const { info_type } = validated;
   const { storeId, authToken, store } = context;
 
   // Determine which tabs to load based on info_type
@@ -92,7 +93,32 @@ async function getStoreInfo(
 
   // Map expected tabs to actual tab names (case-insensitive fuzzy match)
   for (const expectedTab of tabsToLoad) {
-    const actualTab = findActualTabName(expectedTab, detectedSchema);
+    let actualTab = findActualTabName(expectedTab, detectedSchema);
+
+    // FALLBACK: If not in schema, try direct query with common names
+    if (!actualTab) {
+      const commonNames: Record<string, string[]> = {
+        'hours': ['Hours', 'hours', 'HOURS', 'Store Hours', 'Opening Hours'],
+        'services': ['Services', 'services', 'SERVICES', 'Service'],
+        'products': ['Products', 'products', 'PRODUCTS', 'Product', 'Inventory'],
+        'store_info': ['Store Info', 'store_info', 'Info', 'About']
+      };
+
+      const namesToTry = commonNames[expectedTab] || [expectedTab];
+      for (const name of namesToTry) {
+        try {
+          const testData = await loadTabData(storeId, name, authToken);
+          if (testData && testData.length >= 0) {
+            actualTab = name;
+            console.log(`[getStoreInfo] Found ${expectedTab} tab via direct query: ${name}`);
+            break;
+          }
+        } catch (err) {
+          continue;
+        }
+      }
+    }
+
     if (actualTab) {
       tabMapping[expectedTab] = actualTab;
     }
@@ -138,17 +164,36 @@ async function getServices(
     };
   }
 
-  const { query, category } = validation.data;
+  const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
-  // Find services tab
+  // Find services tab using schema if available
   const detectedSchema = store?.detected_schema || {};
-  const servicesTab = findActualTabName('services', detectedSchema);
+  let servicesTab = findActualTabName('services', detectedSchema);
+
+  // FALLBACK: If no schema or tab not found, try direct query with common names
+  if (!servicesTab) {
+    console.log('[getServices] No schema or tab not found, trying direct query');
+    const commonNames = ['Services', 'services', 'SERVICES', 'Service'];
+    for (const name of commonNames) {
+      try {
+        const testData = await loadTabData(storeId, name, authToken);
+        if (testData && testData.length >= 0) {
+          servicesTab = name;
+          console.log(`[getServices] Found services tab via direct query: ${name}`);
+          break;
+        }
+      } catch (err) {
+        // Tab doesn't exist, continue trying
+        continue;
+      }
+    }
+  }
 
   if (!servicesTab) {
     return {
       success: false,
-      error: 'Services data not available. Please ensure your sheet has a services tab.'
+      error: `Services data not available. Please ensure your sheet has a tab named "Services" (or reconnect your sheet to detect tabs).`
     };
   }
 
@@ -198,17 +243,35 @@ async function getProducts(
     };
   }
 
-  const { query, category } = validation.data;
+  const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
-  // Find products tab
+  // Find products tab using schema if available
   const detectedSchema = store?.detected_schema || {};
-  const productsTab = findActualTabName('products', detectedSchema);
+  let productsTab = findActualTabName('products', detectedSchema);
+
+  // FALLBACK: If no schema or tab not found, try direct query with common names
+  if (!productsTab) {
+    console.log('[getProducts] No schema or tab not found, trying direct query');
+    const commonNames = ['Products', 'products', 'PRODUCTS', 'Product', 'Inventory'];
+    for (const name of commonNames) {
+      try {
+        const testData = await loadTabData(storeId, name, authToken);
+        if (testData && testData.length >= 0) {
+          productsTab = name;
+          console.log(`[getProducts] Found products tab via direct query: ${name}`);
+          break;
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+  }
 
   if (!productsTab) {
     return {
       success: false,
-      error: 'Products data not available. Please ensure your sheet has a products tab.'
+      error: 'Products data not available. Please ensure your sheet has a tab named "Products" (or reconnect your sheet to detect tabs).'
     };
   }
 
@@ -327,17 +390,41 @@ async function getMiscData(
     };
   }
 
-  const { tab_name, query } = validation.data;
+  const { tab_name, query } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
-  // Find the requested tab
+  // Find the requested tab using schema if available
   const detectedSchema = store?.detected_schema || {};
-  const actualTab = findActualTabName(tab_name, detectedSchema);
+  let actualTab = findActualTabName(tab_name, detectedSchema);
+
+  // FALLBACK: If no schema or tab not found, try direct query with exact name
+  if (!actualTab) {
+    console.log(`[getMiscData] Tab "${tab_name}" not in schema, trying direct query`);
+    try {
+      const testData = await loadTabData(storeId, tab_name, authToken);
+      if (testData && testData.length >= 0) {
+        actualTab = tab_name;
+        console.log(`[getMiscData] Found tab via direct query: ${tab_name}`);
+      }
+    } catch (err) {
+      // Tab doesn't exist
+      const availableTabs = Object.keys(detectedSchema).length > 0
+        ? Object.keys(detectedSchema).join(', ')
+        : 'unknown (reconnect sheet to detect tabs)';
+      return {
+        success: false,
+        error: `Tab "${tab_name}" not found. Available tabs: ${availableTabs}`
+      };
+    }
+  }
 
   if (!actualTab) {
+    const availableTabs = Object.keys(detectedSchema).length > 0
+      ? Object.keys(detectedSchema).join(', ')
+      : 'unknown (reconnect sheet to detect tabs)';
     return {
       success: false,
-      error: `Tab "${tab_name}" not found. Available tabs: ${Object.keys(detectedSchema).join(', ')}`
+      error: `Tab "${tab_name}" not found. Available tabs: ${availableTabs}`
     };
   }
 
@@ -406,11 +493,14 @@ async function loadTabData(
 ): Promise<any[]> {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
+  console.log(`[loadTabData] Loading tab: ${tabName} for store: ${storeId}`);
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/google-sheet`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`
+      'Authorization': `Bearer ${authToken}`,
+      'apikey': authToken
     },
     body: JSON.stringify({
       operation: 'read',
@@ -420,10 +510,13 @@ async function loadTabData(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load ${tabName}: ${response.statusText}`);
+    const errorText = await response.text();
+    console.error(`[loadTabData] Failed to load ${tabName}:`, errorText);
+    throw new Error(`Failed to load ${tabName}: ${response.statusText} - ${errorText}`);
   }
 
   const result = await response.json();
+  console.log(`[loadTabData] Loaded ${result.data?.length || 0} rows from ${tabName}`);
   return result.data || [];
 }
 

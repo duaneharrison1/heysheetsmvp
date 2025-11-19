@@ -13,6 +13,7 @@ export interface Store {
   location: string;
   rating: number;
   isOpen: boolean;
+  is_active: boolean;
   image?: string;
 }
 interface StoreCardProps {
@@ -65,9 +66,9 @@ export function StoreCard({ store, create, onCreate }: StoreCardProps) {
   <Card className="group cursor-pointer relative h-full flex flex-col" onClick={handleViewClick}>
       {/* Status badge top-right */}
       <div className="absolute right-4 top-4">
-        <Badge variant={store.isOpen ? "default" : "secondary"} className="text-xs">
+        <Badge variant={store.is_active ? "default" : "secondary"} className="text-xs">
           <Clock className="w-3 h-3 mr-1" />
-          {store.isOpen ? 'Active' : 'Inactive'}
+          {store.is_active ? 'Active' : 'Inactive'}
         </Badge>
       </div>
 

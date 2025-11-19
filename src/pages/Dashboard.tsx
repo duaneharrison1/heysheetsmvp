@@ -5,15 +5,27 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { H1, Lead } from '@/components/ui/heading';
 import { StoreCard } from '@/components/StoreCard';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Plus, MessageSquare, Settings, Loader2 } from 'lucide-react';
 import { UserContext } from '@/components/SidebarLayout';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 const Dashboard = () => {
   const user = useContext(UserContext);
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [storeName, setStoreName] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -36,7 +48,7 @@ const Dashboard = () => {
 
       if (error) {
         console.error('Error loading stores:', error);
-        toast({ title: 'Error', description: 'Failed to load stores', variant: 'destructive' });
+        toast.error('Failed to load stores');
       }
 
       setStores(data || []);
@@ -46,15 +58,18 @@ const Dashboard = () => {
   };
 
   const handleCreate = async () => {
-    const name = prompt('Store name:');
-    if (!name?.trim()) return;
+    if (!storeName.trim()) {
+      toast.error('Please enter a store name');
+      return;
+    }
+
     try {
       setCreating(true);
 
       // cast insert payload/response to any to avoid generated DB types issues
       const res = await supabase
         .from('stores')
-        .insert({ name: name.trim(), user_id: user.id } as any)
+        .insert({ name: storeName.trim(), user_id: user.id } as any)
         .select()
         .single() as unknown as { data: any; error: any };
 
@@ -63,16 +78,25 @@ const Dashboard = () => {
 
       if (error) {
         console.error('[Dashboard] Error creating store:', error);
-        toast({ title: 'Error', description: `Failed to create store: ${error?.message || error}`, variant: 'destructive' });
+        toast.error(`Failed to create store: ${error?.message || error}`);
         return;
       }
 
       if (store) {
-        toast({ title: 'Success', description: `Store created with ID: ${store.id}` });
+        toast.success(`Store created`);
+        setOpenDialog(false);
+        setStoreName('');
         await loadStores(user.id);
       }
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setOpenDialog(open);
+    if (!open) {
+      setStoreName('');
     }
   };
 
@@ -85,23 +109,61 @@ const Dashboard = () => {
         <Lead>Manage and monitor your connected stores</Lead>
       </div>
 
-      {/* Grid with create card + existing stores. On empty, show a larger centered create card. */}
-      {stores.length === 0 ? (
-        <div className="flex">
-          <div className="w-full max-w-2xl mx-auto">
-            <StoreCard create onCreate={handleCreate} />
-            <div className="mt-4 text-center text-sm text-muted-foreground">No stores yet. Create your first store to get started!</div>
+      <Dialog open={openDialog} onOpenChange={handleDialogOpenChange}>
+        {/* Grid with create card + existing stores. On empty, show a larger centered create card. */}
+        {stores.length === 0 ? (
+          <div className="flex">
+            <div className="w-full max-w-2xl mx-auto">
+              <StoreCard create onCreate={() => setOpenDialog(true)} />
+              <div className="mt-4 text-center text-sm text-muted-foreground">No stores yet. Create your first store to get started!</div>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stores.map((store) => (
-            <StoreCard key={store.id} store={store} />
-          ))}
-          {/* Last cell: subtle create card */}
-          <StoreCard create onCreate={handleCreate} />
-        </div>
-      )}
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {stores.map((store) => (
+              <StoreCard key={store.id} store={store} />
+            ))}
+            {/* Last cell: subtle create card */}
+            <StoreCard create onCreate={() => setOpenDialog(true)} />
+          </div>
+        )}
+
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Store</DialogTitle>
+            <DialogDescription>
+              Enter a name for your store. You can set up more details and connect a Google Sheet later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Store name..."
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !creating) {
+                  e.preventDefault();
+                  handleCreate();
+                }
+              }}
+              disabled={creating}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOpenDialog(false)}
+              disabled={creating}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={creating || !storeName.trim()}>
+              {creating ? 'Creating...' : 'Create Store'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

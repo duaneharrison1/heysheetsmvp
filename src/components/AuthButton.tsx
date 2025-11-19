@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { LogIn, LogOut, Loader2 } from 'lucide-react';
 
 const AuthButton = () => {
@@ -23,7 +23,7 @@ const AuthButton = () => {
       setLoading(true);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/` },
+        options: { redirectTo: `${window.location.origin}/dashboard` },
       });
       if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } catch (error) {

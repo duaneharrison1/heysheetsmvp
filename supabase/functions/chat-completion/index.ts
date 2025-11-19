@@ -8,10 +8,10 @@ import {
   FunctionResult,
   ChatCompletionRequest,
   ChatCompletionResponse
-} from './types.ts';
-import { classifyIntent } from './classifier/index.ts';
-import { generateResponse } from './responder/index.ts';
-import { executeFunction } from './tools/index.ts';
+} from '../_shared/types.ts';
+import { classifyIntent } from '../classifier/index.ts';
+import { generateResponse } from '../responder/index.ts';
+import { executeFunction } from '../tools/index.ts';
 
 // ============================================================================
 // CORS HEADERS
@@ -73,6 +73,13 @@ serve(async (req) => {
         : store.detected_schema
     };
 
+    console.log('[Orchestrator] Store config:', {
+      id: storeConfig.id,
+      name: storeConfig.name,
+      hasDetectedSchema: !!storeConfig.detected_schema,
+      schemaKeys: storeConfig.detected_schema ? Object.keys(storeConfig.detected_schema) : []
+    });
+
     // Pre-load store data for classification context (using detected schema)
     let storeData: StoreData = {
       services: [],
@@ -88,7 +95,7 @@ serve(async (req) => {
       const productsTab = findActualTabName('products', detectedSchema);
       const hoursTab = findActualTabName('hours', detectedSchema);
 
-      // Load data in parallel
+      // Load data in parallel using SERVICE_ROLE_KEY for authentication
       const [services, products, hours] = await Promise.all([
         servicesTab ? loadTab(servicesTab, storeId, serviceRoleKey) : Promise.resolve([]),
         productsTab ? loadTab(productsTab, storeId, serviceRoleKey) : Promise.resolve([]),
@@ -98,16 +105,19 @@ serve(async (req) => {
       storeData = { services, products, hours };
     } catch (error) {
       console.error('[Orchestrator] Error pre-loading data:', error);
-      // Continue without pre-loaded data
     }
 
-    // Step 1: Classify user intent
-    console.log('[Orchestrator] Classifying intent...');
+    // Step 1: Classify intent and extract parameters
     const classification: Classification = await classifyIntent(messages, { storeData });
 
-    console.log('[Orchestrator] Classification:', classification);
+    console.log('[Orchestrator] Classification:', {
+      intent: classification.intent,
+      confidence: classification.confidence,
+      function: classification.function_to_call,
+      needsClarification: classification.needs_clarification
+    });
 
-    // Step 2: Execute function if needed
+    // Step 2: Execute function if classified
     let functionResult: FunctionResult | undefined;
 
     if (classification.function_to_call && classification.function_to_call !== 'null') {
@@ -119,7 +129,7 @@ serve(async (req) => {
         {
           storeId,
           userId: 'anonymous', // Public access, no user ID
-          authToken: serviceRoleKey,
+          authToken: serviceRoleKey,  // Use SERVICE_ROLE_KEY for internal function calls
           store: storeConfig
         }
       );
@@ -127,8 +137,7 @@ serve(async (req) => {
       console.log('[Orchestrator] Function result:', functionResult);
     }
 
-    // Step 3: Generate natural language response
-    console.log('[Orchestrator] Generating response...');
+    // Step 3: Generate response using LLM
     const responseText = await generateResponse(
       messages,
       classification,
@@ -193,7 +202,8 @@ function findActualTabName(
 }
 
 /**
- * Load data from Google Sheet tab
+ * Load data from Google Sheet tab via google-sheet edge function
+ * Uses SERVICE_ROLE_KEY for authentication to allow internal edge function calls
  */
 async function loadTab(
   tabName: string,
@@ -207,7 +217,8 @@ async function loadTab(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
+        'Authorization': `Bearer ${authToken}`,
+        'apikey': authToken
       },
       body: JSON.stringify({
         operation: 'read',
