@@ -178,7 +178,14 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
     body: JSON.stringify({
       model: 'anthropic/claude-3.5-sonnet',
       messages: [{ role: 'user', content: classificationPrompt }],
-      response_format: { type: "json_object" }, // More compatible than json_schema
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "classification",
+          schema: ClassificationSchema,
+          strict: true // Guarantees 100% schema compliance and valid JSON
+        }
+      },
       temperature: 0.3 // Lower temperature for more consistent classification
     })
   });
@@ -190,7 +197,19 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
   }
 
   const result = await response.json();
-  let classification = JSON.parse(result.choices[0].message.content);
+  const rawContent = result.choices[0].message.content;
+
+  console.log('[Classifier] Raw LLM response:', rawContent.substring(0, 500));
+
+  let classification;
+  try {
+    classification = JSON.parse(rawContent);
+  } catch (parseError) {
+    console.error('[Classifier] Failed to parse JSON response');
+    console.error('[Classifier] Raw content:', rawContent);
+    console.error('[Classifier] Parse error:', parseError);
+    throw new Error(`Invalid JSON from LLM: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+  }
 
   // Fallback: Transform old field names to new ones if needed
   if (!classification.function_to_call && classification.function) {
