@@ -13,6 +13,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [calendarIdInput, setCalendarIdInput] = useState('');
   const [subscribing, setSubscribing] = useState(false);
+  const [creatingForService, setCreatingForService] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -199,6 +200,50 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   }
 
+  async function createCalendarForService(serviceId: string, serviceName: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) {
+      toast({
+        title: 'Error',
+        description: 'User email not found',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCreatingForService(serviceId);
+    try {
+      const { data, error } = await supabase.functions.invoke('link-calendar', {
+        body: {
+          storeId,
+          serviceId,
+          serviceName,
+          ownerEmail: user.email,
+          action: 'create',
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Calendar created!',
+        description: data.message || 'Availability calendar has been created and linked',
+      });
+
+      // Reload everything
+      loadCalendars();
+      loadStore();
+    } catch (error: any) {
+      toast({
+        title: 'Create failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingForService(null);
+    }
+  }
+
   function getLinkedCalendar(serviceId: string): string | null {
     for (const [calId, svcId] of Object.entries(mappings)) {
       if (svcId === serviceId) return calId;
@@ -261,21 +306,28 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded space-y-3">
           <div>
             <p className="text-sm text-blue-900 mb-3">
-              <strong>How it works:</strong>
+              <strong>📅 Recommended: Click "Create Calendar"</strong>
             </p>
-            <ol className="text-sm text-blue-900 space-y-2 list-decimal list-inside">
-              <li>Create a calendar in Google Calendar for your service</li>
-              <li>Share it with <code className="bg-blue-100 px-1 py-0.5 rounded">heysheets-backend@heysheets-mvp.iam.gserviceaccount.com</code> (permission: "Make changes to events")</li>
-              <li>Copy the calendar ID from Google Calendar Settings → "Integrate calendar"</li>
-              <li>Paste the calendar ID below and click "Subscribe"</li>
-              <li>Link the calendar to a service from the dropdown</li>
-            </ol>
+            <p className="text-sm text-blue-900 mb-3">
+              For each service, click the <strong>"Create Calendar"</strong> button below. This will:
+            </p>
+            <ul className="text-sm text-blue-900 space-y-1 list-disc list-inside ml-2">
+              <li>Create an availability calendar automatically</li>
+              <li>Share it with your email so you can manage availability</li>
+              <li>Link it to the service instantly</li>
+            </ul>
+            <p className="text-sm text-blue-700 mt-3 italic">
+              Then, add events to the calendar in Google Calendar to mark when the service is available for booking.
+            </p>
           </div>
 
           <div className="pt-3 border-t border-blue-300">
             <label className="text-sm font-medium text-blue-900 block mb-2">
-              Add Calendar by ID
+              Advanced: Add Existing Calendar by ID
             </label>
+            <p className="text-xs text-blue-700 mb-2">
+              Note: Service accounts have limited access to calendars. Use "Create Calendar" above for best results.
+            </p>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -294,6 +346,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 onClick={subscribeToCalendar}
                 disabled={subscribing || !calendarIdInput.trim()}
                 size="sm"
+                variant="outline"
               >
                 {subscribing ? (
                   <>
@@ -337,31 +390,64 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
                     <div className="flex gap-2">
                       {linkedCalendarId ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => unlinkCalendar(linkedCalendarId)}
-                        >
-                          Unlink
-                        </Button>
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(
+                              `https://calendar.google.com/calendar/u/0/r?cid=${linkedCalendarId}`,
+                              '_blank'
+                            )}
+                          >
+                            <Calendar className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => unlinkCalendar(linkedCalendarId)}
+                          >
+                            Unlink
+                          </Button>
+                        </>
                       ) : (
-                        <select
-                          className="border rounded px-3 py-2 text-sm"
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              linkCalendar(serviceId, e.target.value);
-                              e.target.value = ''; // Reset
-                            }
-                          }}
-                          defaultValue=""
-                        >
-                          <option value="">Select calendar...</option>
-                          {calendars.map((cal) => (
-                            <option key={cal.id} value={cal.id}>
-                              {cal.name}
-                            </option>
-                          ))}
-                        </select>
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => createCalendarForService(serviceId, service.serviceName)}
+                            disabled={creatingForService === serviceId}
+                          >
+                            {creatingForService === serviceId ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Creating...
+                              </>
+                            ) : (
+                              <>
+                                <Calendar className="h-4 w-4 mr-2" />
+                                Create Calendar
+                              </>
+                            )}
+                          </Button>
+                          <select
+                            className="border rounded px-3 py-2 text-sm"
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                linkCalendar(serviceId, e.target.value);
+                                e.target.value = ''; // Reset
+                              }
+                            }}
+                            defaultValue=""
+                            disabled={creatingForService === serviceId}
+                          >
+                            <option value="">Or select existing...</option>
+                            {calendars.map((cal) => (
+                              <option key={cal.id} value={cal.id}>
+                                {cal.name}
+                              </option>
+                            ))}
+                          </select>
+                        </>
                       )}
                     </div>
                   </div>

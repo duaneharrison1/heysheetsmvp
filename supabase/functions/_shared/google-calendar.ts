@@ -211,6 +211,33 @@ export async function listCalendars(): Promise<any[]> {
 }
 
 /**
+ * Verify calendar access by trying to read it
+ */
+async function verifyCalendarAccess(calendarId: string, token: string): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Cannot access calendar:', error);
+      return false;
+    }
+
+    const calendar = await response.json();
+    console.log('✅ Calendar accessible:', calendar.summary);
+    return true;
+  } catch (error) {
+    console.error('Error verifying calendar access:', error);
+    return false;
+  }
+}
+
+/**
  * Subscribe service account to a shared calendar
  *
  * When a calendar is shared with the service account, it doesn't automatically
@@ -222,6 +249,17 @@ export async function listCalendars(): Promise<any[]> {
  */
 export async function subscribeToCalendar(calendarId: string): Promise<any> {
   const token = await getAccessToken();
+
+  // First verify we can access the calendar
+  console.log('Verifying calendar access...');
+  const canAccess = await verifyCalendarAccess(calendarId, token);
+
+  if (!canAccess) {
+    throw new Error(
+      'Cannot access calendar. Make sure it is shared with heysheets-backend@heysheets-mvp.iam.gserviceaccount.com with at least "See all event details" permission. ' +
+      'Note: Service accounts have limited calendar access. If sharing doesn\'t work, create the calendar through the "Set Up Calendar Booking" button instead.'
+    );
+  }
 
   const response = await fetch(
     'https://www.googleapis.com/calendar/v3/users/me/calendarList',

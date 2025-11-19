@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { listCalendars, updateEventProperties, listEvents, subscribeToCalendar } from '../_shared/google-calendar.ts';
+import { listCalendars, updateEventProperties, listEvents, subscribeToCalendar, createCalendar, shareCalendar } from '../_shared/google-calendar.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { storeId, serviceId, calendarId, action } = await req.json();
+    const { storeId, serviceId, calendarId, action, serviceName, ownerEmail } = await req.json();
 
     if (!storeId) {
       throw new Error('storeId is required');
@@ -60,6 +60,73 @@ serve(async (req) => {
             description: cal.description,
             timeZone: cal.timeZone,
           }))
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ACTION: Create availability calendar for a service
+    if (action === 'create') {
+      if (!serviceId || !serviceName || !ownerEmail) {
+        throw new Error('serviceId, serviceName, and ownerEmail are required for create action');
+      }
+
+      console.log(`Creating availability calendar for service: ${serviceName}`);
+
+      // Get store name for calendar title
+      const { data: store } = await supabase
+        .from('stores')
+        .select('name')
+        .eq('id', storeId)
+        .single();
+
+      const storeName = store?.name || 'Store';
+
+      // Create calendar owned by service account
+      const newCalendarId = await createCalendar(
+        `${serviceName} - Availability`,
+        `Availability schedule for ${serviceName} at ${storeName}. Add events to this calendar to mark when the service is available for booking.`,
+        'Asia/Hong_Kong'
+      );
+
+      console.log(`✅ Created availability calendar: ${newCalendarId}`);
+
+      // Share with owner so they can manage availability
+      await shareCalendar(newCalendarId, ownerEmail, 'writer');
+      console.log(`✅ Shared with owner: ${ownerEmail}`);
+
+      // Auto-link to the service
+      const { data: storeData } = await supabase
+        .from('stores')
+        .select('calendar_mappings')
+        .eq('id', storeId)
+        .single();
+
+      const mappings = storeData?.calendar_mappings
+        ? JSON.parse(storeData.calendar_mappings)
+        : {};
+
+      mappings[newCalendarId] = serviceId;
+
+      const { error: updateError } = await supabase
+        .from('stores')
+        .update({
+          calendar_mappings: JSON.stringify(mappings),
+        })
+        .eq('id', storeId);
+
+      if (updateError) {
+        throw new Error(`Failed to link calendar: ${updateError.message}`);
+      }
+
+      console.log(`✅ Auto-linked calendar to service ${serviceId}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Availability calendar created and linked to ${serviceName}!`,
+          calendarId: newCalendarId,
+          serviceId
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -222,7 +289,7 @@ serve(async (req) => {
       );
     }
 
-    throw new Error('Invalid action. Use: list, subscribe, link, or unlink');
+    throw new Error('Invalid action. Use: list, create, subscribe, link, or unlink');
 
   } catch (error) {
     console.error('Link calendar error:', error);
