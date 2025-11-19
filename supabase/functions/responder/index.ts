@@ -39,6 +39,12 @@ ${store?.description ? `Description: ${store.description}` : ''}
 ${JSON.stringify(resultData, null, 2)}
 
 IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
+    } else if (functionResult.needs_clarification) {
+      // Handle clarification needed (not an error!)
+      functionContext = `FUNCTION NEEDS MORE INFO:
+${functionResult.message || 'Need more information to proceed'}
+
+IMPORTANT: Ask for the missing information naturally and conversationally. This is NOT an error - just ask what you need to know.`;
     } else {
       functionContext = `FUNCTION ERROR:
 ${functionResult.error || 'Unknown error occurred'}
