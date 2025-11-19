@@ -33,8 +33,10 @@ ${store?.description ? `Description: ${store.description}` : ''}
   let functionContext = '';
   if (functionResult) {
     if (functionResult.success) {
+      // Handle both wrapped {success, data} and direct data formats
+      const resultData = functionResult.data || functionResult;
       functionContext = `FUNCTION RESULT (Use this data in your response):
-${JSON.stringify(functionResult.data, null, 2)}
+${JSON.stringify(resultData, null, 2)}
 
 IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
     } else {
