@@ -1,17 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import {
-  Classification,
-  Message,
-  StoreData,
-  StoreConfig,
-  FunctionResult,
-  ChatCompletionRequest,
-  ChatCompletionResponse
-} from './types.ts';
-import { classifyIntent } from './classifier/index.ts';
-import { generateResponse } from './responder/index.ts';
-import { executeFunction } from './tools/index.ts';
 
 // ============================================================================
 // CORS HEADERS
@@ -389,7 +377,7 @@ async function getProducts(params: Record<string, any>, storeId: string, authTok
       body: JSON.stringify({
         operation: 'read',
         storeId,
-        tabName
+        tabName: 'Products'
       })
     });
 

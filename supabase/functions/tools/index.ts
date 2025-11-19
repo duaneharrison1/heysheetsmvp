@@ -1,4 +1,4 @@
-import { FunctionContext, FunctionResult, StoreConfig } from '../types.ts';
+import { FunctionContext, FunctionResult, StoreConfig } from '../_shared/types.ts';
 import {
   validateParams,
   GetStoreInfoSchema,

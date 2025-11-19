@@ -1,4 +1,4 @@
-import { Classification, Message, StoreData } from '../types.ts';
+import { Classification, Message, StoreData } from '../_shared/types.ts';
 
 // ============================================================================
 // STRUCTURED OUTPUT SCHEMA

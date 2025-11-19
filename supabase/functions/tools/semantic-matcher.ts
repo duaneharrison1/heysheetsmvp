@@ -1,4 +1,4 @@
-import { ServiceRecord, ProductRecord } from '../types.ts';
+import { ServiceRecord, ProductRecord } from '../_shared/types.ts';
 
 // ============================================================================
 // TWO-STAGE SEMANTIC MATCHING
@@ -159,7 +159,7 @@ function getCodeScores(
     if (category && category.includes(queryLower)) score += 20;
 
     // Tag match: +15 points per tag
-    tags.forEach(tag => {
+    tags.forEach((tag: string) => {
       if (tag.trim() && queryTokens.some(token => tag.includes(token))) {
         score += 15;
       }
