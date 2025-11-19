@@ -12,13 +12,13 @@ export const GetStoreInfoSchema = z.object({
 });
 
 export const GetServicesSchema = z.object({
-  query: z.string().optional(),
-  category: z.string().optional()
+  query: z.string().optional().nullable().transform(val => val ?? undefined),
+  category: z.string().optional().nullable().transform(val => val ?? undefined)
 });
 
 export const GetProductsSchema = z.object({
-  query: z.string().optional(),
-  category: z.string().optional()
+  query: z.string().optional().nullable().transform(val => val ?? undefined),
+  category: z.string().optional().nullable().transform(val => val ?? undefined)
 });
 
 export const SubmitLeadSchema = z.object({
