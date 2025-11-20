@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -285,6 +285,15 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setCreatingCalendar(false);
   };
 
+  // Helper: Get dynamic placeholder text for calendar name
+  const getCalendarNamePlaceholder = () => {
+    if (createStep === 'specific' && selectedServiceId) {
+      const service = services.find(s => (s.serviceID || s.serviceName) === selectedServiceId);
+      return service ? `${service.serviceName} - Availability` : 'Enter calendar name';
+    }
+    return 'Enter calendar name';
+  };
+
   // Dialog Component - Create Calendar
   const CreateCalendarDialog = () => (
     <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -371,31 +380,43 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   Select Services (can select multiple)
                 </label>
                 <div className="space-y-2 border rounded-lg p-3 max-h-60 overflow-y-auto">
-                  {services.map((service) => {
-                    const serviceId = service.serviceID || service.serviceName;
-                    return (
-                      <div key={serviceId} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`service-${serviceId}`}
-                          checked={selectedServices.includes(serviceId)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedServices([...selectedServices, serviceId]);
-                            } else {
-                              setSelectedServices(selectedServices.filter(id => id !== serviceId));
-                            }
-                          }}
-                        />
-                        <label
-                          htmlFor={`service-${serviceId}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {service.serviceName}
-                        </label>
-                      </div>
-                    );
-                  })}
+                  {services.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-2">
+                      No services available
+                    </div>
+                  ) : (
+                    services.map((service) => {
+                      const serviceId = service.serviceID || service.serviceName;
+                      return (
+                        <div key={serviceId} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`service-${serviceId}`}
+                            checked={selectedServices.includes(serviceId)}
+                            onCheckedChange={(checked) => {
+                              console.log('Service checkbox changed:', service.serviceName, checked);
+                              if (checked) {
+                                setSelectedServices([...selectedServices, serviceId]);
+                              } else {
+                                setSelectedServices(selectedServices.filter(id => id !== serviceId));
+                              }
+                            }}
+                          />
+                          <label
+                            htmlFor={`service-${serviceId}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                          >
+                            {service.serviceName}
+                          </label>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
+                {selectedServices.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected
+                  </p>
+                )}
               </div>
 
               <Alert>
@@ -478,7 +499,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 <Input
                   value={calendarName}
                   onChange={(e) => setCalendarName(e.target.value)}
-                  placeholder="e.g., Advanced Sculpting - Availability"
+                  placeholder={getCalendarNamePlaceholder()}
                 />
               </div>
 
@@ -596,224 +617,158 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Not setup yet
   if (!store?.invite_calendar_id) {
     return (
-      <Card className="p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Calendar className="h-6 w-6 text-blue-600" />
-          <h3 className="text-lg font-semibold">Enable Calendar Booking</h3>
-        </div>
-        <p className="text-sm text-gray-600 mb-4">
-          Set up automatic booking with Google Calendar integration.
-          Customers will receive calendar invites and email confirmations automatically.
-        </p>
-        <Button onClick={setupCalendar} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Setting up...
-            </>
-          ) : (
-            'Set Up Calendar Booking'
-          )}
-        </Button>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Calendar Booking</CardTitle>
+              <CardDescription>
+                Enable booking through Google Calendar availability
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Set up calendar booking</AlertTitle>
+            <AlertDescription>
+              This will create a "Customer Bookings" calendar where confirmed bookings appear as events.
+              You'll be able to link your services to availability calendars in the next step.
+            </AlertDescription>
+          </Alert>
+          <Button onClick={setupCalendar} disabled={loading} className="w-full">
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Setting up...
+              </>
+            ) : (
+              'Set Up Calendar Booking'
+            )}
+          </Button>
+        </CardContent>
       </Card>
     );
   }
 
   // Already setup - show linking UI
   return (
-    <Card className="p-6">
-      <div className="space-y-6">
-        {/* Status Section */}
-        <div className="flex items-center justify-between pb-4 border-b">
-          <div className="flex items-center gap-3">
-            <Calendar className="h-6 w-6 text-green-600" />
-            <div>
-              <h3 className="text-lg font-semibold">Calendar Booking Management</h3>
-              <p className="text-sm text-gray-600">Link services to Google Calendar availability schedules</p>
-            </div>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+            <Calendar className="h-5 w-5" />
           </div>
-          <Badge variant="default" className="bg-green-100 text-green-800">
+          <div className="flex-1">
+            <CardTitle>Calendar Booking</CardTitle>
+            <CardDescription>
+              Manage service availability calendars
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
             <CheckCircle className="h-3 w-3 mr-1" />
             Active
           </Badge>
         </div>
-
-        {/* Customer Bookings Link */}
-        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-green-900">Customer Bookings Calendar</p>
-              <p className="text-sm text-green-700">View all confirmed bookings</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(
-                `https://calendar.google.com/calendar/u/0/r?cid=${store.invite_calendar_id}`,
-                '_blank'
-              )}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Open in Google Calendar
-            </Button>
-          </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Customer Bookings Calendar Info */}
+        <div className="space-y-2">
+          <h4 className="font-semibold text-sm">Customer Bookings Calendar</h4>
+          <p className="text-sm text-muted-foreground">
+            View all confirmed bookings in your Google Calendar
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(
+              `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.invite_calendar_id)}`,
+              '_blank'
+            )}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open in Google Calendar
+          </Button>
         </div>
 
         <Separator />
 
-        {/* Instructions */}
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertTitle>How to link service calendars</AlertTitle>
-          <AlertDescription className="space-y-3 mt-2">
-            <div className="space-y-2">
-              <p className="font-semibold">Step 1: Create availability calendar in Google Calendar</p>
-              <p className="text-sm">Create a calendar for your service (e.g., "Pottery Classes Availability")</p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="font-semibold">Step 2: Share with service account</p>
-              <div className="flex items-center gap-2 bg-white p-2 rounded border">
-                <code className="flex-1 text-xs">
-                  heysheets-backend@heysheets-mvp.iam.gserviceaccount.com
-                </code>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    navigator.clipboard.writeText('heysheets-backend@heysheets-mvp.iam.gserviceaccount.com');
-                    toast({ title: 'Email copied!' });
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <p className="text-sm text-orange-600 font-medium">
-                ⚠️ Important: Select "Make changes to events" permission (NOT "See all event details")
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="font-semibold">Step 3: Get calendar ID</p>
-              <p className="text-sm">In Google Calendar: Settings → Select your calendar → "Integrate calendar" → Copy Calendar ID</p>
-              <p className="text-xs text-gray-500">Example: abc123xyz@group.calendar.google.com</p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="font-semibold">Step 4: Paste calendar ID below and click Link</p>
-            </div>
-          </AlertDescription>
-        </Alert>
-
-        {/* Service List */}
+        {/* Services Section */}
         {services.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No services found. Add services to your Google Sheet first.</p>
-          </div>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              No services found. Add services to your Google Sheet first, then come back here to link them to availability calendars.
+            </AlertDescription>
+          </Alert>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="font-semibold">Link Services to Calendars</h4>
+              <h4 className="font-semibold">Service Availability</h4>
               <Button onClick={() => setCreateDialogOpen(true)} size="sm">
                 + Add Calendar
               </Button>
             </div>
-            {services.map((service) => {
-              const serviceId = service.serviceID || service.serviceName;
-              const linkedCalendar = getLinkedCalendar(serviceId);
-              return (
-                <div key={serviceId} className="border rounded-lg p-4">
-                  <div className="space-y-3">
-                    {/* Service Info */}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h5 className="font-semibold">{service.serviceName}</h5>
-                        <p className="text-sm text-gray-600">
-                          Capacity: {service.capacity} | Price: ${service.price}
-                        </p>
-                      </div>
-                      {linkedCalendar && (
-                        <Badge variant="default" className="bg-green-100 text-green-800">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Linked
-                        </Badge>
+
+            {/* Service List */}
+            <div className="space-y-2">
+              {services.map((service) => {
+                const serviceId = service.serviceID || service.serviceName;
+                const linkedCalendar = getLinkedCalendar(serviceId);
+                return (
+                  <div key={serviceId} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="font-medium">{service.serviceName}</div>
+                      {linkedCalendar ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            <CheckCircle className="mr-1 h-3 w-3" />
+                            Linked
+                          </Badge>
+                          <span className="text-xs text-muted-foreground font-mono">{linkedCalendar.substring(0, 30)}...</span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Not linked to availability calendar
+                        </div>
                       )}
                     </div>
-
-                    {/* Link/Unlink Interface */}
-                    {linkedCalendar ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 p-2 bg-gray-50 rounded border">
-                          <p className="text-xs text-gray-500">Linked calendar:</p>
-                          <p className="text-sm font-mono break-all">{linkedCalendar}</p>
-                        </div>
-                        <div className="flex gap-2">
+                    <div className="flex gap-2">
+                      {linkedCalendar && (
+                        <>
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
                             onClick={() => window.open(
-                              `https://calendar.google.com/calendar/u/0/r?cid=${linkedCalendar}`,
+                              `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(linkedCalendar)}`,
                               '_blank'
                             )}
+                            title="Open calendar"
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
                             onClick={() => unlinkCalendar(serviceId)}
+                            title="Unlink calendar"
                           >
-                            <X className="h-4 w-4 mr-1" />
-                            Unlink
+                            <X className="h-4 w-4" />
                           </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Paste calendar ID (e.g., abc123@group.calendar.google.com)"
-                          value={calendarInputs[serviceId] || ''}
-                          onChange={(e) => setCalendarInputs({
-                            ...calendarInputs,
-                            [serviceId]: e.target.value
-                          })}
-                          className="flex-1"
-                        />
-                        <Button
-                          onClick={() => linkCalendar(
-                            serviceId,
-                            calendarInputs[serviceId] || ''
-                          )}
-                          disabled={!calendarInputs[serviceId]?.trim()}
-                        >
-                          <LinkIcon className="h-4 w-4 mr-1" />
-                          Link
-                        </Button>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
-
-        {/* Troubleshooting */}
-        <Alert variant="default">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Troubleshooting</AlertTitle>
-          <AlertDescription>
-            <p className="text-sm mb-2">If linking fails:</p>
-            <ul className="text-sm space-y-1 list-disc list-inside">
-              <li>Verify you shared with the exact email above</li>
-              <li>Confirm permission is "Make changes to events" (not read-only)</li>
-              <li>Wait 30 seconds after sharing before linking</li>
-              <li>Check calendar ID is correct (no extra spaces)</li>
-            </ul>
-          </AlertDescription>
-        </Alert>
-      </div>
+      </CardContent>
 
       {/* Create Calendar Dialog */}
       <CreateCalendarDialog />
