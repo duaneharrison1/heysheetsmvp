@@ -41,6 +41,21 @@ export function getCalendarEditLink(calendarId: string): string {
 }
 
 /**
+ * Get link to open calendar in regular view (not embed)
+ * User can add/edit events in this view
+ */
+export function getCalendarViewLink(calendarId: string): string {
+  return `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(calendarId)}`;
+}
+
+/**
+ * Get link to a specific event
+ */
+export function getEventLink(calendarId: string, eventId: string): string {
+  return `https://calendar.google.com/calendar/u/0/r/eventedit/${eventId}?cid=${encodeURIComponent(calendarId)}`;
+}
+
+/**
  * Get calendar settings link
  */
 export function getCalendarSettingsLink(calendarId: string): string {
