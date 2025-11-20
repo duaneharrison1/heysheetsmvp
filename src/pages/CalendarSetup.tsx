@@ -14,8 +14,23 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getCalendarEmbedLink, getCalendarEditLink } from '@/lib/calendar-links';
+import {
+  fetchUpcomingBookings,
+  fetchAvailableSlots,
+  formatEventDate,
+  formatEventTime,
+  type CalendarEvent
+} from '@/lib/calendar-data';
 
 export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [store, setStore] = useState<any>(null);
@@ -33,9 +48,26 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [createdCalendarId, setCreatedCalendarId] = useState('');
   const [creatingCalendar, setCreatingCalendar] = useState(false);
 
+  // Event data state
+  const [upcomingBookings, setUpcomingBookings] = useState<CalendarEvent[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [scheduleEvents, setScheduleEvents] = useState<Record<string, CalendarEvent[]>>({});
+
   useEffect(() => {
     loadStore();
   }, [storeId]);
+
+  // Load schedule slots when calendar mappings change
+  useEffect(() => {
+    if (store?.calendar_mappings) {
+      const mappings = typeof store.calendar_mappings === 'string'
+        ? JSON.parse(store.calendar_mappings)
+        : store.calendar_mappings || {};
+
+      const calendarIds = Object.keys(mappings);
+      calendarIds.forEach(calId => loadScheduleSlots(calId));
+    }
+  }, [store?.calendar_mappings]);
 
   async function loadStore() {
     const { data } = await supabase
@@ -48,6 +80,33 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
     if (data?.invite_calendar_id) {
       loadServices();
+      loadUpcomingBookings(data.invite_calendar_id);
+    }
+  }
+
+  async function loadUpcomingBookings(inviteCalendarId: string) {
+    if (!inviteCalendarId) return;
+
+    setLoadingBookings(true);
+    try {
+      const bookings = await fetchUpcomingBookings(inviteCalendarId, 10);
+      setUpcomingBookings(bookings);
+    } catch (error) {
+      console.error('Error loading bookings:', error);
+    } finally {
+      setLoadingBookings(false);
+    }
+  }
+
+  async function loadScheduleSlots(calendarId: string) {
+    try {
+      const slots = await fetchAvailableSlots(calendarId, 5);
+      setScheduleEvents(prev => ({
+        ...prev,
+        [calendarId]: slots,
+      }));
+    } catch (error) {
+      console.error('Error loading schedule slots:', error);
     }
   }
 
@@ -308,6 +367,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     setSelectedType('general');
                     setCreateStep('general');
                     setCalendarName('Store Hours');
+                    setSelectedServices([]);
                   }}
                   className="w-full p-4 text-left border rounded-lg hover:border-primary transition-colors"
                 >
@@ -328,6 +388,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   onClick={() => {
                     setSelectedType('specific');
                     setCreateStep('specific');
+                    setSelectedServices([]);
+                    setCalendarName('');
                   }}
                   className="w-full p-4 text-left border rounded-lg hover:border-primary transition-colors"
                 >
@@ -695,35 +757,85 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <CardTitle>Service Availability</CardTitle>
+              <CardTitle>Calendar Booking</CardTitle>
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                 Active
               </Badge>
             </div>
             <CardDescription>
-              Set up time slots when services can be booked
+              Manage booking calendars and availability schedules
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Customer Bookings Calendar Info */}
-        <div className="space-y-2">
-          <h4 className="font-semibold text-sm text-muted-foreground">Customer Bookings Calendar</h4>
-          <p className="text-sm text-muted-foreground">
-            View all confirmed bookings
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(
-              `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.invite_calendar_id)}`,
-              '_blank'
+        {/* Customer Bookings Calendar Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-sm">Customer Bookings Calendar</h4>
+            {upcomingBookings.length > 0 && (
+              <Badge variant="outline">{upcomingBookings.length} upcoming</Badge>
             )}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Open in Google Calendar
-          </Button>
+          </div>
+
+          {loadingBookings ? (
+            <div className="space-y-2">
+              <div className="h-16 bg-gray-100 animate-pulse rounded" />
+              <div className="h-16 bg-gray-100 animate-pulse rounded" />
+            </div>
+          ) : upcomingBookings.length > 0 ? (
+            <>
+              <div className="space-y-2">
+                {upcomingBookings.slice(0, 5).map(booking => (
+                  <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <div className="font-medium text-sm">{booking.summary}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatEventDate(booking.start.dateTime)} • {formatEventTime(booking.start.dateTime)}
+                      </div>
+                    </div>
+                    <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'} className="text-xs">
+                      {booking.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+
+              {upcomingBookings.length > 5 && (
+                <p className="text-xs text-muted-foreground">
+                  +{upcomingBookings.length - 5} more booking{upcomingBookings.length - 5 > 1 ? 's' : ''}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground py-2">
+              No upcoming bookings
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(
+                getCalendarEmbedLink(store.invite_calendar_id, { mode: 'AGENDA' }),
+                '_blank'
+              )}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              View All Bookings
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.open(
+                getCalendarEditLink(store.invite_calendar_id),
+                '_blank'
+              )}
+            >
+              Edit Calendar
+            </Button>
+          </div>
         </div>
 
         <Separator />
@@ -734,75 +846,151 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <h4 className="font-semibold">Availability Schedules</h4>
           </div>
 
-          {services.length === 0 ? (
+          {/* Check if Google Sheet is connected */}
+          {!store.sheet_id ? (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Set up your services first</AlertTitle>
+              <AlertDescription>
+                To create availability schedules, add your Google Sheet with services. Go to Store Setup to connect your sheet.
+              </AlertDescription>
+            </Alert>
+          ) : services.length === 0 ? (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No services found. Add services to your Google Sheet first.
+                No services found in your Google Sheet. Add services to your sheet to set up availability schedules.
               </AlertDescription>
             </Alert>
+          ) : Object.keys(store?.calendar_mappings || {}).length === 0 ? (
+            /* EMPTY STATE - No schedules created yet */
+            <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-3">
+              <div className="flex justify-center">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Calendar className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+              <div>
+                <h5 className="font-semibold mb-1">No availability schedules yet</h5>
+                <p className="text-sm text-muted-foreground">
+                  Create a schedule to define when your services can be booked. You can create shared hours for multiple services or unique schedules for specific services.
+                </p>
+              </div>
+              <Button onClick={() => setCreateDialogOpen(true)}>
+                + Create Availability Schedule
+              </Button>
+            </div>
           ) : (
             <>
-              {/* Service List */}
-              <div className="space-y-2">
-                {services.map((service) => {
-                  const serviceId = service.serviceID || service.serviceName;
-                  const linkedCalendar = getLinkedCalendar(serviceId);
-                  return (
-                    <div key={serviceId} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="font-medium">{service.serviceName}</div>
-                        {linkedCalendar ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              <CheckCircle className="mr-1 h-3 w-3" />
-                              Linked
-                            </Badge>
-                            <span className="text-xs text-muted-foreground font-mono">{linkedCalendar.substring(0, 30)}...</span>
+              {/* Show calendar cards */}
+              <div className="space-y-3">
+                {(() => {
+                  const mappings = typeof store.calendar_mappings === 'string'
+                    ? JSON.parse(store.calendar_mappings)
+                    : store.calendar_mappings || {};
+
+                  const calendarGroups: Record<string, string[]> = {};
+                  Object.entries(mappings).forEach(([calendarId, serviceId]) => {
+                    if (!calendarGroups[calendarId]) {
+                      calendarGroups[calendarId] = [];
+                    }
+                    calendarGroups[calendarId].push(serviceId as string);
+                  });
+
+                  return Object.entries(calendarGroups).map(([calendarId, serviceIds]) => {
+                    const linkedServices = services.filter(s => {
+                      const sid = s.serviceID || s.serviceName;
+                      return serviceIds.includes(sid);
+                    });
+
+                    const calendarName = linkedServices.length === 1
+                      ? `${linkedServices[0].serviceName} - Availability`
+                      : linkedServices.length > 1
+                        ? `Shared Schedule (${linkedServices.length} services)`
+                        : 'Availability Schedule';
+
+                    const slots = scheduleEvents[calendarId] || [];
+
+                    return (
+                      <div key={calendarId} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium">{calendarName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {linkedServices.map(s => s.serviceName).join(', ')}
+                            </div>
                           </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground mt-1">
-                            No availability schedule
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => window.open(
+                                  getCalendarEmbedLink(calendarId, { mode: 'WEEK' }),
+                                  '_blank'
+                                )}
+                              >
+                                View Schedule
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => window.open(
+                                  getCalendarEditLink(calendarId),
+                                  '_blank'
+                                )}
+                              >
+                                Edit in Google Calendar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  toast({
+                                    title: "Edit services",
+                                    description: "This feature is coming soon",
+                                  });
+                                }}
+                              >
+                                Edit Linked Services
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => {
+                                  serviceIds.forEach(serviceId => {
+                                    unlinkCalendar(serviceId);
+                                  });
+                                }}
+                              >
+                                Remove Schedule
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        {/* Show next available slots */}
+                        {slots.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium text-muted-foreground">Next Available:</div>
+                            {slots.slice(0, 3).map(slot => (
+                              <div key={slot.id} className="text-xs text-muted-foreground">
+                                📅 {formatEventDate(slot.start.dateTime)} • {formatEventTime(slot.start.dateTime)} - {formatEventTime(slot.end.dateTime)}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-2">
-                        {linkedCalendar && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => window.open(
-                                `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(linkedCalendar)}`,
-                                '_blank'
-                              )}
-                              title="Open calendar"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => unlinkCalendar(serviceId)}
-                              title="Unlink"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
 
-              {/* Add Availability Button */}
               <Button
                 onClick={() => setCreateDialogOpen(true)}
                 variant="outline"
                 className="w-full"
               >
-                + Add Availability
+                + Add Another Schedule
               </Button>
             </>
           )}
