@@ -7,6 +7,16 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -52,6 +62,15 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [upcomingBookings, setUpcomingBookings] = useState<CalendarEvent[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [scheduleEvents, setScheduleEvents] = useState<Record<string, CalendarEvent[]>>({});
+
+  // Confirmation dialog state
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [calendarToRemove, setCalendarToRemove] = useState<{ calendarId: string; serviceIds: string[]; name: string } | null>(null);
+
+  // Edit services dialog state
+  const [editServicesDialogOpen, setEditServicesDialogOpen] = useState(false);
+  const [calendarToEdit, setCalendarToEdit] = useState<{ calendarId: string; serviceIds: string[]; name: string } | null>(null);
+  const [editSelectedServices, setEditSelectedServices] = useState<string[]>([]);
 
   useEffect(() => {
     loadStore();
@@ -328,6 +347,51 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setSelectedServices([]);
     setCreatedCalendarId('');
     setCreatingCalendar(false);
+  };
+
+  // Handle confirmation of schedule removal
+  const handleRemoveSchedule = async () => {
+    if (!calendarToRemove) return;
+
+    // Unlink all services associated with this calendar
+    for (const serviceId of calendarToRemove.serviceIds) {
+      await unlinkCalendar(serviceId);
+    }
+
+    setRemoveDialogOpen(false);
+    setCalendarToRemove(null);
+  };
+
+  // Handle saving edited services
+  const handleSaveEditedServices = async () => {
+    if (!calendarToEdit) return;
+
+    try {
+      // First, unlink all current services
+      for (const serviceId of calendarToEdit.serviceIds) {
+        await unlinkCalendar(serviceId);
+      }
+
+      // Then, link the new selected services
+      for (const serviceId of editSelectedServices) {
+        await linkCalendar(serviceId, calendarToEdit.calendarId);
+      }
+
+      toast({
+        title: 'Services updated!',
+        description: 'Calendar services have been updated successfully',
+      });
+
+      setEditServicesDialogOpen(false);
+      setCalendarToEdit(null);
+      setEditSelectedServices([]);
+    } catch (error: any) {
+      toast({
+        title: 'Update failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   };
 
   // Helper: Get dynamic placeholder text for schedule name
@@ -865,21 +929,19 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  toast({
-                                    title: "Edit services",
-                                    description: "This feature is coming soon",
-                                  });
+                                  setCalendarToEdit({ calendarId, serviceIds, name: calendarName });
+                                  setEditSelectedServices([...serviceIds]);
+                                  setEditServicesDialogOpen(true);
                                 }}
                               >
-                                Edit Linked Services
+                                Edit Services
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
                                 onClick={() => {
-                                  serviceIds.forEach(serviceId => {
-                                    unlinkCalendar(serviceId);
-                                  });
+                                  setCalendarToRemove({ calendarId, serviceIds, name: calendarName });
+                                  setRemoveDialogOpen(true);
                                 }}
                               >
                                 Remove Schedule
@@ -898,6 +960,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                                 onClick={() => window.open(slot.htmlLink, '_blank')}
                                 className="text-xs text-muted-foreground hover:underline text-left block"
                               >
+                                {slot.summary && <span className="font-medium">{slot.summary} • </span>}
                                 📅 {formatEventDate(slot.start.dateTime)} • {formatEventTime(slot.start.dateTime)} - {formatEventTime(slot.end.dateTime)}
                               </button>
                             ))}
@@ -989,6 +1052,110 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
       {/* Create Calendar Dialog */}
       <CreateCalendarDialog />
+
+      {/* Remove Schedule Confirmation Dialog */}
+      <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Schedule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove "{calendarToRemove?.name}"? This will unlink all services from this calendar, but the calendar itself will remain in Google Calendar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveSchedule}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove Schedule
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Services Dialog */}
+      <Dialog open={editServicesDialogOpen} onOpenChange={setEditServicesDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Services</DialogTitle>
+            <DialogDescription>
+              Update which services use "{calendarToEdit?.name}"
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">
+              Select Services
+            </label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Choose which services will use this availability schedule
+            </p>
+            <div className="space-y-2 border rounded-lg p-3 max-h-60 overflow-y-auto">
+              {services.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-2">
+                  No services available
+                </div>
+              ) : (
+                services.map((service) => {
+                  const serviceId = service.serviceID || service.serviceName;
+                  const isChecked = editSelectedServices.includes(serviceId);
+                  return (
+                    <div
+                      key={serviceId}
+                      className="flex items-center space-x-3 py-2 px-2 rounded hover:bg-gray-50 cursor-pointer"
+                      onClick={() => {
+                        if (isChecked) {
+                          setEditSelectedServices(editSelectedServices.filter(id => id !== serviceId));
+                        } else {
+                          setEditSelectedServices([...editSelectedServices, serviceId]);
+                        }
+                      }}
+                    >
+                      <Checkbox
+                        id={`edit-service-${serviceId}`}
+                        checked={isChecked}
+                        onCheckedChange={() => {}}
+                      />
+                      <label
+                        htmlFor={`edit-service-${serviceId}`}
+                        className="text-sm font-medium leading-none cursor-pointer flex-1"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        {service.serviceName}
+                      </label>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {editSelectedServices.length > 0 && (
+              <p className="text-sm text-muted-foreground mt-2">
+                {editSelectedServices.length} service{editSelectedServices.length === 1 ? '' : 's'} selected
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditServicesDialogOpen(false);
+                setCalendarToEdit(null);
+                setEditSelectedServices([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEditedServices}
+              disabled={editSelectedServices.length === 0}
+            >
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
