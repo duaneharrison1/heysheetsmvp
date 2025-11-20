@@ -9,18 +9,37 @@ const DropdownContext = React.createContext<any>(null)
 
 const DropdownMenu = ({ children }: { children?: React.ReactNode }) => {
   const [open, setOpen] = React.useState(false)
+  const [triggerRef, setTriggerRef] = React.useState<HTMLElement | null>(null)
   return (
-    <DropdownContext.Provider value={{ open, setOpen }}>
+    <DropdownContext.Provider value={{ open, setOpen, triggerRef, setTriggerRef }}>
       {children}
     </DropdownContext.Provider>
   )
 }
 
-const DropdownMenuTrigger = ({ children }: { children?: React.ReactNode }) => {
+const DropdownMenuTrigger = ({ children, asChild }: { children?: React.ReactNode; asChild?: boolean }) => {
   const ctx = React.useContext(DropdownContext)
+  const ref = React.useRef<HTMLButtonElement>(null)
+
+  React.useEffect(() => {
+    if (ref.current) {
+      ctx.setTriggerRef(ref.current)
+    }
+  }, [ctx])
+
   if (!ctx) return null
+
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children as any, {
+      ref,
+      onClick: () => ctx.setOpen((v: boolean) => !v),
+      'aria-expanded': ctx.open,
+    })
+  }
+
   return (
     <button
+      ref={ref}
       type="button"
       onClick={() => ctx.setOpen((v: boolean) => !v)}
       aria-expanded={ctx.open}
@@ -36,13 +55,67 @@ const DropdownMenuPortal = ({ children }: { children?: React.ReactNode }) => {
   return createPortal(<>{children}</>, el)
 }
 
-const DropdownMenuContent = ({ className, children }: any) => {
+const DropdownMenuContent = ({ className, children, align = 'start', sideOffset = 0 }: any) => {
   const ctx = React.useContext(DropdownContext)
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const [position, setPosition] = React.useState({ top: 0, left: 0 })
+
+  React.useEffect(() => {
+    if (ctx.open && ctx.triggerRef && contentRef.current) {
+      const triggerRect = ctx.triggerRef.getBoundingClientRect()
+      const contentRect = contentRef.current.getBoundingClientRect()
+
+      let top = triggerRect.bottom + sideOffset
+      let left = triggerRect.left
+
+      // Align positioning
+      if (align === 'end') {
+        left = triggerRect.right - contentRect.width
+      } else if (align === 'center') {
+        left = triggerRect.left + (triggerRect.width / 2) - (contentRect.width / 2)
+      }
+
+      // Keep within viewport
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+
+      if (left + contentRect.width > viewportWidth) {
+        left = viewportWidth - contentRect.width - 10
+      }
+      if (left < 10) {
+        left = 10
+      }
+      if (top + contentRect.height > viewportHeight) {
+        top = triggerRect.top - contentRect.height - sideOffset
+      }
+
+      setPosition({ top, left })
+    }
+  }, [ctx.open, ctx.triggerRef, align, sideOffset])
+
+  React.useEffect(() => {
+    if (ctx.open) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (contentRef.current && !contentRef.current.contains(e.target as Node) &&
+            ctx.triggerRef && !ctx.triggerRef.contains(e.target as Node)) {
+          ctx.setOpen(false)
+        }
+      }
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [ctx.open, ctx])
+
   if (!ctx) return null
   if (!ctx.open) return null
+
   return (
     <DropdownMenuPortal>
-      <div className={cn("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md", className)}>
+      <div
+        ref={contentRef}
+        style={{ position: 'fixed', top: `${position.top}px`, left: `${position.left}px` }}
+        className={cn("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md", className)}
+      >
         {children}
       </div>
     </DropdownMenuPortal>

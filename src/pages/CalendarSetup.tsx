@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink, getEventLink } from '@/lib/calendar-links';
+import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink } from '@/lib/calendar-links';
 import {
   fetchUpcomingBookings,
   fetchAvailableSlots,
@@ -750,12 +750,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <Calendar className="h-5 w-5" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <CardTitle>Calendar Booking</CardTitle>
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                Active
-              </Badge>
-            </div>
+            <CardTitle>Calendar Booking</CardTitle>
             <CardDescription>
               Manage booking calendars and availability schedules
             </CardDescription>
@@ -763,22 +758,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Availability Schedules Section */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Availability Schedules</h4>
-          </div>
+        {/* Check if Google Sheet is connected */}
+        {!store.sheet_id ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Set up your services first</AlertTitle>
+            <AlertDescription>
+              To create availability schedules, add your Google Sheet with services. Go to Store Setup to connect your sheet.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            {/* Availability Schedules Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold">Availability Schedules</h4>
+              </div>
 
-          {/* Check if Google Sheet is connected */}
-          {!store.sheet_id ? (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertTitle>Set up your services first</AlertTitle>
-              <AlertDescription>
-                To create availability schedules, add your Google Sheet with services. Go to Store Setup to connect your sheet.
-              </AlertDescription>
-            </Alert>
-          ) : services.length === 0 ? (
+              {services.length === 0 ? (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
@@ -843,13 +840,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               {linkedServices.map(s => s.serviceName).join(', ')}
                             </div>
                           </div>
-                          <DropdownMenu modal={false}>
+                          <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" sideOffset={5}>
+                            <DropdownMenuContent align="end" className="z-50">
                               <DropdownMenuItem
                                 onClick={() => window.open(
                                   getCalendarEmbedLink(calendarId, { mode: 'WEEK' }),
@@ -898,7 +895,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                             {slots.slice(0, 3).map(slot => (
                               <button
                                 key={slot.id}
-                                onClick={() => window.open(getEventLink(calendarId, slot.id), '_blank')}
+                                onClick={() => window.open(slot.htmlLink, '_blank')}
                                 className="text-xs text-muted-foreground hover:underline text-left block"
                               >
                                 📅 {formatEventDate(slot.start.dateTime)} • {formatEventTime(slot.start.dateTime)} - {formatEventTime(slot.end.dateTime)}
@@ -945,7 +942,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 {upcomingBookings.slice(0, 5).map(booking => (
                   <button
                     key={booking.id}
-                    onClick={() => window.open(getEventLink(store.invite_calendar_id, booking.id), '_blank')}
+                    onClick={() => window.open(booking.htmlLink, '_blank')}
                     className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
                   >
                     <div>
@@ -986,6 +983,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             View All Bookings
           </Button>
         </div>
+          </>
+        )}
       </CardContent>
 
       {/* Create Calendar Dialog */}
