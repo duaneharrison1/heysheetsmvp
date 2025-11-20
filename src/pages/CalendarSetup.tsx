@@ -242,11 +242,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   }
 
-  // Helper: Get Google Calendar settings link
-  const getGoogleCalendarLink = (calendarId: string) => {
-    return `https://calendar.google.com/calendar/u/0/r/settings/calendar/${encodeURIComponent(calendarId)}`;
-  };
-
   // Auto-create calendar handler
   async function handleCreateCalendar() {
     if (!calendarName.trim()) {
@@ -355,9 +350,9 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           {createStep === 'choice' && (
             <>
               <DialogHeader>
-                <DialogTitle>Create Availability Calendar</DialogTitle>
+                <DialogTitle>Create Availability Schedule</DialogTitle>
                 <DialogDescription>
-                  Choose how you want to set up your service availability
+                  Choose how to organize your booking hours
                 </DialogDescription>
               </DialogHeader>
 
@@ -366,7 +361,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   onClick={() => {
                     setSelectedType('general');
                     setCreateStep('general');
-                    setCalendarName('Store Hours');
+                    setCalendarName('');
                     setSelectedServices([]);
                   }}
                   className="w-full p-4 text-left border rounded-lg hover:border-primary transition-colors"
@@ -376,9 +371,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       <Calendar className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold mb-1">General Availability</h3>
+                      <h3 className="font-semibold mb-1">⭐ General Hours</h3>
                       <p className="text-sm text-muted-foreground">
-                        For multiple services with the same schedule (e.g., "Store Hours" covering Pottery, Wheel Throwing, Sculpting)
+                        One schedule for services with the same hours
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Example: "Store Hours" for Mon-Fri 9-5
                       </p>
                     </div>
                   </div>
@@ -398,9 +396,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       <Calendar className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold mb-1">Specific Service</h3>
+                      <h3 className="font-semibold mb-1">🎯 Unique Schedule</h3>
                       <p className="text-sm text-muted-foreground">
-                        For a service with unique hours (e.g., weekend-only classes or special workshops)
+                        Custom availability for specific services
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Example: "Weekend Classes" for Sat-Sun only
                       </p>
                     </div>
                   </div>
@@ -423,9 +424,25 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <div className="space-y-4 py-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  Select Services
-                  <span className="text-xs text-muted-foreground ml-2">(can select multiple)</span>
+                  Schedule Name
                 </label>
+                <Input
+                  value={calendarName}
+                  onChange={(e) => setCalendarName(e.target.value)}
+                  placeholder="e.g., Store Hours"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Name this availability schedule
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Which services share this schedule?
+                </label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select all services that will be available during the same hours
+                </p>
                 <div className="space-y-2 border rounded-lg p-3 max-h-60 overflow-y-auto">
                   {services.length === 0 ? (
                     <div className="text-sm text-muted-foreground py-2">
@@ -468,24 +485,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   )}
                 </div>
                 {selectedServices.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} selected
                   </p>
                 )}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">
-                  Calendar Name
-                </label>
-                <Input
-                  value={calendarName}
-                  onChange={(e) => setCalendarName(e.target.value)}
-                  placeholder="e.g., Store Hours"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  💡 Tip: Use recurring events in Google Calendar for regular hours (e.g., Mon-Fri 9 AM - 5 PM)
-                </p>
               </div>
             </div>
 
@@ -521,16 +524,34 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <DialogHeader>
               <DialogTitle>Specific Service Availability</DialogTitle>
               <DialogDescription>
-                Create a calendar for one or more services with unique hours
+                Create a calendar for services with unique availability
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              {/* FIRST: Schedule Name */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Schedule Name
+                </label>
+                <Input
+                  value={calendarName}
+                  onChange={(e) => setCalendarName(e.target.value)}
+                  placeholder="e.g., Weekend Classes"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Name this availability schedule
+                </p>
+              </div>
+
+              {/* SECOND: Select Services */}
               <div>
                 <label className="text-sm font-medium mb-2 block">
                   Select Service(s)
-                  <span className="text-xs text-muted-foreground ml-2">(can select multiple)</span>
                 </label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Choose which services will use this availability schedule
+                </p>
                 <div className="space-y-2 border rounded-lg p-3 max-h-60 overflow-y-auto">
                   {services.length === 0 ? (
                     <div className="text-sm text-muted-foreground py-2">
@@ -545,18 +566,20 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           key={serviceId}
                           className="flex items-center space-x-3 py-2 px-2 rounded hover:bg-gray-50 cursor-pointer"
                           onClick={() => {
-                            console.log('Specific - Checkbox clicked:', service.serviceName, 'Current checked:', isChecked, 'Current selection:', selectedServices);
+                            console.log('Specific - Service row clicked:', service.serviceName);
                             const newSelection = isChecked
                               ? selectedServices.filter(id => id !== serviceId)
                               : [...selectedServices, serviceId];
                             setSelectedServices(newSelection);
 
-                            // Auto-fill name if only one service selected
+                            // Auto-fill name ONLY when exactly 1 service selected
                             if (newSelection.length === 1) {
                               const selectedService = services.find(s => (s.serviceID || s.serviceName) === newSelection[0]);
                               if (selectedService) {
                                 setCalendarName(`${selectedService.serviceName} - Availability`);
                               }
+                            } else if (newSelection.length === 0) {
+                              setCalendarName(''); // Clear name if no services selected
                             }
                           }}
                         >
@@ -564,7 +587,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                             id={`specific-service-${serviceId}`}
                             checked={isChecked}
                             onCheckedChange={(checked) => {
-                              console.log('Specific - onCheckedChange:', service.serviceName, checked);
+                              console.log('Specific - Checkbox changed:', service.serviceName, checked);
                             }}
                           />
                           <label
@@ -580,31 +603,27 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   )}
                 </div>
                 {selectedServices.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} selected
                   </p>
                 )}
               </div>
 
-              <div>
-                <label className="text-sm font-medium mb-2 block">
-                  Calendar Name
-                </label>
-                <Input
-                  value={calendarName}
-                  onChange={(e) => setCalendarName(e.target.value)}
-                  placeholder={getCalendarNamePlaceholder()}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  💡 Perfect for: Services with unique schedules like weekend-only classes or special workshops
-                </p>
-              </div>
+              <Alert>
+                <div className="text-sm">
+                  💡 <strong>Perfect for:</strong> Services with unique schedules like weekend-only classes, evening sessions, or services available at different times than your regular hours.
+                </div>
+              </Alert>
             </div>
 
             <div className="flex justify-between gap-3">
               <Button
                 variant="outline"
-                onClick={() => setCreateStep('choice')}
+                onClick={() => {
+                  setCreateStep('choice');
+                  setSelectedServices([]);
+                  setCalendarName('');
+                }}
                 disabled={creatingCalendar}
               >
                 Back
@@ -633,7 +652,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-600" />
-                Calendar Created Successfully!
+                Calendar Created!
               </DialogTitle>
               <DialogDescription>
                 "{calendarName}" has been created and shared with your email
@@ -643,26 +662,26 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <div className="space-y-4 py-4">
               <Alert>
                 <div className="space-y-2">
-                  <div className="font-semibold">Next: Add Your Available Times</div>
+                  <div className="font-semibold">Next: Add Your Available Time Slots</div>
                   <div className="text-sm space-y-1">
                     {selectedType === 'general' ? (
                       <>
-                        <p>Add events to this calendar to define when your {selectedServices.length} selected service{selectedServices.length > 1 ? 's are' : ' is'} available for booking.</p>
+                        <p>Add events to this calendar to define when your {selectedServices.length} selected service{selectedServices.length === 1 ? '' : 's'} can be booked.</p>
                         <p className="font-medium mt-2">Example:</p>
                         <ul className="list-disc list-inside ml-2 space-y-1">
-                          <li>Add a recurring event "Monday-Friday, 9 AM - 5 PM"</li>
-                          <li>All {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} become bookable during these hours</li>
-                          <li>Remove or edit events anytime to adjust availability</li>
+                          <li>Add recurring event "Monday-Friday, 9 AM - 5 PM"</li>
+                          <li>All {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} become bookable during these hours</li>
+                          <li>Perfect for services that share the same operating schedule</li>
                         </ul>
                       </>
                     ) : (
                       <>
-                        <p>Add events to this calendar to define when {selectedServices.length > 1 ? 'these services are' : 'this service is'} available for booking.</p>
+                        <p>Add events to this calendar to define unique availability for your {selectedServices.length} selected service{selectedServices.length === 1 ? '' : 's'}.</p>
                         <p className="font-medium mt-2">Example:</p>
                         <ul className="list-disc list-inside ml-2 space-y-1">
-                          <li>Add "Saturday 10 AM - 4 PM" for weekend-only classes</li>
-                          <li>Add "Dec 15, 6 PM - 9 PM" for a special workshop</li>
-                          <li>Events in this calendar = bookable time slots</li>
+                          <li>Add "Every Saturday, 10 AM - 4 PM" for weekend-only classes</li>
+                          <li>Add "Tuesday & Thursday, 6 PM - 9 PM" for evening sessions</li>
+                          <li>Perfect for services with availability different from regular hours</li>
                         </ul>
                       </>
                     )}
@@ -670,29 +689,16 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </div>
               </Alert>
 
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    window.open(getGoogleCalendarLink(createdCalendarId), '_blank');
-                  }}
-                  className="flex-1"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Open in Google Calendar
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(getGoogleCalendarLink(createdCalendarId));
-                    toast({
-                      title: 'Link copied!',
-                      description: 'Calendar link copied to clipboard',
-                    });
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
+              {/* Single button - use embed link */}
+              <Button
+                onClick={() => {
+                  window.open(getCalendarEmbedLink(createdCalendarId, { mode: 'WEEK' }), '_blank');
+                }}
+                className="w-full"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open in Google Calendar
+              </Button>
             </div>
 
             <div className="flex justify-end">
@@ -719,7 +725,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <div>
               <CardTitle>Service Availability</CardTitle>
               <CardDescription>
-                Define when customers can book your services by creating availability schedules
+                Define when customers can book your services by creating availability schedules. Use shared hours for services with the same schedule, or create unique availability for individual services.
               </CardDescription>
             </div>
           </div>
@@ -739,7 +745,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 Setting up...
               </>
             ) : (
-              'Set Up Booking Availability'
+              '+ Create Schedule'
             )}
           </Button>
         </CardContent>
@@ -769,77 +775,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Customer Bookings Calendar Section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm">Customer Bookings Calendar</h4>
-            {upcomingBookings.length > 0 && (
-              <Badge variant="outline">{upcomingBookings.length} upcoming</Badge>
-            )}
-          </div>
-
-          {loadingBookings ? (
-            <div className="space-y-2">
-              <div className="h-16 bg-gray-100 animate-pulse rounded" />
-              <div className="h-16 bg-gray-100 animate-pulse rounded" />
-            </div>
-          ) : upcomingBookings.length > 0 ? (
-            <>
-              <div className="space-y-2">
-                {upcomingBookings.slice(0, 5).map(booking => (
-                  <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <div className="font-medium text-sm">{booking.summary}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatEventDate(booking.start.dateTime)} • {formatEventTime(booking.start.dateTime)}
-                      </div>
-                    </div>
-                    <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'} className="text-xs">
-                      {booking.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-
-              {upcomingBookings.length > 5 && (
-                <p className="text-xs text-muted-foreground">
-                  +{upcomingBookings.length - 5} more booking{upcomingBookings.length - 5 > 1 ? 's' : ''}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground py-2">
-              No upcoming bookings
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(
-                getCalendarEmbedLink(store.invite_calendar_id, { mode: 'AGENDA' }),
-                '_blank'
-              )}
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              View All Bookings
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => window.open(
-                getCalendarEditLink(store.invite_calendar_id),
-                '_blank'
-              )}
-            >
-              Edit Calendar
-            </Button>
-          </div>
-        </div>
-
-        <Separator />
-
         {/* Availability Schedules Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -877,7 +812,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </p>
               </div>
               <Button onClick={() => setCreateDialogOpen(true)}>
-                + Create Availability Schedule
+                + Create Schedule
               </Button>
             </div>
           ) : (
@@ -990,10 +925,70 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 variant="outline"
                 className="w-full"
               >
-                + Add Another Schedule
+                + Add Schedule
               </Button>
             </>
           )}
+        </div>
+
+        <Separator />
+
+        {/* Customer Bookings Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Upcoming Bookings</h4>
+            {upcomingBookings.length > 0 && (
+              <Badge variant="outline">{upcomingBookings.length} upcoming</Badge>
+            )}
+          </div>
+
+          {loadingBookings ? (
+            <div className="space-y-2">
+              <div className="h-16 bg-gray-100 animate-pulse rounded" />
+              <div className="h-16 bg-gray-100 animate-pulse rounded" />
+            </div>
+          ) : upcomingBookings.length > 0 ? (
+            <>
+              <div className="space-y-2">
+                {upcomingBookings.slice(0, 5).map(booking => (
+                  <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <div className="font-medium text-sm">{booking.summary}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatEventDate(booking.start.dateTime)} • {formatEventTime(booking.start.dateTime)}
+                      </div>
+                    </div>
+                    <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'} className="text-xs">
+                      {booking.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+
+              {upcomingBookings.length > 5 && (
+                <p className="text-xs text-muted-foreground">
+                  +{upcomingBookings.length - 5} more booking{upcomingBookings.length - 5 > 1 ? 's' : ''}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground py-2">
+              No upcoming bookings
+            </p>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => window.open(
+              getCalendarEmbedLink(store.invite_calendar_id, { mode: 'AGENDA' }),
+              '_blank'
+            )}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            View All Bookings
+          </Button>
         </div>
       </CardContent>
 
