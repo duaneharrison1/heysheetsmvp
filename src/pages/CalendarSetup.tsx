@@ -435,15 +435,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   };
 
-  // Helper: Get dynamic placeholder text for schedule name
-  const getCalendarNamePlaceholder = () => {
-    if (createStep === 'specific' && selectedServices.length === 1) {
-      const service = services.find(s => (s.serviceID || s.serviceName) === selectedServices[0]);
-      return service ? `${service.serviceName} - Availability` : 'Enter schedule name';
-    }
-    return 'Enter schedule name';
-  };
-
   // Dialog Component - Create Availability Schedule
   const CreateCalendarDialog = () => {
     console.log('Dialog opened - Services:', services.length, 'Selected services:', selectedServices);
@@ -676,14 +667,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               ? selectedServices.filter(id => id !== serviceId)
                               : [...selectedServices, serviceId];
                             setSelectedServices(newSelection);
-
-                            // Auto-fill name ONLY when exactly 1 service selected AND field is empty
-                            if (newSelection.length === 1 && !calendarName.trim()) {
-                              const selectedService = services.find(s => (s.serviceID || s.serviceName) === newSelection[0]);
-                              if (selectedService) {
-                                setCalendarName(`${selectedService.serviceName} - Availability`);
-                              }
-                            }
                           }}
                         >
                           <Checkbox
