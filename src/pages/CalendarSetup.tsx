@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getCalendarEmbedLink, getCalendarEditLink } from '@/lib/calendar-links';
+import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink, getEventLink } from '@/lib/calendar-links';
 import {
   fetchUpcomingBookings,
   fetchAvailableSlots,
@@ -663,47 +663,35 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <Alert>
                 <div className="space-y-2">
                   <div className="font-semibold">Next: Add Your Available Time Slots</div>
-                  <div className="text-sm space-y-1">
+                  <div className="text-sm space-y-2">
+                    <p className="font-medium">When adding events in Google Calendar:</p>
+                    <ol className="list-decimal list-inside ml-2 space-y-1">
+                      <li>Click "+ Create" or click on a time slot</li>
+                      <li><strong>Important:</strong> Select the calendar "<span className="font-semibold">{calendarName}</span>" from the dropdown</li>
+                      <li>Add your available time (e.g., "Mon-Fri 9 AM - 5 PM")</li>
+                      <li>Make it recurring if needed</li>
+                      <li>Save the event</li>
+                    </ol>
+
                     {selectedType === 'general' ? (
-                      <>
-                        <p>Add events to this calendar to define when your {selectedServices.length} selected service{selectedServices.length === 1 ? '' : 's'} can be booked.</p>
-                        <p className="font-medium mt-2">Example:</p>
-                        <ul className="list-disc list-inside ml-2 space-y-1">
-                          <li>Add recurring event "Monday-Friday, 9 AM - 5 PM"</li>
-                          <li>All {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} become bookable during these hours</li>
-                          <li>Perfect for services that share the same operating schedule</li>
-                        </ul>
-                      </>
+                      <p className="mt-2">All {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} will become bookable during the times you add to this calendar.</p>
                     ) : (
-                      <>
-                        <p>Add events to this calendar to define unique availability for your {selectedServices.length} selected service{selectedServices.length === 1 ? '' : 's'}.</p>
-                        <p className="font-medium mt-2">Example:</p>
-                        <ul className="list-disc list-inside ml-2 space-y-1">
-                          <li>Add "Every Saturday, 10 AM - 4 PM" for weekend-only classes</li>
-                          <li>Add "Tuesday & Thursday, 6 PM - 9 PM" for evening sessions</li>
-                          <li>Perfect for services with availability different from regular hours</li>
-                        </ul>
-                      </>
+                      <p className="mt-2">Your {selectedServices.length} selected service{selectedServices.length === 1 ? '' : 's'} will become bookable during the times you add to this calendar.</p>
                     )}
                   </div>
                 </div>
               </Alert>
 
-              {/* Single button - use embed link */}
+              {/* Single button - use regular calendar view */}
               <Button
                 onClick={() => {
-                  window.open(getCalendarEmbedLink(createdCalendarId, { mode: 'WEEK' }), '_blank');
+                  window.open(getCalendarViewLink(createdCalendarId), '_blank');
+                  resetCreateDialog();
                 }}
                 className="w-full"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Open in Google Calendar
-              </Button>
-            </div>
-
-            <div className="flex justify-end">
-              <Button onClick={resetCreateDialog}>
-                Done
               </Button>
             </div>
           </>
@@ -855,13 +843,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               {linkedServices.map(s => s.serviceName).join(', ')}
                             </div>
                           </div>
-                          <DropdownMenu>
+                          <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align="end" sideOffset={5}>
                               <DropdownMenuItem
                                 onClick={() => window.open(
                                   getCalendarEmbedLink(calendarId, { mode: 'WEEK' }),
@@ -908,9 +896,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           <div className="space-y-1">
                             <div className="text-xs font-medium text-muted-foreground">Next Available:</div>
                             {slots.slice(0, 3).map(slot => (
-                              <div key={slot.id} className="text-xs text-muted-foreground">
+                              <button
+                                key={slot.id}
+                                onClick={() => window.open(getEventLink(calendarId, slot.id), '_blank')}
+                                className="text-xs text-muted-foreground hover:underline text-left block"
+                              >
                                 📅 {formatEventDate(slot.start.dateTime)} • {formatEventTime(slot.start.dateTime)} - {formatEventTime(slot.end.dateTime)}
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -951,7 +943,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <>
               <div className="space-y-2">
                 {upcomingBookings.slice(0, 5).map(booking => (
-                  <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <button
+                    key={booking.id}
+                    onClick={() => window.open(getEventLink(store.invite_calendar_id, booking.id), '_blank')}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
+                  >
                     <div>
                       <div className="font-medium text-sm">{booking.summary}</div>
                       <div className="text-xs text-muted-foreground">
@@ -961,7 +957,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'} className="text-xs">
                       {booking.status}
                     </Badge>
-                  </div>
+                  </button>
                 ))}
               </div>
 
