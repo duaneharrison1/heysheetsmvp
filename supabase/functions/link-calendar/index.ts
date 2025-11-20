@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { listCalendars, updateEventProperties, listEvents } from '../_shared/google-calendar.ts';
+import { listCalendars, updateEventProperties, listEvents, createCalendar, shareCalendar } from '../_shared/google-calendar.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -12,7 +12,8 @@ serve(async (req) => {
   }
 
   try {
-    const { storeId, serviceId, calendarId, action } = await req.json();
+    const body = await req.json();
+    const { storeId, serviceId, calendarId, action, serviceIds, calendarName, ownerEmail } = body;
 
     if (!storeId) {
       throw new Error('storeId is required');
@@ -187,7 +188,107 @@ serve(async (req) => {
       );
     }
 
-    throw new Error('Invalid action. Use: list, link, or unlink');
+    // ACTION: Create new calendar and auto-link to service(s)
+    if (action === 'create') {
+      if (!serviceIds || !Array.isArray(serviceIds) || serviceIds.length === 0) {
+        throw new Error('serviceIds array is required for create action');
+      }
+      if (!calendarName || !calendarName.trim()) {
+        throw new Error('calendarName is required for create action');
+      }
+      if (!ownerEmail) {
+        throw new Error('ownerEmail is required for create action');
+      }
+
+      console.log('=== CREATE CALENDAR ===');
+      console.log('Calendar name:', calendarName);
+      console.log('Service IDs:', serviceIds);
+      console.log('Owner email:', ownerEmail);
+
+      try {
+        // 1. Create the calendar
+        const calendarId = await createCalendar(
+          calendarName,
+          `Availability calendar for ${calendarName}. Add events to this calendar to define when your services are bookable.`,
+          'Asia/Hong_Kong'
+        );
+
+        console.log('✅ Calendar created:', calendarId);
+
+        // 2. Share with owner (writer access)
+        await shareCalendar(calendarId, ownerEmail, 'writer');
+        console.log('✅ Calendar shared with:', ownerEmail);
+
+        // 3. Auto-link to selected service(s)
+        const { data: store, error: fetchError } = await supabase
+          .from('stores')
+          .select('calendar_mappings')
+          .eq('id', storeId)
+          .single();
+
+        if (fetchError) {
+          console.error('Error fetching store:', fetchError);
+          throw fetchError;
+        }
+
+        // Parse existing mappings
+        let mappings: Record<string, string> = {};
+        if (store?.calendar_mappings) {
+          try {
+            mappings = typeof store.calendar_mappings === 'string'
+              ? JSON.parse(store.calendar_mappings)
+              : store.calendar_mappings;
+          } catch (e) {
+            console.error('Error parsing calendar_mappings:', e);
+            mappings = {};
+          }
+        }
+
+        // Link calendar to all selected services
+        for (const svcId of serviceIds) {
+          mappings[calendarId] = svcId;
+        }
+
+        console.log('Updated mappings:', mappings);
+
+        // Save updated mappings
+        const { error: updateError } = await supabase
+          .from('stores')
+          .update({ calendar_mappings: JSON.stringify(mappings) })
+          .eq('id', storeId);
+
+        if (updateError) {
+          console.error('Error updating mappings:', updateError);
+          throw updateError;
+        }
+
+        console.log('✅ Calendar linked to services:', serviceIds);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            calendarId,
+            message: 'Calendar created and linked successfully'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (createError: any) {
+        console.error('Error in create action:', createError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: createError.message || 'Failed to create calendar'
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+    }
+
+    throw new Error('Invalid action. Use: list, link, unlink, or create');
 
   } catch (error) {
     console.error('Link calendar error:', error);
