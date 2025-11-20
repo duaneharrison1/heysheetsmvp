@@ -81,30 +81,53 @@ serve(async (req) => {
         .eq('id', storeId)
         .single();
 
-      // Parse existing mappings (following existing pattern)
-      let mappings: Record<string, string[]> = {};
+      // Parse existing mappings with new metadata structure
+      type CalendarMetadata = { name: string; serviceIds: string[] };
+      let mappings: Record<string, CalendarMetadata> = {};
+
       if (store?.calendar_mappings) {
         const raw = typeof store.calendar_mappings === 'string'
           ? JSON.parse(store.calendar_mappings)
           : store.calendar_mappings;
 
-        // Handle legacy format (string values) by converting to array format
+        // Handle legacy formats and convert to new metadata structure
         mappings = {};
         for (const [calId, value] of Object.entries(raw)) {
-          if (Array.isArray(value)) {
-            mappings[calId] = value as string[];
+          if (value && typeof value === 'object' && 'serviceIds' in value) {
+            // New format with metadata
+            mappings[calId] = value as CalendarMetadata;
+          } else if (Array.isArray(value)) {
+            // Legacy array format - migrate to new structure
+            mappings[calId] = {
+              name: 'Availability Schedule', // Default name for legacy data
+              serviceIds: value as string[]
+            };
           } else {
-            mappings[calId] = [value as string];
+            // Legacy string format - migrate to new structure
+            mappings[calId] = {
+              name: 'Availability Schedule', // Default name for legacy data
+              serviceIds: [value as string]
+            };
           }
         }
       }
 
-      // Add new mapping
+      // Add new mapping or update existing
       if (!mappings[calendarId]) {
-        mappings[calendarId] = [];
-      }
-      if (!mappings[calendarId].includes(serviceId)) {
-        mappings[calendarId].push(serviceId);
+        // Fetch calendar name from Google Calendar API
+        const calendars = await listCalendars();
+        const calendar = calendars.find(cal => cal.id === calendarId);
+        const calendarName = calendar?.summary || 'Availability Schedule';
+
+        mappings[calendarId] = {
+          name: calendarName,
+          serviceIds: [serviceId]
+        };
+      } else {
+        // Add service to existing calendar if not already present
+        if (!mappings[calendarId].serviceIds.includes(serviceId)) {
+          mappings[calendarId].serviceIds.push(serviceId);
+        }
       }
 
       // Save (stringify following existing pattern)
@@ -173,19 +196,32 @@ serve(async (req) => {
         .eq('id', storeId)
         .single();
 
-      let mappings: Record<string, string[]> = {};
+      type CalendarMetadata = { name: string; serviceIds: string[] };
+      let mappings: Record<string, CalendarMetadata> = {};
+
       if (store?.calendar_mappings) {
         const raw = typeof store.calendar_mappings === 'string'
           ? JSON.parse(store.calendar_mappings)
           : store.calendar_mappings;
 
-        // Handle legacy format
+        // Handle legacy formats and migrate to new structure
         mappings = {};
         for (const [calId, value] of Object.entries(raw)) {
-          if (Array.isArray(value)) {
-            mappings[calId] = value as string[];
+          if (value && typeof value === 'object' && 'serviceIds' in value) {
+            // New format with metadata
+            mappings[calId] = value as CalendarMetadata;
+          } else if (Array.isArray(value)) {
+            // Legacy array format
+            mappings[calId] = {
+              name: 'Availability Schedule',
+              serviceIds: value as string[]
+            };
           } else {
-            mappings[calId] = [value as string];
+            // Legacy string format
+            mappings[calId] = {
+              name: 'Availability Schedule',
+              serviceIds: [value as string]
+            };
           }
         }
       }
@@ -194,9 +230,9 @@ serve(async (req) => {
       // Otherwise, remove the entire calendar mapping
       if (serviceId) {
         if (mappings[calendarId]) {
-          mappings[calendarId] = mappings[calendarId].filter(id => id !== serviceId);
+          mappings[calendarId].serviceIds = mappings[calendarId].serviceIds.filter(id => id !== serviceId);
           // If no services left, remove the calendar entry entirely
-          if (mappings[calendarId].length === 0) {
+          if (mappings[calendarId].serviceIds.length === 0) {
             delete mappings[calendarId];
           }
         }
@@ -269,20 +305,33 @@ serve(async (req) => {
         }
 
         // Parse existing mappings
-        let mappings: Record<string, string[]> = {};
+        type CalendarMetadata = { name: string; serviceIds: string[] };
+        let mappings: Record<string, CalendarMetadata> = {};
+
         if (store?.calendar_mappings) {
           try {
             const raw = typeof store.calendar_mappings === 'string'
               ? JSON.parse(store.calendar_mappings)
               : store.calendar_mappings;
 
-            // Handle legacy format
+            // Handle legacy formats and migrate to new structure
             mappings = {};
             for (const [calId, value] of Object.entries(raw)) {
-              if (Array.isArray(value)) {
-                mappings[calId] = value as string[];
+              if (value && typeof value === 'object' && 'serviceIds' in value) {
+                // New format with metadata
+                mappings[calId] = value as CalendarMetadata;
+              } else if (Array.isArray(value)) {
+                // Legacy array format
+                mappings[calId] = {
+                  name: 'Availability Schedule',
+                  serviceIds: value as string[]
+                };
               } else {
-                mappings[calId] = [value as string];
+                // Legacy string format
+                mappings[calId] = {
+                  name: 'Availability Schedule',
+                  serviceIds: [value as string]
+                };
               }
             }
           } catch (e) {
@@ -291,8 +340,11 @@ serve(async (req) => {
           }
         }
 
-        // Link calendar to all selected services
-        mappings[calendarId] = serviceIds;
+        // Link calendar to all selected services with the provided name
+        mappings[calendarId] = {
+          name: calendarName,
+          serviceIds: serviceIds
+        };
 
         console.log('Updated mappings:', mappings);
 
