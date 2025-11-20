@@ -224,8 +224,22 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       : store.calendar_mappings;
 
     // Find calendar ID that maps to this service
-    for (const [calId, svcId] of Object.entries(mappings)) {
-      if (svcId === serviceId) return calId;
+    for (const [calId, value] of Object.entries(mappings)) {
+      let serviceIds: string[];
+
+      // Handle different formats
+      if (value && typeof value === 'object' && 'serviceIds' in value) {
+        // New metadata format
+        serviceIds = (value as { name: string; serviceIds: string[] }).serviceIds;
+      } else if (Array.isArray(value)) {
+        // Legacy array format
+        serviceIds = value;
+      } else {
+        // Legacy string format
+        serviceIds = [value as string];
+      }
+
+      if (serviceIds.includes(serviceId)) return calId;
     }
 
     return null;
@@ -240,6 +254,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         body: {
           storeId,
           calendarId,
+          serviceId,  // Pass serviceId to remove just this service
           action: 'unlink',
         },
       });
@@ -367,20 +382,46 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     if (!calendarToEdit) return;
 
     try {
-      // First, unlink all current services
-      for (const serviceId of calendarToEdit.serviceIds) {
-        await unlinkCalendar(serviceId);
-      }
+      // Update the calendar_mappings directly to preserve the calendar name
+      const mappings = typeof store.calendar_mappings === 'string'
+        ? JSON.parse(store.calendar_mappings)
+        : store.calendar_mappings || {};
 
-      // Then, link the new selected services
-      for (const serviceId of editSelectedServices) {
-        await linkCalendar(serviceId, calendarToEdit.calendarId);
-      }
+      // Parse and convert legacy formats
+      type CalendarData = { name: string; serviceIds: string[] };
+      const updatedMappings: Record<string, CalendarData> = {};
+
+      Object.entries(mappings).forEach(([calId, value]: [string, any]) => {
+        if (value && typeof value === 'object' && 'serviceIds' in value) {
+          updatedMappings[calId] = value as CalendarData;
+        } else if (Array.isArray(value)) {
+          updatedMappings[calId] = { name: 'Availability Schedule', serviceIds: value };
+        } else {
+          updatedMappings[calId] = { name: 'Availability Schedule', serviceIds: [value as string] };
+        }
+      });
+
+      // Update the specific calendar's services while preserving its name
+      updatedMappings[calendarToEdit.calendarId] = {
+        name: calendarToEdit.name, // Preserve the calendar name
+        serviceIds: editSelectedServices
+      };
+
+      // Save to database
+      const { error } = await supabase
+        .from('stores')
+        .update({ calendar_mappings: JSON.stringify(updatedMappings) })
+        .eq('id', storeId);
+
+      if (error) throw error;
 
       toast({
         title: 'Services updated!',
         description: 'Calendar services have been updated successfully',
       });
+
+      // Reload store to reflect changes
+      await loadStore();
 
       setEditServicesDialogOpen(false);
       setCalendarToEdit(null);
@@ -636,14 +677,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               : [...selectedServices, serviceId];
                             setSelectedServices(newSelection);
 
-                            // Auto-fill name ONLY when exactly 1 service selected
-                            if (newSelection.length === 1) {
+                            // Auto-fill name ONLY when exactly 1 service selected AND field is empty
+                            if (newSelection.length === 1 && !calendarName.trim()) {
                               const selectedService = services.find(s => (s.serviceID || s.serviceName) === newSelection[0]);
                               if (selectedService) {
                                 setCalendarName(`${selectedService.serviceName} - Availability`);
                               }
-                            } else if (newSelection.length === 0) {
-                              setCalendarName(''); // Clear name if no services selected
                             }
                           }}
                         >
@@ -860,7 +899,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   Create a schedule to define when your services can be booked. You can create shared hours for multiple services or unique schedules for specific services.
                 </p>
               </div>
-              <Button onClick={() => setCreateDialogOpen(true)}>
+              <Button onClick={() => {
+                setCreateStep('choice');
+                setCreateDialogOpen(true);
+              }}>
                 + Create Schedule
               </Button>
             </div>
@@ -873,25 +915,36 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     ? JSON.parse(store.calendar_mappings)
                     : store.calendar_mappings || {};
 
-                  const calendarGroups: Record<string, string[]> = {};
-                  Object.entries(mappings).forEach(([calendarId, serviceId]) => {
-                    if (!calendarGroups[calendarId]) {
-                      calendarGroups[calendarId] = [];
+                  // Convert to calendarGroups - handle all formats
+                  type CalendarData = { name: string; serviceIds: string[] };
+                  const calendarGroups: Record<string, CalendarData> = {};
+
+                  Object.entries(mappings).forEach(([calendarId, value]) => {
+                    if (value && typeof value === 'object' && 'serviceIds' in value) {
+                      // New metadata format
+                      calendarGroups[calendarId] = value as CalendarData;
+                    } else if (Array.isArray(value)) {
+                      // Legacy array format - generate default name
+                      calendarGroups[calendarId] = {
+                        name: 'Availability Schedule',
+                        serviceIds: value
+                      };
+                    } else {
+                      // Legacy string format - generate default name
+                      calendarGroups[calendarId] = {
+                        name: 'Availability Schedule',
+                        serviceIds: [value as string]
+                      };
                     }
-                    calendarGroups[calendarId].push(serviceId as string);
                   });
 
-                  return Object.entries(calendarGroups).map(([calendarId, serviceIds]) => {
+                  return Object.entries(calendarGroups).map(([calendarId, calendarData]) => {
                     const linkedServices = services.filter(s => {
                       const sid = s.serviceID || s.serviceName;
-                      return serviceIds.includes(sid);
+                      return calendarData.serviceIds.includes(sid);
                     });
 
-                    const calendarName = linkedServices.length === 1
-                      ? `${linkedServices[0].serviceName} - Availability`
-                      : linkedServices.length > 1
-                        ? `Shared Schedule (${linkedServices.length} services)`
-                        : 'Availability Schedule';
+                    const calendarName = calendarData.name;
 
                     const slots = scheduleEvents[calendarId] || [];
 
@@ -929,8 +982,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  setCalendarToEdit({ calendarId, serviceIds, name: calendarName });
-                                  setEditSelectedServices([...serviceIds]);
+                                  setCalendarToEdit({ calendarId, serviceIds: calendarData.serviceIds, name: calendarName });
+                                  setEditSelectedServices([...calendarData.serviceIds]);
                                   setEditServicesDialogOpen(true);
                                 }}
                               >
@@ -940,7 +993,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               <DropdownMenuItem
                                 className="text-destructive"
                                 onClick={() => {
-                                  setCalendarToRemove({ calendarId, serviceIds, name: calendarName });
+                                  setCalendarToRemove({ calendarId, serviceIds: calendarData.serviceIds, name: calendarName });
                                   setRemoveDialogOpen(true);
                                 }}
                               >
@@ -973,7 +1026,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </div>
 
               <Button
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={() => {
+                  setCreateStep('choice');
+                  setCreateDialogOpen(true);
+                }}
                 variant="outline"
                 className="w-full"
               >
