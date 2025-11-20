@@ -224,8 +224,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       : store.calendar_mappings;
 
     // Find calendar ID that maps to this service
-    for (const [calId, svcId] of Object.entries(mappings)) {
-      if (svcId === serviceId) return calId;
+    for (const [calId, value] of Object.entries(mappings)) {
+      // Handle both array and legacy string format
+      const serviceIds = Array.isArray(value) ? value : [value];
+      if (serviceIds.includes(serviceId)) return calId;
     }
 
     return null;
@@ -240,6 +242,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         body: {
           storeId,
           calendarId,
+          serviceId,  // Pass serviceId to remove just this service
           action: 'unlink',
         },
       });
@@ -636,14 +639,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               : [...selectedServices, serviceId];
                             setSelectedServices(newSelection);
 
-                            // Auto-fill name ONLY when exactly 1 service selected
-                            if (newSelection.length === 1) {
+                            // Auto-fill name ONLY when exactly 1 service selected AND field is empty
+                            if (newSelection.length === 1 && !calendarName.trim()) {
                               const selectedService = services.find(s => (s.serviceID || s.serviceName) === newSelection[0]);
                               if (selectedService) {
                                 setCalendarName(`${selectedService.serviceName} - Availability`);
                               }
-                            } else if (newSelection.length === 0) {
-                              setCalendarName(''); // Clear name if no services selected
                             }
                           }}
                         >
@@ -860,7 +861,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   Create a schedule to define when your services can be booked. You can create shared hours for multiple services or unique schedules for specific services.
                 </p>
               </div>
-              <Button onClick={() => setCreateDialogOpen(true)}>
+              <Button onClick={() => {
+                setCreateStep('choice');
+                setCreateDialogOpen(true);
+              }}>
                 + Create Schedule
               </Button>
             </div>
@@ -873,12 +877,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     ? JSON.parse(store.calendar_mappings)
                     : store.calendar_mappings || {};
 
+                  // Convert to calendarGroups - handle both array and legacy string format
                   const calendarGroups: Record<string, string[]> = {};
-                  Object.entries(mappings).forEach(([calendarId, serviceId]) => {
-                    if (!calendarGroups[calendarId]) {
-                      calendarGroups[calendarId] = [];
-                    }
-                    calendarGroups[calendarId].push(serviceId as string);
+                  Object.entries(mappings).forEach(([calendarId, value]) => {
+                    calendarGroups[calendarId] = Array.isArray(value) ? value : [value as string];
                   });
 
                   return Object.entries(calendarGroups).map(([calendarId, serviceIds]) => {
@@ -973,7 +975,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </div>
 
               <Button
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={() => {
+                  setCreateStep('choice');
+                  setCreateDialogOpen(true);
+                }}
                 variant="outline"
                 className="w-full"
               >

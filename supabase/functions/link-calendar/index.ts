@@ -82,15 +82,30 @@ serve(async (req) => {
         .single();
 
       // Parse existing mappings (following existing pattern)
-      let mappings: Record<string, string> = {};
+      let mappings: Record<string, string[]> = {};
       if (store?.calendar_mappings) {
-        mappings = typeof store.calendar_mappings === 'string'
+        const raw = typeof store.calendar_mappings === 'string'
           ? JSON.parse(store.calendar_mappings)
           : store.calendar_mappings;
+
+        // Handle legacy format (string values) by converting to array format
+        mappings = {};
+        for (const [calId, value] of Object.entries(raw)) {
+          if (Array.isArray(value)) {
+            mappings[calId] = value as string[];
+          } else {
+            mappings[calId] = [value as string];
+          }
+        }
       }
 
       // Add new mapping
-      mappings[calendarId] = serviceId;
+      if (!mappings[calendarId]) {
+        mappings[calendarId] = [];
+      }
+      if (!mappings[calendarId].includes(serviceId)) {
+        mappings[calendarId].push(serviceId);
+      }
 
       // Save (stringify following existing pattern)
       const { error: updateError } = await supabase
@@ -158,15 +173,37 @@ serve(async (req) => {
         .eq('id', storeId)
         .single();
 
-      let mappings: Record<string, string> = {};
+      let mappings: Record<string, string[]> = {};
       if (store?.calendar_mappings) {
-        mappings = typeof store.calendar_mappings === 'string'
+        const raw = typeof store.calendar_mappings === 'string'
           ? JSON.parse(store.calendar_mappings)
           : store.calendar_mappings;
+
+        // Handle legacy format
+        mappings = {};
+        for (const [calId, value] of Object.entries(raw)) {
+          if (Array.isArray(value)) {
+            mappings[calId] = value as string[];
+          } else {
+            mappings[calId] = [value as string];
+          }
+        }
       }
 
-      // Remove mapping
-      delete mappings[calendarId];
+      // If serviceId is provided, remove just that service from the calendar
+      // Otherwise, remove the entire calendar mapping
+      if (serviceId) {
+        if (mappings[calendarId]) {
+          mappings[calendarId] = mappings[calendarId].filter(id => id !== serviceId);
+          // If no services left, remove the calendar entry entirely
+          if (mappings[calendarId].length === 0) {
+            delete mappings[calendarId];
+          }
+        }
+      } else {
+        // Remove entire calendar mapping
+        delete mappings[calendarId];
+      }
 
       const { error: updateError } = await supabase
         .from('stores')
@@ -232,12 +269,22 @@ serve(async (req) => {
         }
 
         // Parse existing mappings
-        let mappings: Record<string, string> = {};
+        let mappings: Record<string, string[]> = {};
         if (store?.calendar_mappings) {
           try {
-            mappings = typeof store.calendar_mappings === 'string'
+            const raw = typeof store.calendar_mappings === 'string'
               ? JSON.parse(store.calendar_mappings)
               : store.calendar_mappings;
+
+            // Handle legacy format
+            mappings = {};
+            for (const [calId, value] of Object.entries(raw)) {
+              if (Array.isArray(value)) {
+                mappings[calId] = value as string[];
+              } else {
+                mappings[calId] = [value as string];
+              }
+            }
           } catch (e) {
             console.error('Error parsing calendar_mappings:', e);
             mappings = {};
@@ -245,9 +292,7 @@ serve(async (req) => {
         }
 
         // Link calendar to all selected services
-        for (const svcId of serviceIds) {
-          mappings[calendarId] = svcId;
-        }
+        mappings[calendarId] = serviceIds;
 
         console.log('Updated mappings:', mappings);
 
