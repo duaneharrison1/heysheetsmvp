@@ -25,8 +25,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      {/* Debug Panel - only visible in development */}
-      {import.meta.env.DEV && <DebugPanel />}
+      {/* Debug Panel - now visible in production */}
+      <DebugPanel />
       {/* Temporary test to verify dev mode */}
       <DebugTest />
       <BrowserRouter>
