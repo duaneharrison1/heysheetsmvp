@@ -9,7 +9,7 @@ export async function generateResponse(
   classification: Classification,
   functionResult?: FunctionResult,
   store?: StoreConfig
-): Promise<string> {
+): Promise<{ text: string; usage: { input: number; output: number } }> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
   if (!OPENROUTER_API_KEY) {
@@ -109,7 +109,16 @@ RESPOND NATURALLY:`;
   const result = await response.json();
   const responseText = result.choices[0].message.content;
 
+  // Extract token usage from OpenRouter response
+  const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
   console.log('[Responder] Generated response');
+  console.log('[Responder] Token usage:', usage);
 
-  return responseText;
+  return {
+    text: responseText,
+    usage: {
+      input: usage.prompt_tokens || 0,
+      output: usage.completion_tokens || 0,
+    },
+  };
 }

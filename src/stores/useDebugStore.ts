@@ -10,6 +10,7 @@ export interface DebugRequest {
     detected: string
     confidence: number
     duration: number
+    reasoning?: string
   }
 
   functionCalls?: Array<{
@@ -64,6 +65,8 @@ interface DebugStore {
   isVisible: boolean
   isPanelOpen: boolean
   selectedModel: string
+  expandedRequest: string | null
+  userExpandedRequests: Set<string>
   filters: {
     status: 'all' | 'pending' | 'complete' | 'error'
     model: 'all' | string
@@ -75,16 +78,23 @@ interface DebugStore {
   setFilter: (key: string, value: any) => void
   togglePanel: () => void
   clearHistory: () => void
+  toggleRequestExpanded: (id: string) => void
 
   getFilteredRequests: () => DebugRequest[]
-  getAverageTTFT: () => number
+  getAverageIntentTime: () => number
+  getAverageResponseTime: () => number
+  getMinMaxResponseTime: () => { min: number; max: number }
+  getMinMaxIntentTime: () => { min: number; max: number }
   getTotalCost: () => number
+  getCostBreakdown: () => { requests: number; inputTokens: number; outputTokens: number }
 }
 
 export const useDebugStore = create<DebugStore>((set, get) => ({
   requests: [],
   isVisible: true,
   isPanelOpen: false, // Closed by default
+  expandedRequest: null,
+  userExpandedRequests: new Set(),
   selectedModel: typeof localStorage !== 'undefined'
     ? localStorage.getItem('heysheets-debug-model') || 'anthropic/claude-3.5-sonnet'
     : 'anthropic/claude-3.5-sonnet',
@@ -93,6 +103,8 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   addRequest: (request) =>
     set((state) => ({
       requests: [request, ...state.requests].slice(0, 100),
+      // Auto-expand the latest request (most recent)
+      expandedRequest: request.id,
     })),
 
   updateRequest: (id, updates) =>
@@ -117,7 +129,29 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   togglePanel: () =>
     set((state) => ({ isPanelOpen: !state.isPanelOpen })),
 
-  clearHistory: () => set({ requests: [] }),
+  toggleRequestExpanded: (id) =>
+    set((state) => {
+      const isCurrentlyExpanded = state.expandedRequest === id
+      const newUserExpanded = new Set(state.userExpandedRequests)
+
+      if (isCurrentlyExpanded) {
+        // User is closing it
+        newUserExpanded.delete(id)
+        return {
+          expandedRequest: null,
+          userExpandedRequests: newUserExpanded,
+        }
+      } else {
+        // User is opening it
+        newUserExpanded.add(id)
+        return {
+          expandedRequest: id,
+          userExpandedRequests: newUserExpanded,
+        }
+      }
+    }),
+
+  clearHistory: () => set({ requests: [], expandedRequest: null, userExpandedRequests: new Set() }),
 
   getFilteredRequests: () => {
     const { requests, filters } = get()
@@ -128,14 +162,52 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     )
   },
 
-  getAverageTTFT: () => {
+  getAverageIntentTime: () => {
     const requests = get().requests.filter((r) => r.timings.intentDuration)
     if (requests.length === 0) return 0
     const sum = requests.reduce((acc, r) => acc + (r.timings.intentDuration || 0), 0)
     return Math.round(sum / requests.length)
   },
 
+  getAverageResponseTime: () => {
+    const requests = get().requests.filter((r) => r.timings.totalDuration)
+    if (requests.length === 0) return 0
+    const sum = requests.reduce((acc, r) => acc + (r.timings.totalDuration || 0), 0)
+    return Math.round(sum / requests.length)
+  },
+
+  getMinMaxResponseTime: () => {
+    const requests = get().requests.filter((r) => r.timings.totalDuration)
+    if (requests.length === 0) return { min: 0, max: 0 }
+    const times = requests.map((r) => r.timings.totalDuration || 0)
+    return {
+      min: Math.round(Math.min(...times)),
+      max: Math.round(Math.max(...times)),
+    }
+  },
+
+  getMinMaxIntentTime: () => {
+    const requests = get().requests.filter((r) => r.timings.intentDuration)
+    if (requests.length === 0) return { min: 0, max: 0 }
+    const times = requests.map((r) => r.timings.intentDuration || 0)
+    return {
+      min: Math.round(Math.min(...times)),
+      max: Math.round(Math.max(...times)),
+    }
+  },
+
   getTotalCost: () => {
     return get().requests.reduce((acc, r) => acc + (r.cost?.total || 0), 0)
+  },
+
+  getCostBreakdown: () => {
+    const requests = get().requests
+    const inputTokens = requests.reduce((acc, r) => acc + (r.tokens?.total.input || 0), 0)
+    const outputTokens = requests.reduce((acc, r) => acc + (r.tokens?.total.output || 0), 0)
+    return {
+      requests: requests.length,
+      inputTokens,
+      outputTokens,
+    }
   },
 }))
