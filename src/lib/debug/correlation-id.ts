@@ -14,9 +14,9 @@ export function generateSupabaseLogLink(
     return '#'
   }
 
-  // Use ?s= parameter to pre-fill search with requestId
-  // Format: /functions/{function-name}/logs?s=[{request-id}]
-  const searchTerm = `[${requestId}]`
+  // Escape brackets for regex (Supabase treats ?s= as regex pattern)
+  // [abc-123] becomes \[abc-123\] which regex treats as literal brackets
+  const searchTerm = `\\[${requestId}\\]`
 
   return `https://supabase.com/dashboard/project/${projectId}/functions/${functionName}/logs?s=${encodeURIComponent(searchTerm)}`
 }
