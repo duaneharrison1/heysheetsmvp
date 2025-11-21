@@ -250,20 +250,25 @@ function RequestCard({
                 ? 'destructive'
                 : 'secondary'
             }
-            className="ml-2 flex items-center gap-1"
+            className={cn(
+              "ml-2 flex items-center gap-1",
+              // Remove background for loading states
+              (request.status === 'classifying' || request.status === 'pending' || request.status === 'executing' || request.status === 'responding') &&
+              "bg-transparent border-transparent"
+            )}
           >
             {request.status === 'complete' && '✅'}
             {request.status === 'error' && '❌'}
-            {request.status === 'classifying' && <Loader2 className="h-3 w-3 animate-spin" />}
+            {request.status === 'classifying' && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
             {(request.status === 'pending' || request.status === 'executing' || request.status === 'responding') && (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
             )}
             {request.status === 'complete' ? (
               `${((request.timings.totalDuration || 0) / 1000).toFixed(2)}s`
             ) : request.status === 'classifying' ? (
               ''
             ) : (
-              request.status.charAt(0).toUpperCase() + request.status.slice(1)
+              <span className="text-gray-400">{request.status.charAt(0).toUpperCase() + request.status.slice(1)}</span>
             )}
           </Badge>
         </div>
@@ -273,15 +278,11 @@ function RequestCard({
             Error in: {errorStep.name}
           </div>
         )}
-
-        <div className="text-xs text-gray-500 mt-1">
-          {isExpanded ? '▼ Hide details' : '▶ Show details'}
-        </div>
       </div>
 
       {/* Expanded view with steps */}
       {isExpanded && request.steps && request.steps.length > 0 && (
-        <div className="mt-4 space-y-2">
+        <div className="mt-3 space-y-2">
           {request.steps.map((step, idx) => (
             <div key={idx}>
               {/* Step card */}
@@ -302,7 +303,9 @@ function RequestCard({
                       Step {idx + 1}: {step.name}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400">{step.duration.toFixed(0)}ms</span>
+                  <span className="text-xs text-gray-400">
+                    {step.duration ? `${step.duration.toFixed(0)}ms` : '-'}
+                  </span>
                 </div>
 
                 <div className="text-xs text-gray-400 mb-2">
@@ -409,7 +412,7 @@ function RequestCard({
 
       {/* Fallback to old view if no steps */}
       {isExpanded && (!request.steps || request.steps.length === 0) && (
-        <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
+        <div className="mt-3 space-y-2">
           {/* Show old format */}
           {request.intent && (
             <div className="text-xs text-yellow-400 mb-2 cursor-help">
