@@ -2,12 +2,7 @@ import { useDebugStore } from '@/stores/useDebugStore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { HoverTooltip } from './HoverTooltip';
 import { ExternalLink, Copy, X } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
 import { formatRequestForAI } from '@/lib/debug/format-for-ai';
@@ -48,78 +43,77 @@ export function DebugPanel() {
   if (!isPanelOpen) return null;
 
   return (
-    <TooltipProvider>
-      <div className="fixed inset-y-0 left-0 z-40 w-96 bg-gray-950 text-gray-100 border-r border-gray-800 shadow-xl flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-100">Debug Panel</h2>
-            <button
-              onClick={togglePanel}
-              className="text-gray-400 hover:text-gray-200 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-3 gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Card className="p-3 bg-gray-900 border-gray-800 cursor-help">
-                  <div className="text-xs text-gray-400">Avg Intent</div>
-                  <div className="text-sm font-bold text-yellow-400">
-                    {(getAverageIntentTime() / 1000).toFixed(2)}s
-                  </div>
-                </Card>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
-                <div className="text-xs space-y-1">
-                  <div className="font-semibold">Intent Classification Time</div>
-                  <div>Min: {(minMaxIntent.min / 1000).toFixed(2)}s</div>
-                  <div>Max: {(minMaxIntent.max / 1000).toFixed(2)}s</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Card className="p-3 bg-gray-900 border-gray-800 cursor-help">
-                  <div className="text-xs text-gray-400">Avg Total</div>
-                  <div className="text-sm font-bold text-blue-400">
-                    {(getAverageResponseTime() / 1000).toFixed(2)}s
-                  </div>
-                </Card>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
-                <div className="text-xs space-y-1">
-                  <div className="font-semibold">Total Response Time</div>
-                  <div>Fastest: {(minMaxResponse.min / 1000).toFixed(2)}s</div>
-                  <div>Slowest: {(minMaxResponse.max / 1000).toFixed(2)}s</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Card className="p-3 bg-gray-900 border-gray-800 cursor-help">
-                  <div className="text-xs text-gray-400">Cost</div>
-                  <div className="text-sm font-bold text-green-400">
-                    ${getTotalCost().toFixed(4)}
-                  </div>
-                </Card>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-gray-800 border-gray-700">
-                <div className="text-xs space-y-1">
-                  <div className="font-semibold">Total Cost Breakdown</div>
-                  <div>Requests: {costBreakdown.requests}</div>
-                  <div>Input tokens: {costBreakdown.inputTokens.toLocaleString()}</div>
-                  <div>Output tokens: {costBreakdown.outputTokens.toLocaleString()}</div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </div>
+    <div className="fixed inset-y-0 left-0 z-40 w-96 bg-gray-950 text-gray-100 border-r border-gray-800 shadow-xl flex flex-col">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-100">Debug Panel</h2>
+          <button
+            onClick={togglePanel}
+            className="text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <HoverTooltip
+            side="bottom"
+            content={
+              <div className="space-y-1">
+                <div className="font-semibold text-gray-100">Intent Classification Time</div>
+                <div className="text-gray-300">Min: {(minMaxIntent.min / 1000).toFixed(2)}s</div>
+                <div className="text-gray-300">Max: {(minMaxIntent.max / 1000).toFixed(2)}s</div>
+              </div>
+            }
+          >
+            <Card className="p-3 bg-gray-900 border-gray-800 cursor-help">
+              <div className="text-xs text-gray-400">Avg Intent</div>
+              <div className="text-sm font-bold text-yellow-400">
+                {(getAverageIntentTime() / 1000).toFixed(2)}s
+              </div>
+            </Card>
+          </HoverTooltip>
+
+          <HoverTooltip
+            side="bottom"
+            content={
+              <div className="space-y-1">
+                <div className="font-semibold text-gray-100">Total Response Time</div>
+                <div className="text-gray-300">Fastest: {(minMaxResponse.min / 1000).toFixed(2)}s</div>
+                <div className="text-gray-300">Slowest: {(minMaxResponse.max / 1000).toFixed(2)}s</div>
+              </div>
+            }
+          >
+            <Card className="p-3 bg-gray-900 border-gray-800 cursor-help">
+              <div className="text-xs text-gray-400">Avg Total</div>
+              <div className="text-sm font-bold text-blue-400">
+                {(getAverageResponseTime() / 1000).toFixed(2)}s
+              </div>
+            </Card>
+          </HoverTooltip>
+
+          <HoverTooltip
+            side="bottom"
+            content={
+              <div className="space-y-1">
+                <div className="font-semibold text-gray-100">Total Cost Breakdown</div>
+                <div className="text-gray-300">Requests: {costBreakdown.requests}</div>
+                <div className="text-gray-300">Input tokens: {costBreakdown.inputTokens.toLocaleString()}</div>
+                <div className="text-gray-300">Output tokens: {costBreakdown.outputTokens.toLocaleString()}</div>
+              </div>
+            }
+          >
+            <Card className="p-3 bg-gray-900 border-gray-800 cursor-help">
+              <div className="text-xs text-gray-400">Cost</div>
+              <div className="text-sm font-bold text-green-400">
+                ${getTotalCost().toFixed(4)}
+              </div>
+            </Card>
+          </HoverTooltip>
+        </div>
+      </div>
 
       {/* Model Selector */}
       <div className="p-4 border-b border-gray-800">
@@ -178,21 +172,25 @@ export function DebugPanel() {
 
                     {/* Intent */}
                     {request.intent && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
+                      request.intent.reasoning ? (
+                        <HoverTooltip
+                          side="right"
+                          content={
+                            <div className="space-y-1">
+                              <div className="font-semibold text-gray-100">AI Reasoning</div>
+                              <div className="text-gray-300">{request.intent.reasoning}</div>
+                            </div>
+                          }
+                        >
                           <div className="text-xs text-yellow-400 mb-2 cursor-help">
                             🎯 {request.intent.detected} ({request.intent.confidence.toFixed(2)})
                           </div>
-                        </TooltipTrigger>
-                        {request.intent.reasoning && (
-                          <TooltipContent side="right" className="bg-gray-800 border-gray-700 max-w-xs">
-                            <div className="text-xs space-y-1">
-                              <div className="font-semibold">AI Reasoning</div>
-                              <div className="text-gray-300">{request.intent.reasoning}</div>
-                            </div>
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
+                        </HoverTooltip>
+                      ) : (
+                        <div className="text-xs text-yellow-400 mb-2">
+                          🎯 {request.intent.detected} ({request.intent.confidence.toFixed(2)})
+                        </div>
+                      )
                     )}
 
                     {/* Error Preview */}
@@ -229,6 +227,18 @@ export function DebugPanel() {
                           </div>
                         )}
 
+                        {/* Cost */}
+                        {request.cost && request.cost.total > 0 && (
+                          <div className="text-xs text-gray-300">
+                            <div className="text-gray-400 font-semibold mb-1">
+                              Cost:
+                            </div>
+                            <div className="text-green-400">
+                              💰 ${request.cost.total.toFixed(4)}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Function Calls */}
                         {request.functionCalls && request.functionCalls.length > 0 && (
                           <div className="text-xs text-gray-300">
@@ -236,26 +246,27 @@ export function DebugPanel() {
                               Functions:
                             </div>
                             {request.functionCalls.map((fn, idx) => (
-                              <Tooltip key={idx}>
-                                <TooltipTrigger asChild>
-                                  <div className="mb-1 cursor-help">
-                                    {fn.result.success ? '✅' : '❌'} {fn.name}
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="bg-gray-800 border-gray-700 max-w-xs">
-                                  <div className="text-xs space-y-1">
-                                    <div className="font-semibold">Parameters</div>
-                                    <pre className="text-gray-300 whitespace-pre-wrap">
+                              <HoverTooltip
+                                key={idx}
+                                side="right"
+                                content={
+                                  <div className="space-y-1">
+                                    <div className="font-semibold text-gray-100">Parameters</div>
+                                    <pre className="text-gray-300 whitespace-pre-wrap text-xs">
                                       {JSON.stringify(fn.arguments, null, 2)}
                                     </pre>
                                     {fn.duration && (
-                                      <div className="pt-1 border-t border-gray-700 mt-1">
+                                      <div className="pt-1 border-t border-gray-600 mt-1 text-gray-300">
                                         Duration: {(fn.duration / 1000).toFixed(2)}s
                                       </div>
                                     )}
                                   </div>
-                                </TooltipContent>
-                              </Tooltip>
+                                }
+                              >
+                                <div className="mb-1 cursor-help">
+                                  {fn.result.success ? '✅' : '❌'} {fn.name}
+                                </div>
+                              </HoverTooltip>
                             ))}
                           </div>
                         )}
@@ -299,18 +310,17 @@ export function DebugPanel() {
         </div>
       </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-800">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearHistory}
-            className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
-          >
-            Clear History
-          </Button>
-        </div>
+      {/* Footer */}
+      <div className="p-4 border-t border-gray-800">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={clearHistory}
+          className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
+        >
+          Clear History
+        </Button>
       </div>
-    </TooltipProvider>
+    </div>
   );
 }
