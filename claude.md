@@ -136,8 +136,9 @@ Production-enabled debug monitoring system:
 - Edge functions deployed separately via Supabase CLI
 - Environment variables must be set in both Vercel and Supabase
 
-### Dark Mode
-- If scrollbars aren't dark: add inline style with scrollbarColor
+### Dark Mode (Debug Panel)
+- Debug panel uses full dark mode: gray-950/900 backgrounds, gray-100 text
+- Scrollbars: add inline style with scrollbarColor
 - Use gray-950 not black (#000) for backgrounds
 - Test visibility of text on dark backgrounds
 
@@ -147,8 +148,6 @@ Production-enabled debug monitoring system:
 - Prefers concise, direct responses
 - Wants proactive PR creation with URLs
 - Values clean, minimal UI (no unnecessary elements)
-- Expects dark mode throughout
-- Dislikes modal overlays that block interaction
 - Merges and tests immediately in production
 
 ## Project Goals
@@ -159,3 +158,26 @@ Building an AI-powered chat interface for Google Sheets operations with:
 - Multi-model support
 - Production debugging and monitoring
 - Cost and performance tracking
+
+## Project Progress & Memory
+
+### Completed Features
+
+**Debug Panel System** (Jan 2025)
+- Production-ready debug monitoring with correlation ID tracking
+- Fixed left-side panel (no modal overlay)
+- Bottom-left toggle button with Ctrl+Shift+D hotkey
+- Request history with timing breakdowns and cost tracking
+- Direct links to Supabase logs via correlation IDs
+- Full dark mode styling (gray-950 bg, dark scrollbars)
+- Zustand state management
+- Files: `src/components/debug/*`, `src/stores/useDebugStore.ts`, `src/lib/debug/*`
+
+### Active Work
+- None currently
+
+### Known Issues
+- None currently
+
+### Next Priorities
+- TBD based on user requests
