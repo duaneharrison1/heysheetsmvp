@@ -435,11 +435,309 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   };
 
-  // Dialog Component - Create Availability Schedule
-  const CreateCalendarDialog = () => {
-    console.log('Dialog opened - Services:', services.length, 'Selected services:', selectedServices);
-
+  // Not setup yet
+  if (!store?.invite_calendar_id) {
     return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Service Availability</CardTitle>
+              <CardDescription>
+                Define when customers can book your services by creating availability schedules. Use shared hours for services with the same schedule, or create unique availability for individual services.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Set up booking availability</AlertTitle>
+            <AlertDescription>
+              This will create a "Customer Bookings" calendar where confirmed bookings appear as events. After setup, you'll create availability schedules to define when services can be booked.
+            </AlertDescription>
+          </Alert>
+          <Button onClick={setupCalendar} disabled={loading} className="w-full">
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Setting up...
+              </>
+            ) : (
+              '+ Create Schedule'
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Already setup - show linking UI
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+            <Calendar className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <CardTitle>Calendar Booking</CardTitle>
+            <CardDescription>
+              Manage booking calendars and availability schedules
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Check if Google Sheet is connected */}
+        {!store.sheet_id ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Set up your services first</AlertTitle>
+            <AlertDescription>
+              To create availability schedules, add your Google Sheet with services. Go to Store Setup to connect your sheet.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            {/* Availability Schedules Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold">Availability Schedules</h4>
+              </div>
+
+              {services.length === 0 ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No services found in your Google Sheet. Add services to your sheet to set up availability schedules.
+              </AlertDescription>
+            </Alert>
+          ) : Object.keys(store?.calendar_mappings || {}).length === 0 ? (
+            /* EMPTY STATE - No schedules created yet */
+            <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-3">
+              <div className="flex justify-center">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Calendar className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+              <div>
+                <h5 className="font-semibold mb-1">No availability schedules yet</h5>
+                <p className="text-sm text-muted-foreground">
+                  Create a schedule to define when your services can be booked. You can create shared hours for multiple services or unique schedules for specific services.
+                </p>
+              </div>
+              <Button onClick={() => {
+                setCreateStep('choice');
+                setCreateDialogOpen(true);
+              }}>
+                + Create Schedule
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Show calendar cards */}
+              <div className="space-y-3">
+                {(() => {
+                  const mappings = typeof store.calendar_mappings === 'string'
+                    ? JSON.parse(store.calendar_mappings)
+                    : store.calendar_mappings || {};
+
+                  // Convert to calendarGroups - handle all formats
+                  type CalendarData = { name: string; serviceIds: string[] };
+                  const calendarGroups: Record<string, CalendarData> = {};
+
+                  Object.entries(mappings).forEach(([calendarId, value]) => {
+                    if (value && typeof value === 'object' && 'serviceIds' in value) {
+                      // New metadata format
+                      calendarGroups[calendarId] = value as CalendarData;
+                    } else if (Array.isArray(value)) {
+                      // Legacy array format - generate default name
+                      calendarGroups[calendarId] = {
+                        name: 'Availability Schedule',
+                        serviceIds: value
+                      };
+                    } else {
+                      // Legacy string format - generate default name
+                      calendarGroups[calendarId] = {
+                        name: 'Availability Schedule',
+                        serviceIds: [value as string]
+                      };
+                    }
+                  });
+
+                  return Object.entries(calendarGroups).map(([calendarId, calendarData]) => {
+                    const linkedServices = services.filter(s => {
+                      const sid = s.serviceID || s.serviceName;
+                      return calendarData.serviceIds.includes(sid);
+                    });
+
+                    const calendarName = calendarData.name;
+
+                    const slots = scheduleEvents[calendarId] || [];
+
+                    return (
+                      <div key={calendarId} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium">{calendarName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {linkedServices.map(s => s.serviceName).join(', ')}
+                            </div>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="z-50">
+                              <DropdownMenuItem
+                                onClick={() => window.open(
+                                  getCalendarEmbedLink(calendarId, { mode: 'WEEK' }),
+                                  '_blank'
+                                )}
+                              >
+                                View Schedule
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => window.open(
+                                  getCalendarEditLink(calendarId),
+                                  '_blank'
+                                )}
+                              >
+                                Edit in Google Calendar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setCalendarToEdit({ calendarId, serviceIds: calendarData.serviceIds, name: calendarName });
+                                  setEditSelectedServices([...calendarData.serviceIds]);
+                                  setEditServicesDialogOpen(true);
+                                }}
+                              >
+                                Edit Services
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => {
+                                  setCalendarToRemove({ calendarId, serviceIds: calendarData.serviceIds, name: calendarName });
+                                  setRemoveDialogOpen(true);
+                                }}
+                              >
+                                Remove Schedule
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        {/* Show next available slots */}
+                        {slots.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium text-muted-foreground">Next Available:</div>
+                            {slots.slice(0, 3).map(slot => (
+                              <button
+                                key={slot.id}
+                                onClick={() => window.open(slot.htmlLink, '_blank')}
+                                className="text-xs text-muted-foreground hover:underline text-left block"
+                              >
+                                {slot.summary && <span className="font-medium">{slot.summary} • </span>}
+                                📅 {formatEventDate(slot.start.dateTime)} • {formatEventTime(slot.start.dateTime)} - {formatEventTime(slot.end.dateTime)}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              <Button
+                onClick={() => {
+                  setCreateStep('choice');
+                  setCreateDialogOpen(true);
+                }}
+                variant="outline"
+                className="w-full"
+              >
+                + Add Schedule
+              </Button>
+            </>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Customer Bookings Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Upcoming Bookings</h4>
+            {upcomingBookings.length > 0 && (
+              <Badge variant="outline">{upcomingBookings.length} upcoming</Badge>
+            )}
+          </div>
+
+          {loadingBookings ? (
+            <div className="space-y-2">
+              <div className="h-16 bg-gray-100 animate-pulse rounded" />
+              <div className="h-16 bg-gray-100 animate-pulse rounded" />
+            </div>
+          ) : upcomingBookings.length > 0 ? (
+            <>
+              <div className="space-y-2">
+                {upcomingBookings.slice(0, 5).map(booking => (
+                  <button
+                    key={booking.id}
+                    onClick={() => window.open(booking.htmlLink, '_blank')}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
+                  >
+                    <div>
+                      <div className="font-medium text-sm">{booking.summary}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatEventDate(booking.start.dateTime)} • {formatEventTime(booking.start.dateTime)}
+                      </div>
+                    </div>
+                    <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'} className="text-xs">
+                      {booking.status}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+
+              {upcomingBookings.length > 5 && (
+                <p className="text-xs text-muted-foreground">
+                  +{upcomingBookings.length - 5} more booking{upcomingBookings.length - 5 > 1 ? 's' : ''}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground py-2">
+              No upcoming bookings
+            </p>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => window.open(
+              getCalendarEmbedLink(store.invite_calendar_id, { mode: 'AGENDA' }),
+              '_blank'
+            )}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            View All Bookings
+          </Button>
+        </div>
+          </>
+        )}
+      </CardContent>
+
+      {/* Create Calendar Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-2xl">
           {/* STEP 1: Choice */}
@@ -784,313 +1082,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         )}
       </DialogContent>
     </Dialog>
-  );
-};
-
-  // Not setup yet
-  if (!store?.invite_calendar_id) {
-    return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
-              <Calendar className="h-5 w-5" />
-            </div>
-            <div>
-              <CardTitle>Service Availability</CardTitle>
-              <CardDescription>
-                Define when customers can book your services by creating availability schedules. Use shared hours for services with the same schedule, or create unique availability for individual services.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertTitle>Set up booking availability</AlertTitle>
-            <AlertDescription>
-              This will create a "Customer Bookings" calendar where confirmed bookings appear as events. After setup, you'll create availability schedules to define when services can be booked.
-            </AlertDescription>
-          </Alert>
-          <Button onClick={setupCalendar} disabled={loading} className="w-full">
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Setting up...
-              </>
-            ) : (
-              '+ Create Schedule'
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Already setup - show linking UI
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
-            <Calendar className="h-5 w-5" />
-          </div>
-          <div className="flex-1">
-            <CardTitle>Calendar Booking</CardTitle>
-            <CardDescription>
-              Manage booking calendars and availability schedules
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Check if Google Sheet is connected */}
-        {!store.sheet_id ? (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertTitle>Set up your services first</AlertTitle>
-            <AlertDescription>
-              To create availability schedules, add your Google Sheet with services. Go to Store Setup to connect your sheet.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <>
-            {/* Availability Schedules Section */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold">Availability Schedules</h4>
-              </div>
-
-              {services.length === 0 ? (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                No services found in your Google Sheet. Add services to your sheet to set up availability schedules.
-              </AlertDescription>
-            </Alert>
-          ) : Object.keys(store?.calendar_mappings || {}).length === 0 ? (
-            /* EMPTY STATE - No schedules created yet */
-            <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-3">
-              <div className="flex justify-center">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-              <div>
-                <h5 className="font-semibold mb-1">No availability schedules yet</h5>
-                <p className="text-sm text-muted-foreground">
-                  Create a schedule to define when your services can be booked. You can create shared hours for multiple services or unique schedules for specific services.
-                </p>
-              </div>
-              <Button onClick={() => {
-                setCreateStep('choice');
-                setCreateDialogOpen(true);
-              }}>
-                + Create Schedule
-              </Button>
-            </div>
-          ) : (
-            <>
-              {/* Show calendar cards */}
-              <div className="space-y-3">
-                {(() => {
-                  const mappings = typeof store.calendar_mappings === 'string'
-                    ? JSON.parse(store.calendar_mappings)
-                    : store.calendar_mappings || {};
-
-                  // Convert to calendarGroups - handle all formats
-                  type CalendarData = { name: string; serviceIds: string[] };
-                  const calendarGroups: Record<string, CalendarData> = {};
-
-                  Object.entries(mappings).forEach(([calendarId, value]) => {
-                    if (value && typeof value === 'object' && 'serviceIds' in value) {
-                      // New metadata format
-                      calendarGroups[calendarId] = value as CalendarData;
-                    } else if (Array.isArray(value)) {
-                      // Legacy array format - generate default name
-                      calendarGroups[calendarId] = {
-                        name: 'Availability Schedule',
-                        serviceIds: value
-                      };
-                    } else {
-                      // Legacy string format - generate default name
-                      calendarGroups[calendarId] = {
-                        name: 'Availability Schedule',
-                        serviceIds: [value as string]
-                      };
-                    }
-                  });
-
-                  return Object.entries(calendarGroups).map(([calendarId, calendarData]) => {
-                    const linkedServices = services.filter(s => {
-                      const sid = s.serviceID || s.serviceName;
-                      return calendarData.serviceIds.includes(sid);
-                    });
-
-                    const calendarName = calendarData.name;
-
-                    const slots = scheduleEvents[calendarId] || [];
-
-                    return (
-                      <div key={calendarId} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="font-medium">{calendarName}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {linkedServices.map(s => s.serviceName).join(', ')}
-                            </div>
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="z-50">
-                              <DropdownMenuItem
-                                onClick={() => window.open(
-                                  getCalendarEmbedLink(calendarId, { mode: 'WEEK' }),
-                                  '_blank'
-                                )}
-                              >
-                                View Schedule
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => window.open(
-                                  getCalendarEditLink(calendarId),
-                                  '_blank'
-                                )}
-                              >
-                                Edit in Google Calendar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setCalendarToEdit({ calendarId, serviceIds: calendarData.serviceIds, name: calendarName });
-                                  setEditSelectedServices([...calendarData.serviceIds]);
-                                  setEditServicesDialogOpen(true);
-                                }}
-                              >
-                                Edit Services
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => {
-                                  setCalendarToRemove({ calendarId, serviceIds: calendarData.serviceIds, name: calendarName });
-                                  setRemoveDialogOpen(true);
-                                }}
-                              >
-                                Remove Schedule
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-
-                        {/* Show next available slots */}
-                        {slots.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium text-muted-foreground">Next Available:</div>
-                            {slots.slice(0, 3).map(slot => (
-                              <button
-                                key={slot.id}
-                                onClick={() => window.open(slot.htmlLink, '_blank')}
-                                className="text-xs text-muted-foreground hover:underline text-left block"
-                              >
-                                {slot.summary && <span className="font-medium">{slot.summary} • </span>}
-                                📅 {formatEventDate(slot.start.dateTime)} • {formatEventTime(slot.start.dateTime)} - {formatEventTime(slot.end.dateTime)}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              <Button
-                onClick={() => {
-                  setCreateStep('choice');
-                  setCreateDialogOpen(true);
-                }}
-                variant="outline"
-                className="w-full"
-              >
-                + Add Schedule
-              </Button>
-            </>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Customer Bookings Section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Upcoming Bookings</h4>
-            {upcomingBookings.length > 0 && (
-              <Badge variant="outline">{upcomingBookings.length} upcoming</Badge>
-            )}
-          </div>
-
-          {loadingBookings ? (
-            <div className="space-y-2">
-              <div className="h-16 bg-gray-100 animate-pulse rounded" />
-              <div className="h-16 bg-gray-100 animate-pulse rounded" />
-            </div>
-          ) : upcomingBookings.length > 0 ? (
-            <>
-              <div className="space-y-2">
-                {upcomingBookings.slice(0, 5).map(booking => (
-                  <button
-                    key={booking.id}
-                    onClick={() => window.open(booking.htmlLink, '_blank')}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors w-full text-left"
-                  >
-                    <div>
-                      <div className="font-medium text-sm">{booking.summary}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatEventDate(booking.start.dateTime)} • {formatEventTime(booking.start.dateTime)}
-                      </div>
-                    </div>
-                    <Badge variant={booking.status === 'confirmed' ? 'default' : 'outline'} className="text-xs">
-                      {booking.status}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
-
-              {upcomingBookings.length > 5 && (
-                <p className="text-xs text-muted-foreground">
-                  +{upcomingBookings.length - 5} more booking{upcomingBookings.length - 5 > 1 ? 's' : ''}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground py-2">
-              No upcoming bookings
-            </p>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => window.open(
-              getCalendarEmbedLink(store.invite_calendar_id, { mode: 'AGENDA' }),
-              '_blank'
-            )}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            View All Bookings
-          </Button>
-        </div>
-          </>
-        )}
-      </CardContent>
-
-      {/* Create Calendar Dialog */}
-      <CreateCalendarDialog />
 
       {/* Remove Schedule Confirmation Dialog */}
       <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
