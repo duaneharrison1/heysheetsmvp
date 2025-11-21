@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { useDebugStore } from '@/stores/useDebugStore';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink, Copy, X } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
 import { formatRequestForAI } from '@/lib/debug/format-for-ai';
 import { DEBUG_CONFIG } from '@/config/debug';
@@ -36,58 +34,66 @@ export function DebugPanel() {
 
   const filteredRequests = requests.filter((r) => r.status !== 'pending');
 
+  if (!isPanelOpen) return null;
+
   return (
-    <Sheet open={isPanelOpen} onOpenChange={togglePanel} modal={false}>
-      <SheetContent side="left" className="w-96 p-0 bg-gray-950 text-gray-100 border-r border-gray-800">
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <SheetHeader className="p-4 border-b border-gray-800">
-            <SheetTitle className="text-lg font-semibold text-gray-100">🐛 Debug Panel</SheetTitle>
+    <div className="fixed inset-y-0 left-0 z-40 w-96 bg-gray-950 text-gray-100 border-r border-gray-800 shadow-xl flex flex-col">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-100">🐛 Debug Panel</h2>
+          <button
+            onClick={togglePanel}
+            className="text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <Card className="p-3 bg-gray-900 border-gray-800">
-                <div className="text-xs text-gray-400">Avg TTFT</div>
-                <div className="text-lg font-bold text-yellow-400">
-                  {getAverageTTFT()}ms
-                </div>
-              </Card>
-              <Card className="p-3 bg-gray-900 border-gray-800">
-                <div className="text-xs text-gray-400">Total Cost</div>
-                <div className="text-lg font-bold text-green-400">
-                  ${getTotalCost().toFixed(4)}
-                </div>
-              </Card>
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 gap-2">
+          <Card className="p-3 bg-gray-900 border-gray-800">
+            <div className="text-xs text-gray-400">Avg TTFT</div>
+            <div className="text-lg font-bold text-yellow-400">
+              {getAverageTTFT()}ms
             </div>
-          </SheetHeader>
-
-          {/* Model Selector */}
-          <div className="p-4 border-b border-gray-800">
-            <label className="text-sm text-gray-400 mb-2 block">AI Model</label>
-            <select
-              value={selectedModel}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none"
-            >
-              {DEBUG_CONFIG.models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name} {model.isDefault && '⭐'}
-                </option>
-              ))}
-            </select>
-            <div className="text-xs text-gray-500 mt-1">
-              Affects all future messages
+          </Card>
+          <Card className="p-3 bg-gray-900 border-gray-800">
+            <div className="text-xs text-gray-400">Total Cost</div>
+            <div className="text-lg font-bold text-green-400">
+              ${getTotalCost().toFixed(4)}
             </div>
-          </div>
+          </Card>
+        </div>
+      </div>
 
-          {/* Request History */}
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-3">
-              {filteredRequests.length === 0 ? (
-                <div className="text-center text-gray-500 mt-8">
-                  No requests yet. Start chatting!
-                </div>
-              ) : (
+      {/* Model Selector */}
+      <div className="p-4 border-b border-gray-800">
+        <label className="text-sm text-gray-400 mb-2 block">AI Model</label>
+        <select
+          value={selectedModel}
+          onChange={(e) => setModel(e.target.value)}
+          className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none"
+        >
+          {DEBUG_CONFIG.models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name} {model.isDefault && '⭐'}
+            </option>
+          ))}
+        </select>
+        <div className="text-xs text-gray-500 mt-1">
+          Affects all future messages
+        </div>
+      </div>
+
+      {/* Request History */}
+      <div className="flex-1 overflow-y-auto p-4 bg-gray-950" style={{ scrollbarColor: '#374151 #111827', scrollbarWidth: 'thin' }}>
+        <div className="space-y-3">
+          {filteredRequests.length === 0 ? (
+            <div className="text-center text-gray-500 mt-8">
+              No requests yet. Start chatting!
+            </div>
+          ) : (
                 filteredRequests.map((request) => (
                   <Card
                     key={request.id}
@@ -209,24 +215,22 @@ export function DebugPanel() {
                       </div>
                     )}
                   </Card>
-                ))
-              )}
-            </div>
-          </ScrollArea>
-
-          {/* Footer */}
-          <div className="p-4 border-t border-gray-800">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearHistory}
-              className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
-            >
-              Clear History
-            </Button>
-          </div>
+            ))
+          )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-gray-800">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={clearHistory}
+          className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
+        >
+          Clear History
+        </Button>
+      </div>
+    </div>
   );
 }
