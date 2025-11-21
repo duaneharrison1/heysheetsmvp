@@ -11,13 +11,6 @@ export const DEBUG_CONFIG = {
       isDefault: true,
     },
     {
-      id: 'x-ai/grok-beta',
-      name: 'Grok Beta',
-      provider: 'x-ai',
-      tier: 'fast',
-      isDefault: false,
-    },
-    {
       id: 'openai/gpt-4o-mini',
       name: 'GPT-4o Mini',
       provider: 'openai',
@@ -33,7 +26,6 @@ export const DEBUG_CONFIG = {
 
   pricing: {
     'anthropic/claude-3.5-sonnet': { input: 3.0, output: 15.0 },
-    'x-ai/grok-beta': { input: 0.05, output: 0.15 },
     'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
   },
 } as const

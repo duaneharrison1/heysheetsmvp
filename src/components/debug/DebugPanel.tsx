@@ -41,7 +41,7 @@ export function DebugPanel() {
       {/* Header */}
       <div className="p-4 border-b border-gray-800">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-100">🐛 Debug Panel</h2>
+          <h2 className="text-lg font-semibold text-gray-100">Debug Panel</h2>
           <button
             onClick={togglePanel}
             className="text-gray-400 hover:text-gray-200 transition-colors"
@@ -55,7 +55,7 @@ export function DebugPanel() {
           <Card className="p-3 bg-gray-900 border-gray-800">
             <div className="text-xs text-gray-400">Avg TTFT</div>
             <div className="text-lg font-bold text-yellow-400">
-              {getAverageTTFT()}ms
+              {(getAverageTTFT() / 1000).toFixed(2)}s
             </div>
           </Card>
           <Card className="p-3 bg-gray-900 border-gray-800">
@@ -69,7 +69,6 @@ export function DebugPanel() {
 
       {/* Model Selector */}
       <div className="p-4 border-b border-gray-800">
-        <label className="text-sm text-gray-400 mb-2 block">AI Model</label>
         <select
           value={selectedModel}
           onChange={(e) => setModel(e.target.value)}
@@ -81,9 +80,6 @@ export function DebugPanel() {
             </option>
           ))}
         </select>
-        <div className="text-xs text-gray-500 mt-1">
-          Affects all future messages
-        </div>
       </div>
 
       {/* Request History */}
@@ -124,7 +120,7 @@ export function DebugPanel() {
                       >
                         {request.status === 'complete' && '✅'}
                         {request.status === 'error' && '❌'}
-                        {request.timings.totalDuration?.toFixed(0)}ms
+                        {((request.timings.totalDuration || 0) / 1000).toFixed(2)}s
                       </Badge>
                     </div>
 
@@ -153,16 +149,16 @@ export function DebugPanel() {
                             </div>
                             <div className="space-y-0.5">
                               <div>
-                                📊 Intent: {request.timings.intentDuration.toFixed(0)}ms
+                                📊 Intent: {(request.timings.intentDuration / 1000).toFixed(2)}s
                               </div>
                               {request.timings.functionDuration && (
                                 <div>
-                                  🔧 Functions: {request.timings.functionDuration.toFixed(0)}ms
+                                  🔧 Functions: {(request.timings.functionDuration / 1000).toFixed(2)}s
                                 </div>
                               )}
                               {request.timings.responseDuration && (
                                 <div>
-                                  💬 Response: {request.timings.responseDuration.toFixed(0)}ms
+                                  💬 Response: {(request.timings.responseDuration / 1000).toFixed(2)}s
                                 </div>
                               )}
                             </div>

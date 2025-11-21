@@ -124,7 +124,7 @@ export default function StorePage() {
 
     // 🆕 START DEBUG TRACKING
     const requestId = generateCorrelationId();
-    const requestStart = performance.now();
+    const requestStart = Date.now();
 
     requestTimer.start(requestId, 'total');
     addRequest({

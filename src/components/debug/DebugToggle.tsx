@@ -2,7 +2,7 @@ import { useDebugStore } from '@/stores/useDebugStore';
 import { useEffect } from 'react';
 
 export function DebugToggle() {
-  const { togglePanel } = useDebugStore();
+  const { togglePanel, isPanelOpen } = useDebugStore();
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -17,14 +17,16 @@ export function DebugToggle() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [togglePanel]);
 
-  // Now visible in production too
+  // Hide when panel is open
+  if (isPanelOpen) return null;
+
   return (
     <button
       onClick={togglePanel}
       className="text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1 rounded hover:bg-gray-800/50"
       title="Open debug panel (Ctrl+Shift+D)"
     >
-      debug
+      Debug
     </button>
   );
 }
