@@ -313,20 +313,45 @@ function RequestCard({
               <div className="text-gray-400 font-semibold mb-1">
                 Timeline:
               </div>
-              <div className="space-y-0.5">
-                <div>
-                  📊 Intent: {(request.timings.intentDuration / 1000).toFixed(2)}s
-                </div>
-                {request.timings.functionDuration !== undefined && request.timings.functionDuration > 0 && (
-                  <div>
-                    🔧 Functions: {(request.timings.functionDuration / 1000).toFixed(2)}s
+              <div className="space-y-1">
+                {/* Intent Classification */}
+                {request.timings.intentDuration !== undefined && (
+                  <div className="text-gray-400">
+                    📊 Intent: {(request.timings.intentDuration / 1000).toFixed(2)}s
                   </div>
                 )}
-                {request.timings.responseDuration && (
-                  <div>
+
+                {/* Function Execution */}
+                {request.timings.functionDuration !== undefined && (
+                  <>
+                    <div className="text-gray-400">
+                      {request.functionCalls?.some(fn => !fn.result.success) && (
+                        <span className="text-red-400">❌ </span>
+                      )}
+                      🔧 Functions: {(request.timings.functionDuration / 1000).toFixed(2)}s
+                    </div>
+
+                    {/* Show error inline if function failed */}
+                    {request.functionCalls?.map((fn, idx) => (
+                      !fn.result.success && (
+                        <div key={idx} className="text-xs text-red-400 ml-4">
+                          └─ {fn.name}: {fn.result.error || 'Function failed'}
+                        </div>
+                      )
+                    ))}
+                  </>
+                )}
+
+                {/* Response Generation */}
+                {request.timings.responseDuration !== undefined ? (
+                  <div className="text-gray-400">
                     💬 Response: {(request.timings.responseDuration / 1000).toFixed(2)}s
                   </div>
-                )}
+                ) : request.status === 'error' ? (
+                  <div className="text-gray-500">
+                    ⏭️ Response: skipped
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
@@ -405,11 +430,12 @@ function RequestCard({
 
           {/* Actions - ONLY SHOW WHEN COMPLETE */}
           {request.status === 'complete' && (
-            <div className="flex flex-col gap-1.5 pt-2">
+            <div className="flex gap-2 pt-2">
+              {/* Copy button */}
               <Button
                 size="sm"
                 variant="outline"
-                className="w-full h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
+                className="h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCopy();
@@ -418,22 +444,46 @@ function RequestCard({
                 <Copy className="w-3 h-3 mr-1" />
                 Copy
               </Button>
+
+              {/* Main Logs - Always show */}
               <Button
                 size="sm"
                 variant="outline"
-                className="w-full h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
+                className="h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
                 asChild
-                onClick={(e) => e.stopPropagation()}
               >
                 <a
-                  href={generateSupabaseLogLink(request.id, request.timestamp)}
+                  href={generateSupabaseLogLink(request.id, request.timestamp, 'chat-completion')}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <ExternalLink className="w-3 h-3 mr-1" />
-                  Logs
+                  Main
                 </a>
               </Button>
+
+              {/* Sheet Logs - Only if sheets functions used */}
+              {request.functionCalls?.some(fn =>
+                ['get_products', 'get_services', 'check_availability', 'create_booking', 'getStoreInfo'].includes(fn.name)
+              ) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
+                  asChild
+                >
+                  <a
+                    href={generateSupabaseLogLink(request.id, request.timestamp, 'google-sheet')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    Sheets
+                  </a>
+                </Button>
+              )}
             </div>
           )}
         </div>
