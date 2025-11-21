@@ -25,10 +25,10 @@ export function HoverTooltip({ content, children, side = 'bottom' }: HoverToolti
       {children}
       {isVisible && (
         <div
-          className={`absolute z-50 ${sideClasses[side]} pointer-events-none`}
+          className={`absolute z-[100] ${sideClasses[side]} pointer-events-none`}
           role="tooltip"
         >
-          <div className="bg-gray-800 text-gray-100 text-xs rounded-md border border-gray-700 px-3 py-2 shadow-lg max-w-xs">
+          <div className="bg-gray-800 text-gray-100 text-xs rounded-md border border-gray-700 px-3 py-2 shadow-lg w-80 max-w-[90vw]">
             {content}
           </div>
         </div>

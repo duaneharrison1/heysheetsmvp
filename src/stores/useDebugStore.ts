@@ -65,8 +65,7 @@ interface DebugStore {
   isVisible: boolean
   isPanelOpen: boolean
   selectedModel: string
-  expandedRequest: string | null
-  userExpandedRequests: Set<string>
+  expandedRequests: Set<string>
   filters: {
     status: 'all' | 'pending' | 'complete' | 'error'
     model: 'all' | string
@@ -79,6 +78,7 @@ interface DebugStore {
   togglePanel: () => void
   clearHistory: () => void
   toggleRequestExpanded: (id: string) => void
+  isRequestExpanded: (id: string) => boolean
 
   getFilteredRequests: () => DebugRequest[]
   getAverageIntentTime: () => number
@@ -93,19 +93,22 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   requests: [],
   isVisible: true,
   isPanelOpen: false, // Closed by default
-  expandedRequest: null,
-  userExpandedRequests: new Set(),
+  expandedRequests: new Set(),
   selectedModel: typeof localStorage !== 'undefined'
     ? localStorage.getItem('heysheets-debug-model') || 'anthropic/claude-3.5-sonnet'
     : 'anthropic/claude-3.5-sonnet',
   filters: { status: 'all', model: 'all' },
 
   addRequest: (request) =>
-    set((state) => ({
-      requests: [request, ...state.requests].slice(0, 100),
+    set((state) => {
+      const newExpanded = new Set(state.expandedRequests)
       // Auto-expand the latest request (most recent)
-      expandedRequest: request.id,
-    })),
+      newExpanded.add(request.id)
+      return {
+        requests: [request, ...state.requests].slice(0, 100),
+        expandedRequests: newExpanded,
+      }
+    }),
 
   updateRequest: (id, updates) =>
     set((state) => ({
@@ -131,27 +134,26 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
 
   toggleRequestExpanded: (id) =>
     set((state) => {
-      const isCurrentlyExpanded = state.expandedRequest === id
-      const newUserExpanded = new Set(state.userExpandedRequests)
+      const newExpanded = new Set(state.expandedRequests)
 
-      if (isCurrentlyExpanded) {
+      if (newExpanded.has(id)) {
         // User is closing it
-        newUserExpanded.delete(id)
-        return {
-          expandedRequest: null,
-          userExpandedRequests: newUserExpanded,
-        }
+        newExpanded.delete(id)
       } else {
         // User is opening it
-        newUserExpanded.add(id)
-        return {
-          expandedRequest: id,
-          userExpandedRequests: newUserExpanded,
-        }
+        newExpanded.add(id)
+      }
+
+      return {
+        expandedRequests: newExpanded,
       }
     }),
 
-  clearHistory: () => set({ requests: [], expandedRequest: null, userExpandedRequests: new Set() }),
+  isRequestExpanded: (id) => {
+    return get().expandedRequests.has(id)
+  },
+
+  clearHistory: () => set({ requests: [], expandedRequests: new Set() }),
 
   getFilteredRequests: () => {
     const { requests, filters } = get()

@@ -14,12 +14,13 @@ export function generateSupabaseLogLink(
     return '#'
   }
 
-  // Use REQUEST_ID: prefix format as it appears in logs: [REQUEST_ID:xxx]
-  const searchQuery = encodeURIComponent(`REQUEST_ID:${requestId}`)
+  // Just use the UUID - simpler and user confirmed it works in manual search
+  const searchQuery = requestId
   const date = new Date(timestamp)
-  // Expand time window to ±10 minutes for better coverage
-  const startTime = new Date(date.getTime() - 10 * 60 * 1000).toISOString()
-  const endTime = new Date(date.getTime() + 10 * 60 * 1000).toISOString()
+  // Expand time window to ±15 minutes for better coverage
+  const startTime = new Date(date.getTime() - 15 * 60 * 1000).toISOString()
+  const endTime = new Date(date.getTime() + 15 * 60 * 1000).toISOString()
 
+  // Build URL with unencoded query to match Supabase's expected format
   return `https://supabase.com/dashboard/project/${projectId}/logs/edge-functions?f=${functionName}&q=${searchQuery}&s=${startTime}&e=${endTime}`
 }
