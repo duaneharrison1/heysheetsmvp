@@ -18,9 +18,7 @@ export function DebugToggle() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [togglePanel]);
 
-  // Only show in development mode
-  if (!import.meta.env.DEV) return null;
-
+  // Now visible in production too
   return (
     <button
       onClick={togglePanel}
