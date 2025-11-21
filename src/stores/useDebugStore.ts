@@ -1,10 +1,26 @@
 import { create } from 'zustand'
 
+export interface DebugStep {
+  name: string
+  function: 'classifier' | 'tools' | 'responder' | 'chat-completion' | 'google-sheet'
+  status: 'success' | 'error' | 'skipped'
+  duration: number
+  result?: any
+  error?: {
+    message: string
+    args?: Record<string, any>
+  }
+  functionCalled?: string // For tools step
+}
+
 export interface DebugRequest {
   id: string
   timestamp: number
   userMessage: string
   model: string
+
+  // 🆕 ADD: Step-by-step breakdown
+  steps?: DebugStep[]
 
   intent?: {
     detected: string

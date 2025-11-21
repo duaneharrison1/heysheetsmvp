@@ -209,6 +209,7 @@ export default function StorePage() {
         functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,
+        steps: data.debug?.steps, // 🆕 ADD: Step-by-step breakdown
         status: 'complete',
       });
 

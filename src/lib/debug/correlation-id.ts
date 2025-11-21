@@ -5,7 +5,7 @@ export function generateCorrelationId(): string {
 export function generateSupabaseLogLink(
   requestId: string,
   timestamp: number,
-  functionName: string = 'chat-completion'
+  functionName: 'chat-completion' | 'classifier' | 'tools' | 'responder' | 'google-sheet' = 'chat-completion'
 ): string {
   const projectId = import.meta.env.VITE_SUPABASE_URL?.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1]
 
@@ -14,7 +14,22 @@ export function generateSupabaseLogLink(
     return '#'
   }
 
-  // Use Supabase's actual log link format for specific log entries
-  // Format: /functions/{function-name}/logs?log={request-id}
-  return `https://supabase.com/dashboard/project/${projectId}/functions/${functionName}/logs?log=${requestId}`
+  // Use ?s= parameter to pre-fill search with requestId
+  // Format: /functions/{function-name}/logs?s=[{request-id}]
+  const searchTerm = `[${requestId}]`
+
+  return `https://supabase.com/dashboard/project/${projectId}/functions/${functionName}/logs?s=${encodeURIComponent(searchTerm)}`
+}
+
+// Helper to generate links for all steps
+export function generateStepLogLinks(
+  requestId: string,
+  timestamp: number,
+  steps: Array<{ stepName: string; functionName: 'classifier' | 'tools' | 'responder' | 'chat-completion' | 'google-sheet' }>
+): Array<{ stepName: string; functionName: string; url: string }> {
+  return steps.map(step => ({
+    stepName: step.stepName,
+    functionName: step.functionName,
+    url: generateSupabaseLogLink(requestId, timestamp, step.functionName)
+  }))
 }
