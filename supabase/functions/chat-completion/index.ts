@@ -181,9 +181,15 @@ serve(async (req) => {
     const totalInputTokens = classifyUsage.input + responseUsage.input;
     const totalOutputTokens = classifyUsage.output + responseUsage.output;
 
-    // Claude 3.5 Sonnet pricing: $3/M input, $15/M output
-    const inputCost = (totalInputTokens / 1_000_000) * 3.0;
-    const outputCost = (totalOutputTokens / 1_000_000) * 15.0;
+    // Get pricing based on actual model used (fallback to Claude 3.5 Sonnet if not found)
+    const modelPricing: Record<string, { input: number; output: number }> = {
+      'anthropic/claude-3.5-sonnet': { input: 3.0, output: 15.0 },
+      'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
+    };
+    const pricing = modelPricing[model] || modelPricing['anthropic/claude-3.5-sonnet'];
+
+    const inputCost = (totalInputTokens / 1_000_000) * pricing.input;
+    const outputCost = (totalOutputTokens / 1_000_000) * pricing.output;
     const totalCost = inputCost + outputCost;
 
     log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
@@ -225,8 +231,8 @@ serve(async (req) => {
           total: { input: totalInputTokens, output: totalOutputTokens, cached: 0 },
         },
         cost: {
-          classification: (classifyUsage.input / 1_000_000) * 3.0 + (classifyUsage.output / 1_000_000) * 15.0,
-          response: (responseUsage.input / 1_000_000) * 3.0 + (responseUsage.output / 1_000_000) * 15.0,
+          classification: (classifyUsage.input / 1_000_000) * pricing.input + (classifyUsage.output / 1_000_000) * pricing.output,
+          response: (responseUsage.input / 1_000_000) * pricing.input + (responseUsage.output / 1_000_000) * pricing.output,
           total: totalCost,
         },
       },
