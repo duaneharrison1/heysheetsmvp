@@ -245,6 +245,43 @@ serve(async (req) => {
           response: (responseUsage.input / 1_000_000) * pricing.input + (responseUsage.output / 1_000_000) * pricing.output,
           total: totalCost,
         },
+        // 🆕 ADD: Step-by-step breakdown for enhanced debugging
+        steps: [
+          {
+            name: 'Intent Classification',
+            function: 'classifier',
+            status: 'success',
+            duration: classifyDuration,
+            result: {
+              intent: classification.intent,
+              confidence: classification.confidence,
+              reasoning: classification.reasoning,
+              params: classification.extracted_params,
+            },
+          },
+          ...(classification.function_to_call && classification.function_to_call !== 'null' ? [{
+            name: 'Function Execution',
+            function: 'tools',
+            status: functionResult?.success ? 'success' : 'error',
+            duration: functionDuration,
+            functionCalled: classification.function_to_call,
+            result: functionResult?.success ? functionResult.data : undefined,
+            error: !functionResult?.success ? {
+              message: functionResult?.error || 'Function execution failed',
+              args: classification.extracted_params,
+            } : undefined,
+          }] : []),
+          {
+            name: 'Response Generation',
+            function: 'responder',
+            status: 'success',
+            duration: responseDuration,
+            result: {
+              length: responseText?.length || 0,
+              tokens: { input: responseUsage.input, output: responseUsage.output },
+            },
+          },
+        ],
       },
     };
 
