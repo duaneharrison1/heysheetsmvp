@@ -206,13 +206,17 @@ export function DebugPanel() {
                             </div>
                           }
                         >
-                          <div className="text-xs text-yellow-400 mb-2 cursor-help">
-                            🎯 {request.intent.detected} ({request.intent.confidence.toFixed(2)})
+                          <div className="inline-flex items-center gap-1.5 text-xs bg-yellow-500/20 text-yellow-300 px-2 py-1 rounded border border-yellow-500/30 mb-2 cursor-help">
+                            <span className="text-yellow-400">🎯</span>
+                            <span className="font-medium">{request.intent.detected}</span>
+                            <span className="text-yellow-400/70">({request.intent.confidence.toFixed(2)})</span>
                           </div>
                         </HoverTooltip>
                       ) : (
-                        <div className="text-xs text-yellow-400 mb-2">
-                          🎯 {request.intent.detected} ({request.intent.confidence.toFixed(2)})
+                        <div className="inline-flex items-center gap-1.5 text-xs bg-yellow-500/20 text-yellow-300 px-2 py-1 rounded border border-yellow-500/30 mb-2">
+                          <span className="text-yellow-400">🎯</span>
+                          <span className="font-medium">{request.intent.detected}</span>
+                          <span className="text-yellow-400/70">({request.intent.confidence.toFixed(2)})</span>
                         </div>
                       )
                     )}
