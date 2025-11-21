@@ -246,9 +246,10 @@ export async function checkAvailability(
 
   } catch (error) {
     console.error('[check_availability] Error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      error: error.message,
+      error: errorMsg || 'Unknown error checking availability',
     };
   }
 }
@@ -438,9 +439,10 @@ If you need to reschedule or cancel, please contact us.
 
   } catch (error) {
     console.error('[create_booking] Error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      error: error.message,
+      error: errorMsg || 'Unknown error creating booking',
     };
   }
 }
