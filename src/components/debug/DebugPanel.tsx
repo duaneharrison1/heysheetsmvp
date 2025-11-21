@@ -36,6 +36,22 @@ export function DebugPanel() {
     toast.success('Copied to clipboard!');
   };
 
+  const handleCopyAll = () => {
+    if (requests.length === 0) {
+      toast.error('No requests to copy');
+      return;
+    }
+
+    const allFormatted = requests
+      .map((req, idx) => `=== REQUEST ${idx + 1}/${requests.length} ===\n\n${formatRequestForAI(req)}`)
+      .join('\n\n' + '='.repeat(80) + '\n\n');
+
+    const header = `DEBUG SESSION EXPORT\nTotal Requests: ${requests.length}\nTotal Cost: $${getTotalCost().toFixed(4)}\nExported: ${new Date().toISOString()}\n\n${'='.repeat(80)}\n\n`;
+
+    navigator.clipboard.writeText(header + allFormatted);
+    toast.success(`Copied ${requests.length} requests to clipboard!`);
+  };
+
   const minMaxResponse = getMinMaxResponseTime();
   const minMaxIntent = getMinMaxIntentTime();
   const costBreakdown = getCostBreakdown();
@@ -182,6 +198,7 @@ export function DebugPanel() {
                       request.intent.reasoning ? (
                         <HoverTooltip
                           side="right"
+                          allowOverflow={true}
                           content={
                             <div className="space-y-1">
                               <div className="font-semibold text-gray-100">AI Reasoning</div>
@@ -256,6 +273,7 @@ export function DebugPanel() {
                               <HoverTooltip
                                 key={idx}
                                 side="right"
+                                allowOverflow={true}
                                 content={
                                   <div className="space-y-1">
                                     <div className="font-semibold text-gray-100">Parameters</div>
@@ -319,14 +337,25 @@ export function DebugPanel() {
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-800">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={clearHistory}
-          className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
-        >
-          Clear History
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopyAll}
+            className="flex-1 bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
+          >
+            <Copy className="w-3 h-3 mr-1" />
+            Copy All
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={clearHistory}
+            className="flex-1 bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
+          >
+            Clear History
+          </Button>
+        </div>
       </div>
     </div>
   );
