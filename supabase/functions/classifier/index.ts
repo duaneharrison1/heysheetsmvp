@@ -271,5 +271,15 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
 
   console.log('[Classifier] Result:', JSON.stringify(classification, null, 2));
 
-  return classification as Classification;
+  // Extract token usage from OpenRouter response
+  const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
+  console.log('[Classifier] Token usage:', usage);
+
+  return {
+    classification: classification as Classification,
+    usage: {
+      input: usage.prompt_tokens || 0,
+      output: usage.completion_tokens || 0,
+    },
+  };
 }

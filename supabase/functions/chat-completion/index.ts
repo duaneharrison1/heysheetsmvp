@@ -130,7 +130,7 @@ serve(async (req) => {
     log(requestId, '🎯 Classifying intent...');
     const classifyStart = performance.now();
 
-    const classification: Classification = await classifyIntent(messages, { storeData });
+    const { classification, usage: classifyUsage } = await classifyIntent(messages, { storeData });
 
     const classifyDuration = performance.now() - classifyStart;
     log(requestId, `✅ Intent: ${classification.intent} (${classifyDuration.toFixed(0)}ms)`, {
@@ -167,7 +167,7 @@ serve(async (req) => {
     log(requestId, '💬 Generating response...');
     const responseStart = performance.now();
 
-    const responseText = await generateResponse(
+    const { text: responseText, usage: responseUsage } = await generateResponse(
       messages,
       classification,
       functionResult,
@@ -177,7 +177,17 @@ serve(async (req) => {
     const responseDuration = performance.now() - responseStart;
     const totalDuration = performance.now() - requestStart;
 
+    // Aggregate token usage and calculate cost
+    const totalInputTokens = classifyUsage.input + responseUsage.input;
+    const totalOutputTokens = classifyUsage.output + responseUsage.output;
+
+    // Claude 3.5 Sonnet pricing: $3/M input, $15/M output
+    const inputCost = (totalInputTokens / 1_000_000) * 3.0;
+    const outputCost = (totalOutputTokens / 1_000_000) * 15.0;
+    const totalCost = inputCost + outputCost;
+
     log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
+    log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
     log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
 
     // Step 4: Return response
@@ -197,6 +207,7 @@ serve(async (req) => {
           detected: classification.intent,
           confidence: classification.confidence,
           duration: classifyDuration,
+          reasoning: classification.reasoning, // 🆕 Add reasoning from classifier
         },
         functionCalls: functionResult ? [{
           name: classification.function_to_call || '',
@@ -209,10 +220,14 @@ serve(async (req) => {
           duration: functionDuration,
         }] : [],
         tokens: {
-          total: { input: 0, output: 0, cached: 0 }, // TODO: Track actual tokens
+          classification: { input: classifyUsage.input, output: classifyUsage.output },
+          response: { input: responseUsage.input, output: responseUsage.output },
+          total: { input: totalInputTokens, output: totalOutputTokens, cached: 0 },
         },
         cost: {
-          total: 0, // TODO: Calculate actual cost
+          classification: (classifyUsage.input / 1_000_000) * 3.0 + (classifyUsage.output / 1_000_000) * 15.0,
+          response: (responseUsage.input / 1_000_000) * 3.0 + (responseUsage.output / 1_000_000) * 15.0,
+          total: totalCost,
         },
       },
     };
