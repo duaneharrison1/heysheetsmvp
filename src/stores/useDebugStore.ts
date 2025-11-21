@@ -84,7 +84,7 @@ interface DebugStore {
 export const useDebugStore = create<DebugStore>((set, get) => ({
   requests: [],
   isVisible: true,
-  isPanelOpen: true, // Start open by default for easier debugging
+  isPanelOpen: false, // Closed by default
   selectedModel: typeof localStorage !== 'undefined'
     ? localStorage.getItem('heysheets-debug-model') || 'anthropic/claude-3.5-sonnet'
     : 'anthropic/claude-3.5-sonnet',

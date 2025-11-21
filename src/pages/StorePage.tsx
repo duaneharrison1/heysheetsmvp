@@ -11,7 +11,6 @@ import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Face
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
-import { DebugToggle } from "@/components/debug/DebugToggle";
 
 interface Message {
   id: string;
@@ -425,11 +424,10 @@ export default function StorePage() {
                 <Bot className="w-4 h-4" />
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1">
+            <div>
               <H2 className="text-base">Store Assistant</H2>
               <Lead>I am your virtual assistant — ask me anything about this store.</Lead>
             </div>
-            <DebugToggle />
           </div>
 
           <div className="flex-1 p-6 overflow-y-auto space-y-4">
