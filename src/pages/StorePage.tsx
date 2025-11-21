@@ -123,20 +123,18 @@ export default function StorePage() {
     if (!content.trim() || !storeId) return;
 
     // 🆕 START DEBUG TRACKING
-    const requestId = import.meta.env.DEV ? generateCorrelationId() : null;
+    const requestId = generateCorrelationId();
     const requestStart = performance.now();
 
-    if (requestId) {
-      requestTimer.start(requestId, 'total');
-      addRequest({
-        id: requestId,
-        timestamp: requestStart,
-        userMessage: content.trim(),
-        model: selectedModel,
-        timings: { requestStart },
-        status: 'pending',
-      });
-    }
+    requestTimer.start(requestId, 'total');
+    addRequest({
+      id: requestId,
+      timestamp: requestStart,
+      userMessage: content.trim(),
+      model: selectedModel,
+      timings: { requestStart },
+      status: 'pending',
+    });
     // 🆕 END DEBUG TRACKING
 
     const userMessage: Message = {
@@ -164,12 +162,10 @@ export default function StorePage() {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'X-Request-ID': requestId,
       };
 
-      if (requestId) {
-        headers['X-Request-ID'] = requestId;
-        updateRequest(requestId, { status: 'classifying' });
-      }
+      updateRequest(requestId, { status: 'classifying' });
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
@@ -194,29 +190,27 @@ export default function StorePage() {
       const aiResponse = data.text || "I apologize, I couldn't generate a response.";
 
       // 🆕 UPDATE DEBUG TRACKING
-      if (requestId) {
-        const totalDuration = requestTimer.end(requestId, 'total');
+      const totalDuration = requestTimer.end(requestId, 'total');
 
-        updateRequest(requestId, {
-          response: {
-            text: aiResponse,
-            richContent: data.richContent,
-            duration: 0,
-          },
-          timings: {
-            requestStart,
-            totalDuration,
-            intentDuration: data.debug?.intentDuration,
-            functionDuration: data.debug?.functionDuration,
-            responseDuration: data.debug?.responseDuration,
-          },
-          intent: data.debug?.intent,
-          functionCalls: data.debug?.functionCalls,
-          tokens: data.debug?.tokens,
-          cost: data.debug?.cost,
-          status: 'complete',
-        });
-      }
+      updateRequest(requestId, {
+        response: {
+          text: aiResponse,
+          richContent: data.richContent,
+          duration: 0,
+        },
+        timings: {
+          requestStart,
+          totalDuration,
+          intentDuration: data.debug?.intentDuration,
+          functionDuration: data.debug?.functionDuration,
+          responseDuration: data.debug?.responseDuration,
+        },
+        intent: data.debug?.intent,
+        functionCalls: data.debug?.functionCalls,
+        tokens: data.debug?.tokens,
+        cost: data.debug?.cost,
+        status: 'complete',
+      });
 
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
@@ -229,16 +223,14 @@ export default function StorePage() {
       console.error('Error getting bot response:', error);
 
       // 🆕 TRACK ERROR
-      if (requestId) {
-        updateRequest(requestId, {
-          status: 'error',
-          error: {
-            stage: 'request',
-            message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-        });
-      }
+      updateRequest(requestId, {
+        status: 'error',
+        error: {
+          stage: 'request',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      });
 
       const fallbackResponse: Message = {
         id: (Date.now() + 1).toString(),
