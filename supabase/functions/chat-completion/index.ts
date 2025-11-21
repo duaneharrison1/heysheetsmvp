@@ -19,8 +19,18 @@ import { executeFunction } from '../tools/index.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
 };
+
+// ============================================================================
+// LOGGING HELPER
+// ============================================================================
+
+function log(requestId: string, message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const logData = data ? JSON.stringify(data) : '';
+  console.log(`[${timestamp}] [REQUEST_ID:${requestId}] ${message}`, logData);
+}
 
 // ============================================================================
 // MAIN HANDLER
@@ -32,17 +42,26 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // 🆕 EXTRACT CORRELATION ID & START TIMING
+  const requestId = req.headers.get('X-Request-ID') || crypto.randomUUID();
+  const requestStart = performance.now();
+
+  log(requestId, '📨 Chat completion started');
+
   try {
     // Parse request
     const body: ChatCompletionRequest = await req.json();
-    const { messages, storeId } = body;
+    const { messages, storeId, model } = body;
 
     if (!messages || messages.length === 0 || !storeId) {
+      log(requestId, '❌ Missing required fields');
       return new Response(
         JSON.stringify({ error: 'Missing required fields: messages or storeId' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
       );
     }
+
+    log(requestId, '💬 User message', { messageCount: messages.length, storeId });
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -108,20 +127,24 @@ serve(async (req) => {
     }
 
     // Step 1: Classify intent and extract parameters
+    log(requestId, '🎯 Classifying intent...');
+    const classifyStart = performance.now();
+
     const classification: Classification = await classifyIntent(messages, { storeData });
 
-    console.log('[Orchestrator] Classification:', {
-      intent: classification.intent,
+    const classifyDuration = performance.now() - classifyStart;
+    log(requestId, `✅ Intent: ${classification.intent} (${classifyDuration.toFixed(0)}ms)`, {
       confidence: classification.confidence,
       function: classification.function_to_call,
-      needsClarification: classification.needs_clarification
     });
 
     // Step 2: Execute function if classified
     let functionResult: FunctionResult | undefined;
+    let functionDuration = 0;
 
     if (classification.function_to_call && classification.function_to_call !== 'null') {
-      console.log('[Orchestrator] Executing function:', classification.function_to_call);
+      log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
+      const functionStart = performance.now();
 
       functionResult = await executeFunction(
         classification.function_to_call,
@@ -134,10 +157,16 @@ serve(async (req) => {
         }
       );
 
-      console.log('[Orchestrator] Function result:', functionResult);
+      functionDuration = performance.now() - functionStart;
+      log(requestId, `✅ Function complete (${functionDuration.toFixed(0)}ms)`, {
+        success: functionResult?.success
+      });
     }
 
     // Step 3: Generate response using LLM
+    log(requestId, '💬 Generating response...');
+    const responseStart = performance.now();
+
     const responseText = await generateResponse(
       messages,
       classification,
@@ -145,27 +174,67 @@ serve(async (req) => {
       storeConfig
     );
 
+    const responseDuration = performance.now() - responseStart;
+    const totalDuration = performance.now() - requestStart;
+
+    log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
+    log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
+
     // Step 4: Return response
     const response: ChatCompletionResponse = {
       text: responseText,
       intent: classification.intent,
       confidence: classification.confidence,
       functionCalled: classification.function_to_call || undefined,
-      functionResult
+      functionResult,
+      // 🆕 ADD DEBUG METADATA (frontend will filter in production)
+      debug: {
+        intentDuration: classifyDuration,
+        functionDuration,
+        responseDuration,
+        totalDuration,
+        intent: {
+          detected: classification.intent,
+          confidence: classification.confidence,
+          duration: classifyDuration,
+        },
+        functionCalls: functionResult ? [{
+          name: classification.function_to_call || '',
+          arguments: classification.extracted_params || {},
+          result: {
+            success: functionResult.success,
+            data: functionResult.data,
+            error: functionResult.error,
+          },
+          duration: functionDuration,
+        }] : [],
+        tokens: {
+          total: { input: 0, output: 0, cached: 0 }, // TODO: Track actual tokens
+        },
+        cost: {
+          total: 0, // TODO: Calculate actual cost
+        },
+      },
     };
 
     return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'X-Request-ID': requestId,
+        'Server-Timing': `total;dur=${totalDuration}`,
+      }
     });
 
   } catch (error) {
-    console.error('[Orchestrator] Error:', error);
+    log(requestId, '❌ Error', { error: error instanceof Error ? error.message : String(error) });
     return new Response(
       JSON.stringify({
         error: 'Internal server error',
-        details: error instanceof Error ? error.message : String(error)
+        details: error instanceof Error ? error.message : String(error),
+        requestId,
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
     );
   }
 });

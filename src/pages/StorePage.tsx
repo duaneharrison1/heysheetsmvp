@@ -8,6 +8,10 @@ import { H2, Lead } from "@/components/ui/heading";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, Phone, Mail, MapPin, Calendar } from "lucide-react";
+import { useDebugStore } from "@/stores/useDebugStore";
+import { generateCorrelationId } from "@/lib/debug/correlation-id";
+import { requestTimer } from "@/lib/debug/timing";
+import { DebugToggle } from "@/components/debug/DebugToggle";
 
 interface Message {
   id: string;
@@ -50,6 +54,11 @@ export default function StorePage() {
   const [hasSheet, setHasSheet] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Debug store
+  const addRequest = useDebugStore((state) => state.addRequest);
+  const updateRequest = useDebugStore((state) => state.updateRequest);
+  const selectedModel = useDebugStore((state) => state.selectedModel);
 
   useEffect(() => {
     if (storeId) {
@@ -114,6 +123,23 @@ export default function StorePage() {
   const sendMessage = async (content: string) => {
     if (!content.trim() || !storeId) return;
 
+    // 🆕 START DEBUG TRACKING
+    const requestId = import.meta.env.DEV ? generateCorrelationId() : null;
+    const requestStart = performance.now();
+
+    if (requestId) {
+      requestTimer.start(requestId, 'total');
+      addRequest({
+        id: requestId,
+        timestamp: requestStart,
+        userMessage: content.trim(),
+        model: selectedModel,
+        timings: { requestStart },
+        status: 'pending',
+      });
+    }
+    // 🆕 END DEBUG TRACKING
+
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
@@ -135,17 +161,26 @@ export default function StorePage() {
           content: msg.content
         }));
 
+      // 🆕 ADD CORRELATION ID TO REQUEST
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      };
+
+      if (requestId) {
+        headers['X-Request-ID'] = requestId;
+        updateRequest(requestId, { status: 'classifying' });
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers,
           body: JSON.stringify({
             messages: conversationHistory,
             storeId,
+            model: selectedModel, // 🆕 Pass selected model
           })
         }
       );
@@ -159,6 +194,31 @@ export default function StorePage() {
       console.log('Chat response data:', data);
       const aiResponse = data.text || "I apologize, I couldn't generate a response.";
 
+      // 🆕 UPDATE DEBUG TRACKING
+      if (requestId) {
+        const totalDuration = requestTimer.end(requestId, 'total');
+
+        updateRequest(requestId, {
+          response: {
+            text: aiResponse,
+            richContent: data.richContent,
+            duration: 0,
+          },
+          timings: {
+            requestStart,
+            totalDuration,
+            intentDuration: data.debug?.intentDuration,
+            functionDuration: data.debug?.functionDuration,
+            responseDuration: data.debug?.responseDuration,
+          },
+          intent: data.debug?.intent,
+          functionCalls: data.debug?.functionCalls,
+          tokens: data.debug?.tokens,
+          cost: data.debug?.cost,
+          status: 'complete',
+        });
+      }
+
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
@@ -168,6 +228,19 @@ export default function StorePage() {
       setMessages(prev => [...prev, botResponse]);
     } catch (error) {
       console.error('Error getting bot response:', error);
+
+      // 🆕 TRACK ERROR
+      if (requestId) {
+        updateRequest(requestId, {
+          status: 'error',
+          error: {
+            stage: 'request',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        });
+      }
+
       const fallbackResponse: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
@@ -352,10 +425,11 @@ export default function StorePage() {
                 <Bot className="w-4 h-4" />
               </AvatarFallback>
             </Avatar>
-            <div>
+            <div className="flex-1">
               <H2 className="text-base">Store Assistant</H2>
               <Lead>I am your virtual assistant — ask me anything about this store.</Lead>
             </div>
+            <DebugToggle />
           </div>
 
           <div className="flex-1 p-6 overflow-y-auto space-y-4">

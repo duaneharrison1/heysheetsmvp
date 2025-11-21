@@ -16,6 +16,7 @@ import Billing from './pages/Billing';
 import Help from './pages/Help';
 import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
+import { DebugPanel } from "@/components/debug/DebugPanel";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
+      {/* Debug Panel - only visible in development */}
+      {import.meta.env.DEV && <DebugPanel />}
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
