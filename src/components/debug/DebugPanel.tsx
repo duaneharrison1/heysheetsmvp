@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { HoverTooltip } from './HoverTooltip';
-import { ExternalLink, Copy, X } from 'lucide-react';
+import { ExternalLink, Copy, X, Loader2 } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
 import { formatRequestForAI } from '@/lib/debug/format-for-ai';
 import { DEBUG_CONFIG } from '@/config/debug';
@@ -16,8 +16,8 @@ export function DebugPanel() {
     requests,
     selectedModel,
     setModel,
-    expandedRequest,
     toggleRequestExpanded,
+    isRequestExpanded,
     getAverageIntentTime,
     getAverageResponseTime,
     getMinMaxResponseTime,
@@ -162,11 +162,18 @@ export function DebugPanel() {
                             ? 'destructive'
                             : 'secondary'
                         }
-                        className="ml-2"
+                        className="ml-2 flex items-center gap-1"
                       >
                         {request.status === 'complete' && '✅'}
                         {request.status === 'error' && '❌'}
-                        {((request.timings.totalDuration || 0) / 1000).toFixed(2)}s
+                        {(request.status === 'pending' || request.status === 'classifying' || request.status === 'executing' || request.status === 'responding') && (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        )}
+                        {request.status === 'complete' ? (
+                          `${((request.timings.totalDuration || 0) / 1000).toFixed(2)}s`
+                        ) : (
+                          request.status.charAt(0).toUpperCase() + request.status.slice(1)
+                        )}
                       </Badge>
                     </div>
 
@@ -201,7 +208,7 @@ export function DebugPanel() {
                     )}
 
                     {/* Expanded Details */}
-                    {expandedRequest === request.id && (
+                    {isRequestExpanded(request.id) && (
                       <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
                         {/* Timeline */}
                         {request.timings.intentDuration && (
