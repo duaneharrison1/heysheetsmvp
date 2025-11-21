@@ -1,6 +1,5 @@
 import { useDebugStore } from '@/stores/useDebugStore';
 import { useEffect } from 'react';
-import { Bug } from 'lucide-react';
 
 export function DebugToggle() {
   const { togglePanel } = useDebugStore();
@@ -22,11 +21,10 @@ export function DebugToggle() {
   return (
     <button
       onClick={togglePanel}
-      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      className="text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1 rounded hover:bg-gray-800/50"
       title="Open debug panel (Ctrl+Shift+D)"
     >
-      <Bug className="h-3.5 w-3.5" />
-      <span>Debug</span>
+      debug
     </button>
   );
 }

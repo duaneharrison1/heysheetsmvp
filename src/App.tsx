@@ -17,7 +17,7 @@ import Help from './pages/Help';
 import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
 import { DebugPanel } from "@/components/debug/DebugPanel";
-import { DebugTest } from "@/components/debug/DebugTest";
+import { DebugToggle } from "@/components/debug/DebugToggle";
 
 const queryClient = new QueryClient();
 
@@ -27,8 +27,6 @@ const App = () => (
       <Toaster />
       {/* Debug Panel - now visible in production */}
       <DebugPanel />
-      {/* Temporary test to verify dev mode */}
-      <DebugTest />
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
@@ -50,6 +48,10 @@ const App = () => (
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      {/* Fixed Debug Toggle - Bottom Left */}
+      <div className="fixed bottom-4 left-4 z-50">
+        <DebugToggle />
+      </div>
     </TooltipProvider>
   </QueryClientProvider>
 );
