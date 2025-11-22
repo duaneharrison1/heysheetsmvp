@@ -107,7 +107,7 @@ async function getStoreInfo(
       const namesToTry = commonNames[expectedTab] || [expectedTab];
       for (const name of namesToTry) {
         try {
-          const testData = await loadTabData(storeId, name, authToken);
+          const testData = await loadTabData(storeId, name, authToken, context.requestId);
           if (testData && testData.length >= 0) {
             actualTab = name;
             console.log(`[getStoreInfo] Found ${expectedTab} tab via direct query: ${name}`);
@@ -129,7 +129,7 @@ async function getStoreInfo(
 
   for (const [expectedTab, actualTab] of Object.entries(tabMapping)) {
     try {
-      const tabData = await loadTabData(storeId, actualTab, authToken);
+      const tabData = await loadTabData(storeId, actualTab, authToken, context.requestId);
       data[expectedTab] = tabData;
     } catch (error) {
       console.error(`[getStoreInfo] Error loading ${actualTab}:`, error);
@@ -177,7 +177,7 @@ async function getServices(
     const commonNames = ['Services', 'services', 'SERVICES', 'Service'];
     for (const name of commonNames) {
       try {
-        const testData = await loadTabData(storeId, name, authToken);
+        const testData = await loadTabData(storeId, name, authToken, context.requestId);
         if (testData && testData.length >= 0) {
           servicesTab = name;
           console.log(`[getServices] Found services tab via direct query: ${name}`);
@@ -198,7 +198,7 @@ async function getServices(
   }
 
   // Load all services
-  let services = await loadTabData(storeId, servicesTab, authToken);
+  let services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
 
   // Apply category filter if specified
   if (category) {
@@ -256,7 +256,7 @@ async function getProducts(
     const commonNames = ['Products', 'products', 'PRODUCTS', 'Product', 'Inventory'];
     for (const name of commonNames) {
       try {
-        const testData = await loadTabData(storeId, name, authToken);
+        const testData = await loadTabData(storeId, name, authToken, context.requestId);
         if (testData && testData.length >= 0) {
           productsTab = name;
           console.log(`[getProducts] Found products tab via direct query: ${name}`);
@@ -276,7 +276,7 @@ async function getProducts(
   }
 
   // Load all products
-  let products = await loadTabData(storeId, productsTab, authToken);
+  let products = await loadTabData(storeId, productsTab, authToken, context.requestId);
 
   // Apply category filter if specified
   if (category) {
@@ -356,7 +356,7 @@ async function submitLead(
 
   // Append to sheet
   try {
-    await appendToSheet(storeId, leadsTab, leadData, authToken);
+    await appendToSheet(storeId, leadsTab, leadData, authToken, context.requestId);
 
     return {
       success: true,
@@ -401,7 +401,7 @@ async function getMiscData(
   if (!actualTab) {
     console.log(`[getMiscData] Tab "${tab_name}" not in schema, trying direct query`);
     try {
-      const testData = await loadTabData(storeId, tab_name, authToken);
+      const testData = await loadTabData(storeId, tab_name, authToken, context.requestId);
       if (testData && testData.length >= 0) {
         actualTab = tab_name;
         console.log(`[getMiscData] Found tab via direct query: ${tab_name}`);
@@ -429,7 +429,7 @@ async function getMiscData(
   }
 
   // Load data from tab
-  let data = await loadTabData(storeId, actualTab, authToken);
+  let data = await loadTabData(storeId, actualTab, authToken, context.requestId);
 
   // Apply simple filtering if query provided
   if (query) {
@@ -489,19 +489,27 @@ function findActualTabName(
 async function loadTabData(
   storeId: string,
   tabName: string,
-  authToken: string
+  authToken: string,
+  requestId?: string
 ): Promise<any[]> {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
   console.log(`[loadTabData] Loading tab: ${tabName} for store: ${storeId}`);
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${authToken}`,
+    'apikey': authToken
+  };
+
+  // Add correlation ID if provided
+  if (requestId) {
+    headers['X-Request-ID'] = requestId;
+  }
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/google-sheet`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`,
-      'apikey': authToken
-    },
+    headers,
     body: JSON.stringify({
       operation: 'read',
       storeId,
@@ -527,16 +535,24 @@ async function appendToSheet(
   storeId: string,
   tabName: string,
   data: Record<string, any>,
-  authToken: string
+  authToken: string,
+  requestId?: string
 ): Promise<void> {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${authToken}`
+  };
+
+  // Add correlation ID if provided
+  if (requestId) {
+    headers['X-Request-ID'] = requestId;
+  }
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/google-sheet`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`
-    },
+    headers,
     body: JSON.stringify({
       operation: 'append',
       storeId,

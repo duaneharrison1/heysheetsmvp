@@ -116,9 +116,9 @@ serve(async (req) => {
 
       // Load data in parallel using SERVICE_ROLE_KEY for authentication
       const [services, products, hours] = await Promise.all([
-        servicesTab ? loadTab(servicesTab, storeId, serviceRoleKey) : Promise.resolve([]),
-        productsTab ? loadTab(productsTab, storeId, serviceRoleKey) : Promise.resolve([]),
-        hoursTab ? loadTab(hoursTab, storeId, serviceRoleKey) : Promise.resolve([])
+        servicesTab ? loadTab(servicesTab, storeId, serviceRoleKey, requestId) : Promise.resolve([]),
+        productsTab ? loadTab(productsTab, storeId, serviceRoleKey, requestId) : Promise.resolve([]),
+        hoursTab ? loadTab(hoursTab, storeId, serviceRoleKey, requestId) : Promise.resolve([])
       ]);
 
       storeData = { services, products, hours };
@@ -153,7 +153,8 @@ serve(async (req) => {
           storeId,
           userId: 'anonymous', // Public access, no user ID
           authToken: serviceRoleKey,  // Use SERVICE_ROLE_KEY for internal function calls
-          store: storeConfig
+          store: storeConfig,
+          requestId  // Pass correlation ID for tracing
         }
       );
 
@@ -345,18 +346,26 @@ function findActualTabName(
 async function loadTab(
   tabName: string,
   storeId: string,
-  authToken: string
+  authToken: string,
+  requestId?: string
 ): Promise<any[]> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+      'apikey': authToken
+    };
+
+    // Add correlation ID if provided
+    if (requestId) {
+      headers['X-Request-ID'] = requestId;
+    }
+
     const response = await fetch(`${supabaseUrl}/functions/v1/google-sheet`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`,
-        'apikey': authToken
-      },
+      headers,
       body: JSON.stringify({
         operation: 'read',
         storeId,
