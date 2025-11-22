@@ -99,6 +99,7 @@ export interface FunctionContext {
   userId: string;
   authToken: string;
   store?: StoreConfig;
+  requestId?: string; // For correlation across edge functions
 }
 
 /**
