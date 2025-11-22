@@ -430,12 +430,12 @@ function RequestCard({
 
           {/* Actions - ONLY SHOW WHEN COMPLETE */}
           {request.status === 'complete' && (
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-1.5 pt-2">
               {/* Copy button */}
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
+                className="flex-1 h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCopy();
@@ -445,11 +445,11 @@ function RequestCard({
                 Copy
               </Button>
 
-              {/* Main Logs - Always show */}
+              {/* Chat Completion Logs - Always show */}
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
+                className="flex-1 h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
                 asChild
               >
                 <a
@@ -459,18 +459,18 @@ function RequestCard({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <ExternalLink className="w-3 h-3 mr-1" />
-                  Main
+                  Chat
                 </a>
               </Button>
 
-              {/* Sheet Logs - Only if sheets functions used */}
+              {/* Google Sheet Logs - Only if sheets functions used */}
               {request.functionCalls?.some(fn =>
-                ['get_products', 'get_services', 'check_availability', 'create_booking', 'getStoreInfo'].includes(fn.name)
+                ['get_products', 'get_services', 'check_availability', 'create_booking', 'getStoreInfo', 'get_misc_data'].includes(fn.name)
               ) && (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
+                  className="flex-1 h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
                   asChild
                 >
                   <a
@@ -480,7 +480,7 @@ function RequestCard({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <ExternalLink className="w-3 h-3 mr-1" />
-                    Sheets
+                    Sheet
                   </a>
                 </Button>
               )}

@@ -14,9 +14,10 @@ export function generateSupabaseLogLink(
     return '#'
   }
 
-  // Escape brackets for regex (Supabase treats ?s= as regex pattern)
-  // [abc-123] becomes \[abc-123\] which regex treats as literal brackets
-  const searchTerm = `\\[${requestId}\\]`
+  // Search for just the requestId without brackets
+  // Logs contain [requestId] so searching for requestId will still match
+  // This avoids all regex issues with special characters
+  const searchTerm = requestId
 
   return `https://supabase.com/dashboard/project/${projectId}/functions/${functionName}/logs?s=${encodeURIComponent(searchTerm)}`
 }
