@@ -461,7 +461,7 @@ function RequestCard({
 
               {/* Google Sheet Logs - Only if sheets functions used */}
               {request.functionCalls?.some(fn =>
-                ['get_products', 'get_services', 'check_availability', 'create_booking', 'getStoreInfo', 'get_misc_data'].includes(fn.name)
+                ['get_products', 'get_services', 'check_availability', 'create_booking', 'get_store_info', 'get_misc_data'].includes(fn.name)
               ) && (
                 <Button
                   size="sm"
