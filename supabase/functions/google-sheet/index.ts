@@ -7,7 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id'
 };
 // Baked-in credentials (move to Supabase secrets later if desired)
 const SERVICE_EMAIL = 'heysheets-backend@heysheets-mvp.iam.gserviceaccount.com';
@@ -42,6 +42,16 @@ x8o8OU+8ereiJ2yVcCTggUU=
 // Simple cache
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Logging helper with request ID
+function log(requestId: string | null, message: string, data?: any) {
+  const prefix = requestId ? `[REQUEST_ID:${requestId}]` : '[google-sheet]';
+  if (data) {
+    console.log(prefix, message, data);
+  } else {
+    console.log(prefix, message);
+  }
+}
 function getServiceAuth() {
   return new JWT({
     email: SERVICE_EMAIL,
@@ -97,6 +107,9 @@ async function verifyAccess(req: Request, storeId: string) {
   };
 }
 serve(async (req)=>{
+  // Extract correlation ID from header
+  const requestId = req.headers.get('X-Request-ID') || null;
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
       headers: corsHeaders
@@ -105,7 +118,7 @@ serve(async (req)=>{
   try {
     const body = await req.json();
     const { operation, storeId, tabName, columns, data, sheetId: newSheetId } = body;
-    console.log('[google-sheet] Operation:', operation, 'StoreId:', storeId, 'TabName:', tabName);
+    log(requestId, '📋 Operation:', { operation, storeId, tabName });
     // ========================================
     // READ OPERATION - FULLY PUBLIC
     // ========================================
@@ -139,7 +152,7 @@ serve(async (req)=>{
         const cacheKey = `${sheetId}:${tabName}`;
         const cached = cache.get(cacheKey);
         if (cached && Date.now() < cached.expiry) {
-          console.log('[google-sheet] Cache hit:', cacheKey);
+          log(requestId, '💾 Cache hit:', cacheKey);
           return new Response(JSON.stringify({
             success: true,
             data: cached.data
@@ -158,7 +171,7 @@ serve(async (req)=>{
       try {
         await doc.loadInfo();
       } catch (error) {
-        console.error('[google-sheet] Failed to load sheet:', error);
+        log(requestId, '❌ Failed to load sheet:', error);
         return new Response(JSON.stringify({
           error: 'Cannot access Google Sheet'
         }), {
@@ -207,7 +220,7 @@ serve(async (req)=>{
           expiry: Date.now() + CACHE_TTL
         });
       }
-      console.log('[google-sheet] Read success:', result.length, 'rows');
+      log(requestId, '✅ Read success:', `${result.length} rows from ${tabName}`);
       return new Response(JSON.stringify({
         success: true,
         data: result
@@ -315,7 +328,7 @@ serve(async (req)=>{
             sample_rows: sampleRows,
           };
         } catch (error) {
-          console.error(`[google-sheet] Error loading schema for tab "${tabName}":`, error);
+          log(requestId, `❌ Error loading schema for tab "${tabName}":`, error);
           // Store minimal schema if error occurs
           detectedSchema[tabName] = {
             columns: [],
@@ -473,7 +486,7 @@ serve(async (req)=>{
     });
   } catch (err: unknown) {
     const eAny = err as any;
-    console.error('[google-sheet] Error:', eAny);
+    log(requestId, '❌ Error:', eAny);
     return new Response(JSON.stringify({
       error: eAny?.message || 'Internal error'
     }), {
