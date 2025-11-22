@@ -57,6 +57,7 @@ export default function StorePage() {
   // Debug store
   const addRequest = useDebugStore((state) => state.addRequest);
   const updateRequest = useDebugStore((state) => state.updateRequest);
+  const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
 
   useEffect(() => {
@@ -146,6 +147,17 @@ export default function StorePage() {
 
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
+
+    // Track user message in debug store
+    if (import.meta.env.DEV) {
+      addDebugMessage({
+        id: userMessage.id,
+        type: 'user',
+        content,
+        timestamp: Date.now()
+      });
+    }
+
     setInputValue('');
     setIsTyping(true);
 
@@ -220,6 +232,16 @@ export default function StorePage() {
         timestamp: new Date()
       };
       setMessages(prev => [...prev, botResponse]);
+
+      // Track bot message in debug store
+      if (import.meta.env.DEV) {
+        addDebugMessage({
+          id: botResponse.id,
+          type: 'bot',
+          content: aiResponse,
+          timestamp: Date.now()
+        });
+      }
     } catch (error) {
       console.error('Error getting bot response:', error);
 
@@ -240,6 +262,16 @@ export default function StorePage() {
         timestamp: new Date()
       };
       setMessages(prev => [...prev, fallbackResponse]);
+
+      // Track error message in debug store
+      if (import.meta.env.DEV) {
+        addDebugMessage({
+          id: fallbackResponse.id,
+          type: 'bot',
+          content: fallbackResponse.content,
+          timestamp: Date.now()
+        });
+      }
     } finally {
       setIsTyping(false);
     }

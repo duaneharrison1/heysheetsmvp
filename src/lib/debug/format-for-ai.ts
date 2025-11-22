@@ -1,107 +1,199 @@
-import type { DebugRequest, DebugStep } from '@/stores/useDebugStore'
-import { generateSupabaseLogLink } from './correlation-id'
+import type { DebugRequest, Message } from '@/stores/useDebugStore'
 
-export function formatRequestForAI(request: DebugRequest): string {
+/**
+ * Format a single request with recent conversation context
+ * Used by "Copy" button - shows last 5-6 messages
+ */
+export function formatRequestForAI(
+  request: DebugRequest,
+  allMessages: Message[]
+): string {
   const lines: string[] = []
 
-  lines.push(`DEBUG REQUEST #${request.id.slice(0, 8)}`)
-  lines.push(`Timestamp: ${new Date(request.timestamp).toLocaleString()}`)
-  lines.push('')
-  lines.push(`USER MESSAGE: "${request.userMessage}"`)
-  lines.push(`STATUS: ${request.status.toUpperCase()}`)
+  lines.push(`CHAT DEBUG`)
+  lines.push(`Time: ${new Date(request.timestamp).toLocaleString()}`)
   lines.push('')
 
-  // Step-by-step breakdown
-  if (request.steps && request.steps.length > 0) {
-    lines.push('EXECUTION STEPS:')
+  // Find the position of current user message in conversation
+  const currentMessageIndex = allMessages.findIndex(
+    m => m.content === request.userMessage && m.type === 'user'
+  )
+
+  // Get last 5-6 messages before current (2-3 turns of context)
+  if (currentMessageIndex > 0) {
+    const contextStart = Math.max(0, currentMessageIndex - 5)
+    const contextMessages = allMessages.slice(contextStart, currentMessageIndex)
+
+    if (contextMessages.length > 0) {
+      lines.push(`RECENT CONVERSATION:`)
+      contextMessages.forEach(msg => {
+        const label = msg.type === 'user' ? 'User' : 'Bot'
+        lines.push(`${label}: "${msg.content}"`)
+      })
+      lines.push('')
+    }
+  }
+
+  // Current request
+  lines.push(`CURRENT REQUEST:`)
+  lines.push(`User: "${request.userMessage}"`)
+  lines.push('')
+
+  // Intent
+  if (request.intent) {
+    lines.push(`INTENT: ${request.intent.detected} (${Math.round(request.intent.confidence * 100)}% confidence)`)
+    lines.push(`Duration: ${(request.timings.intentDuration! / 1000).toFixed(2)}s`)
     lines.push('')
+  }
 
-    request.steps.forEach((step, idx) => {
-      const statusIcon =
-        step.status === 'success' ? '✅' :
-        step.status === 'error' ? '❌' : '⏸️'
+  // Functions
+  if (request.functionCalls && request.functionCalls.length > 0) {
+    request.functionCalls.forEach((fn, idx) => {
+      if (idx > 0) lines.push('---')
 
-      lines.push(`${statusIcon} Step ${idx + 1}: ${step.name} (${step.duration.toFixed(0)}ms)`)
-      lines.push(`   Function: ${step.function}`)
+      lines.push(`FUNCTION: ${fn.name}`)
 
-      if (step.status === 'success' && step.result) {
-        if (step.result.intent) {
-          lines.push(`   Result: ${step.result.intent} (${step.result.confidence ? `${(step.result.confidence * 100).toFixed(0)}% confidence` : ''})`)
-        }
-        if (step.functionCalled) {
-          lines.push(`   Called: ${step.functionCalled}`)
-        }
-        if (step.result.length !== undefined) {
-          lines.push(`   Result: Generated ${step.result.length} characters`)
-        }
+      // Arguments
+      if (!fn.arguments || Object.keys(fn.arguments).length === 0) {
+        lines.push(`Arguments: (none - returning all results)`)
+      } else {
+        lines.push(`Arguments:`)
+        lines.push(JSON.stringify(fn.arguments, null, 2))
       }
 
-      if (step.status === 'error' && step.error) {
-        lines.push(`   ❌ ERROR: ${step.error.message}`)
-        if (step.error.args) {
-          lines.push(`   Arguments: ${JSON.stringify(step.error.args, null, 2)}`)
+      // Result
+      if (fn.result.success) {
+        lines.push(`Result: SUCCESS`)
+        if (fn.result.data) {
+          lines.push(`Data:`)
+          lines.push(JSON.stringify(fn.result.data, null, 2))
         }
+      } else {
+        lines.push(`Result: ERROR`)
+        lines.push(`Error: ${fn.result.error || 'Unknown error'}`)
       }
 
-      if (step.status === 'skipped') {
-        lines.push(`   Skipped due to previous error`)
-      }
-
-      // Add log link
-      lines.push(`   Logs: ${generateSupabaseLogLink(request.id, request.timestamp, step.function)}`)
+      lines.push(`Duration: ${(fn.duration / 1000).toFixed(2)}s`)
       lines.push('')
     })
-  } else {
-    // Fallback to old format if steps not available
-    // Intent
+  }
+
+  // Response
+  if (request.response) {
+    lines.push(`BOT RESPONSE:`)
+    lines.push(request.response.text)
+    lines.push('')
+    lines.push(`Duration: ${(request.timings.responseDuration! / 1000).toFixed(2)}s`)
+    lines.push('')
+  } else if (request.status === 'error') {
+    lines.push(`BOT RESPONSE: (error - no response)`)
+    lines.push('')
+  }
+
+  // Summary
+  lines.push(`TIMING:`)
+  lines.push(`Total: ${(request.timings.totalDuration! / 1000).toFixed(2)}s`)
+  if (request.timings.intentDuration) {
+    lines.push(`  Intent: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
+  }
+  if (request.timings.functionDuration) {
+    lines.push(`  Functions: ${(request.timings.functionDuration / 1000).toFixed(2)}s`)
+  }
+  if (request.timings.responseDuration) {
+    lines.push(`  Response: ${(request.timings.responseDuration / 1000).toFixed(2)}s`)
+  }
+
+  if (request.tokens) {
+    lines.push(`Tokens: ${request.tokens.total.input} in / ${request.tokens.total.output} out`)
+  }
+  if (request.cost) {
+    lines.push(`Cost: $${request.cost.total.toFixed(5)}`)
+  }
+  lines.push(`Model: ${request.model}`)
+
+  // Problem detection
+  if (request.status === 'error' || request.functionCalls?.some(fn => !fn.result.success)) {
+    lines.push('')
+    lines.push(`PROBLEM:`)
+    const failedFn = request.functionCalls?.find(fn => !fn.result.success)
+    if (failedFn) {
+      lines.push(`Function "${failedFn.name}" failed: ${failedFn.result.error}`)
+    }
+    if (request.error) {
+      lines.push(`Error in ${request.error.stage}: ${request.error.message}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Format entire conversation history with all requests
+ * Used by "Copy All" button
+ */
+export function formatAllRequestsForAI(
+  requests: DebugRequest[],
+  allMessages: Message[]
+): string {
+  const lines: string[] = []
+
+  lines.push(`FULL CONVERSATION DEBUG`)
+  lines.push(`Total exchanges: ${Math.floor(allMessages.length / 2)}`)
+  lines.push(`Total requests: ${requests.length}`)
+  lines.push('')
+  lines.push('='.repeat(60))
+  lines.push('')
+
+  // Group messages by request
+  requests.forEach((request, idx) => {
+    lines.push(`REQUEST ${idx + 1}`)
+    lines.push(`Time: ${new Date(request.timestamp).toLocaleString()}`)
+    lines.push('')
+
+    lines.push(`User: "${request.userMessage}"`)
+
     if (request.intent) {
-      lines.push('INTENT CLASSIFICATION:')
-      lines.push(`- Detected: ${request.intent.detected}`)
-      lines.push(`- Confidence: ${request.intent.confidence}`)
-      lines.push(`- Duration: ${request.intent.duration}ms`)
-      lines.push('')
+      lines.push(`Intent: ${request.intent.detected} (${Math.round(request.intent.confidence * 100)}%)`)
     }
 
-    // Functions
-    if (request.functionCalls?.length > 0) {
-      lines.push('FUNCTION CALLS:')
-      request.functionCalls.forEach((fn, idx) => {
-        lines.push(`${idx + 1}. ${fn.name} ${fn.result.success ? '✅' : '❌'}`)
-        lines.push(`   Args: ${JSON.stringify(fn.arguments, null, 2)}`)
-        if (!fn.result.success) {
-          lines.push(`   Error: ${fn.result.error}`)
+    if (request.functionCalls && request.functionCalls.length > 0) {
+      request.functionCalls.forEach(fn => {
+        lines.push(`Function: ${fn.name}`)
+        if (fn.arguments && Object.keys(fn.arguments).length > 0) {
+          lines.push(`  Args: ${JSON.stringify(fn.arguments)}`)
+        } else {
+          lines.push(`  Args: (none - returning all results)`)
         }
-        lines.push(`   Duration: ${fn.duration}ms`)
-        lines.push('')
+        lines.push(`  Result: ${fn.result.success ? 'SUCCESS' : 'ERROR - ' + fn.result.error}`)
       })
     }
-  }
 
-  // Total timing
-  if (request.timings.totalDuration) {
-    lines.push(`TOTAL DURATION: ${request.timings.totalDuration.toFixed(0)}ms`)
-  }
-
-  // Tokens & Cost
-  if (request.tokens) {
-    lines.push(`TOKENS: ${request.tokens.total.input} in / ${request.tokens.total.output} out`)
-    lines.push(`COST: $${request.cost?.total.toFixed(5) || '0.00000'}`)
-  }
-
-  // Overall error
-  if (request.error) {
-    lines.push('')
-    lines.push(`OVERALL ERROR:`)
-    lines.push(`Stage: ${request.error.stage}`)
-    lines.push(`Message: ${request.error.message}`)
-    if (request.error.stack) {
-      lines.push(`Stack: ${request.error.stack}`)
+    if (request.response) {
+      lines.push(`Bot: "${request.response.text}"`)
+    } else {
+      lines.push(`Bot: (error - no response)`)
     }
-  }
 
-  lines.push('')
-  lines.push('ALL FUNCTION LOGS:')
-  lines.push(generateSupabaseLogLink(request.id, request.timestamp, 'chat-completion'))
+    lines.push(`Time: ${(request.timings.totalDuration! / 1000).toFixed(2)}s`)
+    if (request.cost) {
+      lines.push(`Cost: $${request.cost.total.toFixed(5)}`)
+    }
+
+    lines.push('')
+    lines.push('-'.repeat(60))
+    lines.push('')
+  })
+
+  // Summary
+  const totalCost = requests.reduce((sum, r) => sum + (r.cost?.total || 0), 0)
+  const totalTime = requests.reduce((sum, r) => sum + (r.timings.totalDuration || 0), 0)
+
+  lines.push(`CONVERSATION SUMMARY:`)
+  lines.push(`Total time: ${(totalTime / 1000).toFixed(2)}s`)
+  lines.push(`Total cost: $${totalCost.toFixed(5)}`)
+  if (requests.length > 0) {
+    lines.push(`Average per request: ${(totalTime / requests.length / 1000).toFixed(2)}s`)
+  }
 
   return lines.join('\n')
 }

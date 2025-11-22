@@ -1,5 +1,12 @@
 import { create } from 'zustand'
 
+export interface Message {
+  id: string
+  type: 'user' | 'bot'
+  content: string
+  timestamp: number
+}
+
 export interface DebugStep {
   name: string
   function: 'classifier' | 'tools' | 'responder' | 'chat-completion' | 'google-sheet'
@@ -78,6 +85,7 @@ export interface DebugRequest {
 
 interface DebugStore {
   requests: DebugRequest[]
+  messages: Message[]
   isVisible: boolean
   isPanelOpen: boolean
   selectedModel: string
@@ -89,6 +97,8 @@ interface DebugStore {
 
   addRequest: (request: DebugRequest) => void
   updateRequest: (id: string, updates: Partial<DebugRequest>) => void
+  addMessage: (message: Message) => void
+  clearMessages: () => void
   setModel: (model: string) => void
   setFilter: (key: string, value: any) => void
   togglePanel: () => void
@@ -107,6 +117,7 @@ interface DebugStore {
 
 export const useDebugStore = create<DebugStore>((set, get) => ({
   requests: [],
+  messages: [],
   isVisible: true,
   isPanelOpen: false, // Closed by default
   expandedRequests: new Set(),
@@ -132,6 +143,13 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
         req.id === id ? { ...req, ...updates } : req
       ),
     })),
+
+  addMessage: (message) =>
+    set((state) => ({
+      messages: [...state.messages, message],
+    })),
+
+  clearMessages: () => set({ messages: [] }),
 
   setModel: (model) => {
     set({ selectedModel: model })
@@ -169,7 +187,7 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     return get().expandedRequests.has(id)
   },
 
-  clearHistory: () => set({ requests: [], expandedRequests: new Set() }),
+  clearHistory: () => set({ requests: [], messages: [], expandedRequests: new Set() }),
 
   getFilteredRequests: () => {
     const { requests, filters } = get()
