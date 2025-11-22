@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { HoverTooltip } from './HoverTooltip';
 import { ExternalLink, Copy, X, Loader2 } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
-import { formatRequestForAI } from '@/lib/debug/format-for-ai';
+import { formatRequestForAI, formatAllRequestsForAI } from '@/lib/debug/format-for-ai';
 import { DEBUG_CONFIG } from '@/config/debug';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ export function DebugPanel() {
     isPanelOpen,
     togglePanel,
     requests,
+    messages,
     selectedModel,
     setModel,
     toggleRequestExpanded,
@@ -33,9 +34,9 @@ export function DebugPanel() {
     const request = requests.find((r) => r.id === requestId);
     if (!request) return;
 
-    const formatted = formatRequestForAI(request);
+    const formatted = formatRequestForAI(request, messages);
     navigator.clipboard.writeText(formatted);
-    toast.success('Copied to clipboard!');
+    toast.success('Copied with conversation context!');
   };
 
   const handleCopyAll = () => {
@@ -44,14 +45,9 @@ export function DebugPanel() {
       return;
     }
 
-    const allFormatted = requests
-      .map((req, idx) => `=== REQUEST ${idx + 1}/${requests.length} ===\n\n${formatRequestForAI(req)}`)
-      .join('\n\n' + '='.repeat(80) + '\n\n');
-
-    const header = `DEBUG SESSION EXPORT\nTotal Requests: ${requests.length}\nTotal Cost: $${getTotalCost().toFixed(4)}\nExported: ${new Date().toISOString()}\n\n${'='.repeat(80)}\n\n`;
-
-    navigator.clipboard.writeText(header + allFormatted);
-    toast.success(`Copied ${requests.length} requests to clipboard!`);
+    const formatted = formatAllRequestsForAI(requests, messages);
+    navigator.clipboard.writeText(formatted);
+    toast.success(`Copied ${requests.length} requests!`);
   };
 
   const minMaxResponse = getMinMaxResponseTime();
