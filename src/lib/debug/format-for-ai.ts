@@ -41,7 +41,7 @@ export function formatRequestForAI(
 
   // Intent
   if (request.intent) {
-    lines.push(`INTENT: ${request.intent.detected} (${Math.round(request.intent.confidence * 100)}% confidence)`)
+    lines.push(`INTENT: ${request.intent.detected} (${Math.round(request.intent.confidence)}% confidence)`)
     lines.push(`Duration: ${(request.timings.intentDuration! / 1000).toFixed(2)}s`)
     lines.push('')
   }
@@ -153,7 +153,7 @@ export function formatAllRequestsForAI(
     lines.push(`User: "${request.userMessage}"`)
 
     if (request.intent) {
-      lines.push(`Intent: ${request.intent.detected} (${Math.round(request.intent.confidence * 100)}%)`)
+      lines.push(`Intent: ${request.intent.detected} (${Math.round(request.intent.confidence)}%)`)
     }
 
     if (request.functionCalls && request.functionCalls.length > 0) {
