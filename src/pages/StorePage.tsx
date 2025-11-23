@@ -11,9 +11,6 @@ import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Face
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
-import { TestModeSwitch } from "@/qa/components/TestModeSwitch";
-import { ScenarioSelector } from "@/qa/components/ScenarioSelector";
-import { TestControls } from "@/qa/components/TestControls";
 
 interface Message {
   id: string;
@@ -23,10 +20,6 @@ interface Message {
   richContent?: {
     type: string;
     data: any;
-  };
-  testResult?: {
-    passed: boolean;
-    qualityScore?: number;
   };
 }
 
@@ -66,10 +59,6 @@ export default function StorePage() {
   const updateRequest = useDebugStore((state) => state.updateRequest);
   const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
-
-  // Test mode state (simple reads, no complex effects)
-  const isTestMode = useDebugStore((state) => state.isTestMode);
-  const currentTest = useDebugStore((state) => state.currentTest);
 
   useEffect(() => {
     if (storeId) {
@@ -552,38 +541,28 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            {isTestMode ? (
-              // Test Mode UI
-              <div className="space-y-3">
-                <TestModeSwitch />
-                <ScenarioSelector />
-                <TestControls storeId={storeId || ''} />
-              </div>
-            ) : (
-              // Normal Chat Input
-              <div className="flex gap-3 items-center">
-                <Input
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage(inputValue);
-                      }
-                    }}
-                    placeholder="Type your message..."
-                    className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  />
-                <Button
-                  onClick={() => sendMessage(inputValue)}
-                  size="sm"
-                  className="rounded-full w-11 h-11 p-0"
-                  disabled={!inputValue.trim()}
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
+            <div className="flex gap-3 items-center">
+              <Input
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage(inputValue);
+                    }
+                  }}
+                  placeholder="Type your message..."
+                  className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                />
+              <Button
+                onClick={() => sendMessage(inputValue)}
+                size="sm"
+                className="rounded-full w-11 h-11 p-0"
+                disabled={!inputValue.trim()}
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
