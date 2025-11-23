@@ -131,6 +131,7 @@ export interface Message {
 export interface ChatCompletionRequest {
   messages: Message[];
   storeId: string;
+  model?: string; // optional model override from frontend
 }
 
 /**
@@ -142,4 +143,6 @@ export interface ChatCompletionResponse {
   confidence: number;
   functionCalled?: string;
   functionResult?: FunctionResult;
+  // Optional debug metadata included in responses (frontend may ignore in production)
+  debug?: any;
 }

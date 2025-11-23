@@ -197,7 +197,7 @@ serve(async (req) => {
       // Legacy models for backwards compatibility
       'anthropic/claude-3.5-sonnet': { input: 3.0, output: 15.0 },
     };
-    const pricing = modelPricing[model] || modelPricing['x-ai/grok-4.1-fast'];
+    const pricing = model ? (modelPricing[model] ?? modelPricing['x-ai/grok-4.1-fast']) : modelPricing['x-ai/grok-4.1-fast'];
 
     const inputCost = (totalInputTokens / 1_000_000) * pricing.input;
     const outputCost = (totalOutputTokens / 1_000_000) * pricing.output;
