@@ -20,6 +20,10 @@ interface Message {
   content: string;
   timestamp: Date;
   richContent?: any;
+  testResult?: {
+    passed: boolean;
+    qualityScore?: number;
+  };
 }
 
 interface ChatMessageProps {
