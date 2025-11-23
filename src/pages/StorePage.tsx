@@ -11,6 +11,9 @@ import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Face
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
+import { TestModeSwitch } from "@/qa/components/TestModeSwitch";
+import { ScenarioSelector } from "@/qa/components/ScenarioSelector";
+import { TestControls } from "@/qa/components/TestControls";
 
 interface Message {
   id: string;
@@ -549,8 +552,10 @@ export default function StorePage() {
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
             {isTestMode ? (
-              <div className="text-center text-sm text-muted-foreground">
-                🧪 Test Mode Enabled - UI components will be added here
+              <div className="space-y-3">
+                <TestModeSwitch />
+                <ScenarioSelector />
+                <TestControls storeId={storeId || ''} />
               </div>
             ) : (
               <div className="flex gap-3 items-center">
