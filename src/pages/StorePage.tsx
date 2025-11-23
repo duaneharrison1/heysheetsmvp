@@ -715,13 +715,9 @@ export default function StorePage() {
                   onClick={isTestMode ? handleRunTest : () => sendMessage(inputValue)}
                   size="sm"
                   className="rounded-full w-11 h-11 p-0"
-                  disabled={isTestMode ? (!selectedScenario || isRunningTest) : !inputValue.trim()}
+                  disabled={isTestMode ? !selectedScenario : !inputValue.trim()}
                 >
-                  {isRunningTest ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
+                  <Send className="w-4 h-4" />
                 </Button>
               )}
             </div>
