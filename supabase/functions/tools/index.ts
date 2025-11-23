@@ -327,6 +327,17 @@ async function getProducts(
     products = matches.map(m => m.item);
   }
 
+  // Build optional UI components payload (frontend will render if available)
+  const components: Array<Record<string, any>> = [];
+
+  if (Array.isArray(products) && products.length) {
+    components.push({
+      id: `products-${storeId}`,
+      type: 'products',
+      props: { products }
+    });
+  }
+
   return {
     success: true,
     data: {
@@ -334,7 +345,10 @@ async function getProducts(
       count: products.length,
       query: query || null,
       category: category || null
-    }
+    },
+    message: `Found ${products.length} products.`,
+    components,
+    componentsVersion: '1'
   };
 }
 

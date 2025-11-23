@@ -212,3 +212,17 @@
     opacity: 0.98;
   }
 }
+
+@layer utilities {
+  /* Utility to hide native scrollbars while preserving scrolling */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+    width: 0;
+    height: 0;
+  }
+}

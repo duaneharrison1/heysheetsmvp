@@ -234,8 +234,13 @@ export default function StorePage() {
           try {
             const fr = data.functionResult;
             if (!fr) return undefined;
-            // Prefer explicit components array (HoursList -> 'hours')
+            // Prefer explicit components array (products -> 'products', HoursList -> 'hours')
             if (Array.isArray(fr.components) && fr.components.length) {
+              const productsComp = fr.components.find((c: any) => c.type === 'products' || c.type === 'Products');
+              if (productsComp && productsComp.props && Array.isArray(productsComp.props.products)) {
+                return { type: 'products', data: productsComp.props.products };
+              }
+
               const hoursComp = fr.components.find((c: any) => c.type === 'HoursList');
               if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {
                 return { type: 'hours', data: hoursComp.props.hours };
@@ -244,6 +249,10 @@ export default function StorePage() {
             // Fallback: if functionResult.data.hours exists
             if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {
               return { type: 'hours', data: fr.data.hours };
+            }
+            // Fallback: if functionResult.data.products exists
+            if (fr.data && Array.isArray(fr.data.products) && fr.data.products.length) {
+              return { type: 'products', data: fr.data.products };
             }
             return undefined;
           } catch (e) {
@@ -353,9 +362,9 @@ export default function StorePage() {
       )}
 
   {/* Main Content: Two Column Layout */}
-  <div className="flex-1 flex w-full">
+    <div className="flex-1 flex w-full min-h-0">
         {/* Store Profile Side Panel */}
-  <Card className="w-96 rounded-none bg-transparent border border-border/10 shadow-[var(--shadow-card-sm)]">
+    <Card className="w-96 flex-shrink-0 rounded-none bg-transparent border border-border/10 shadow-[var(--shadow-card-sm)]">
           <CardContent className="p-6 flex-1 overflow-y-auto">
             {/* Store Avatar and Name */}
             <div className="flex flex-col items-center text-center mb-6">
@@ -463,7 +472,7 @@ export default function StorePage() {
         </Card>
 
   {/* Chat Section */}
-  <div className="flex-1 flex flex-col bg-muted">
+  <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
           {/* Chat header (bot profile) */}
           <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
             <Avatar className="w-10 h-10" variant="bot">

@@ -11,12 +11,21 @@ export const ProductCard: React.FC<{
 }> = ({ product, onActionClick, maxWidth }) => {
   return (
     <Card
-      className={`w-full mx-auto ${maxWidth ? '' : 'max-w-full sm:max-w-sm'} border border-border shadow-sm hover:shadow-md transition-shadow`}
+      className={`w-full mx-auto ${maxWidth ? '' : 'max-w-full sm:max-w-sm'} border border-border shadow-sm hover:shadow-md transition-shadow h-full flex flex-col`}
       style={maxWidth ? { maxWidth } : undefined}
     >
       <CardHeader className="pb-2 p-3 sm:p-4">
-        <div className="aspect-square bg-gradient-to-br from-muted to-muted/60 rounded-lg mb-2 flex items-center justify-center h-16 sm:h-20">
-          <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50" />
+        <div className="aspect-square bg-gradient-to-br from-muted to-muted/60 rounded-lg mb-2 flex items-center justify-center h-16 sm:h-20 overflow-hidden">
+          {product?.image ? (
+            <img
+              src={product.image}
+              alt={product.name || 'product image'}
+              className="w-full h-full object-cover"
+              decoding="async"
+            />
+          ) : (
+            <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50" />
+          )}
         </div>
         <CardTitle className="text-sm sm:text-base font-semibold text-foreground truncate leading-tight">
           {product.name}
@@ -28,9 +37,9 @@ export const ProductCard: React.FC<{
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 p-3 sm:p-4">
-        <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4 line-clamp-2 leading-tight">{product.description}</p>
-        <div className="flex flex-col sm:flex-row gap-2">
+      <CardContent className="pt-0 p-3 sm:p-4 flex-1 flex flex-col">
+        <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4 line-clamp-3 leading-tight">{product.description}</p>
+        <div className="flex flex-col sm:flex-row gap-2 mt-auto">
           <Button 
             size="sm" 
             className="flex-1 min-w-0" 
