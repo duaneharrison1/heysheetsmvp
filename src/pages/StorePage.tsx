@@ -85,6 +85,18 @@ export default function StorePage() {
   const [testRunner] = useState(() => new TestRunner());
   const [isRunningTest, setIsRunningTest] = useState(false);
 
+  // Debug logging for button state
+  useEffect(() => {
+    if (isTestMode) {
+      console.log('🧪 Test Mode Active:', {
+        isTestMode,
+        selectedScenario,
+        isRunningTest,
+        buttonShouldBeDisabled: selectedScenario === null || selectedScenario === undefined || selectedScenario === ''
+      });
+    }
+  }, [isTestMode, selectedScenario, isRunningTest]);
+
   const handlePauseTest = () => {
     testRunner.pause();
     toast.info('Test paused');
@@ -715,7 +727,7 @@ export default function StorePage() {
                   onClick={isTestMode ? handleRunTest : () => sendMessage(inputValue)}
                   size="sm"
                   className="rounded-full w-11 h-11 p-0"
-                  disabled={isTestMode ? !selectedScenario : !inputValue.trim()}
+                  disabled={isTestMode ? (selectedScenario === null || selectedScenario === undefined || selectedScenario === '') : !inputValue.trim()}
                 >
                   <Send className="w-4 h-4" />
                 </Button>
