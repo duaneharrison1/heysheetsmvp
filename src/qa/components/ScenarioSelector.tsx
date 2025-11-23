@@ -27,6 +27,12 @@ export function ScenarioSelector() {
 
     console.log('✅ All scenarios loaded:', loadedScenarios)
     setScenarios(loadedScenarios)
+
+    // AUTO-SELECT FIRST SCENARIO FOR TESTING
+    if (loadedScenarios.length > 0 && !selectedScenario) {
+      console.log('🎯 Auto-selecting first scenario:', loadedScenarios[0].id)
+      setSelectedScenario(loadedScenarios[0].id)
+    }
   }, [])
 
   const handleTestButtonClick = () => {
@@ -73,9 +79,26 @@ export function ScenarioSelector() {
         </Button>
       </div>
 
+      {/* WORKAROUND: Direct selection buttons since Select onValueChange isn't firing */}
+      <div className="flex flex-wrap gap-2 mb-2">
+        {scenarios.map(scenario => (
+          <Button
+            key={scenario.id}
+            onClick={() => {
+              console.log('🔘 Button clicked for scenario:', scenario.id)
+              handleScenarioChange(scenario.id)
+            }}
+            variant={selectedScenario === scenario.id ? 'default' : 'outline'}
+            size="sm"
+          >
+            {scenario.name}
+          </Button>
+        ))}
+      </div>
+
       {selectedScenario && (
         <p className="text-xs text-muted-foreground mt-1">
-          {scenarios.find(s => s.id === selectedScenario)?.description}
+          Selected: {scenarios.find(s => s.id === selectedScenario)?.description}
         </p>
       )}
     </div>
