@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { H2, Lead } from "@/components/ui/heading";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
-import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, Phone, Mail, MapPin, Calendar } from "lucide-react";
+import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, Phone, Mail, MapPin, Calendar, Pause, Play, Square } from "lucide-react";
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
@@ -79,10 +79,27 @@ export default function StorePage() {
   const selectedScenario = useDebugStore((state) => state.selectedScenario);
   const evaluatorModel = useDebugStore((state) => state.evaluatorModel);
   const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
+  const currentTest = useDebugStore((state) => state.currentTest);
 
   // Test runner
   const [testRunner] = useState(() => new TestRunner());
   const [isRunningTest, setIsRunningTest] = useState(false);
+
+  const handlePauseTest = () => {
+    testRunner.pause();
+    toast.info('Test paused');
+  };
+
+  const handleResumeTest = () => {
+    testRunner.resume();
+    toast.info('Test resumed');
+  };
+
+  const handleStopTest = () => {
+    testRunner.stop();
+    setIsRunningTest(false);
+    toast.warning('Test stopped');
+  };
 
   useEffect(() => {
     if (storeId) {
@@ -622,52 +639,91 @@ export default function StorePage() {
             )}
 
             <div className="flex gap-3 items-center">
-              {/* Test Mode Switch - Only visible when Debug Panel is open */}
-              {isPanelOpen && (
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="test-mode-toggle"
-                    checked={isTestMode}
-                    onCheckedChange={setTestMode}
-                  />
-                  <Label htmlFor="test-mode-toggle" className="text-xs whitespace-nowrap cursor-pointer">
-                    {isTestMode ? '🧪 Test' : 'Test'}
-                  </Label>
-                </div>
-              )}
-
-              {/* Input Field - Always visible */}
-              <Input
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (isTestMode) {
-                      handleRunTest();
-                    } else {
-                      sendMessage(inputValue);
-                    }
-                  }
-                }}
-                placeholder={isTestMode ? "Select a scenario above and press Send to run test..." : "Type your message..."}
-                className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                disabled={isTestMode}
-              />
-
-              {/* Send/Run Test Button */}
-              <Button
-                onClick={isTestMode ? handleRunTest : () => sendMessage(inputValue)}
-                size="sm"
-                className="rounded-full w-11 h-11 p-0"
-                disabled={isTestMode ? !selectedScenario || isRunningTest : !inputValue.trim()}
-              >
-                {isRunningTest ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
+              {/* Input Field with Test Switch inside - Only show switch when Debug Panel open */}
+              <div className="flex-1 flex items-center gap-2 rounded-full bg-muted border border-input focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background px-4 py-2">
+                {isPanelOpen && (
+                  <div className="flex items-center gap-1.5">
+                    <Switch
+                      id="test-mode-toggle"
+                      checked={isTestMode}
+                      onCheckedChange={setTestMode}
+                      className="scale-75"
+                    />
+                    <Label htmlFor="test-mode-toggle" className="text-xs whitespace-nowrap cursor-pointer m-0">
+                      {isTestMode ? '🧪' : '💬'}
+                    </Label>
+                  </div>
                 )}
-              </Button>
+                <input
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (isTestMode) {
+                        handleRunTest();
+                      } else {
+                        sendMessage(inputValue);
+                      }
+                    }
+                  }}
+                  placeholder={isTestMode ? "Select a scenario above and press Send to run test..." : "Type your message..."}
+                  className="flex-1 bg-transparent border-0 focus:outline-none text-sm"
+                  disabled={isTestMode}
+                />
+              </div>
+
+              {/* Test Controls (Pause/Resume/Stop) or Send/Run Test Button */}
+              {isRunningTest && currentTest ? (
+                <div className="flex gap-2">
+                  {/* Pause/Resume Button */}
+                  {currentTest.status === 'paused' ? (
+                    <Button
+                      onClick={handleResumeTest}
+                      size="sm"
+                      variant="default"
+                      className="flex items-center gap-2"
+                    >
+                      <Play className="w-4 h-4" />
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handlePauseTest}
+                      size="sm"
+                      variant="secondary"
+                      className="flex items-center gap-2"
+                    >
+                      <Pause className="w-4 h-4" />
+                      Pause
+                    </Button>
+                  )}
+
+                  {/* Stop Button */}
+                  <Button
+                    onClick={handleStopTest}
+                    size="sm"
+                    variant="destructive"
+                    className="rounded-full w-11 h-11 p-0"
+                  >
+                    <Square className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                /* Send/Run Test Button */
+                <Button
+                  onClick={isTestMode ? handleRunTest : () => sendMessage(inputValue)}
+                  size="sm"
+                  className="rounded-full w-11 h-11 p-0"
+                  disabled={isTestMode ? (!selectedScenario || isRunningTest) : !inputValue.trim()}
+                >
+                  {isRunningTest ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>

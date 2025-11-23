@@ -28,6 +28,10 @@ export function DebugPanel() {
     getTotalCost,
     getCostBreakdown,
     clearHistory,
+    isTestMode,
+    currentTest,
+    evaluatorModel,
+    setEvaluatorModel,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -78,6 +82,7 @@ export function DebugPanel() {
 
         {/* Model Selector */}
         <div className="mb-3">
+          <label className="text-xs text-gray-400 block mb-1">Chat Model</label>
           <select
             value={selectedModel}
             onChange={(e) => setModel(e.target.value)}
@@ -90,6 +95,46 @@ export function DebugPanel() {
             ))}
           </select>
         </div>
+
+        {/* Evaluator Model Selector - Only visible in test mode */}
+        {isTestMode && (
+          <div className="mb-3">
+            <label className="text-xs text-gray-400 block mb-1">Evaluator Model (QA)</label>
+            <select
+              value={evaluatorModel}
+              onChange={(e) => setEvaluatorModel(e.target.value)}
+              className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
+            >
+              {DEBUG_CONFIG.models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Test Progress - Only when test is running */}
+        {currentTest && (
+          <div className="mb-3 p-3 bg-blue-900/20 border border-blue-800 rounded">
+            <div className="text-xs text-blue-300 font-semibold mb-2 flex items-center gap-2">
+              🧪 Test Running
+              {currentTest.status === 'paused' && <Badge variant="secondary" className="text-xs">Paused</Badge>}
+            </div>
+            <div className="text-xs text-gray-300 mb-1">
+              {currentTest.scenarioName}
+            </div>
+            <div className="text-xs text-gray-400">
+              Step {currentTest.currentStepIndex + 1} of {currentTest.totalSteps}
+            </div>
+            <div className="mt-2 w-full bg-gray-800 rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all"
+                style={{ width: `${((currentTest.currentStepIndex + 1) / currentTest.totalSteps) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
