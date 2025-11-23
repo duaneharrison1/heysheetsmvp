@@ -57,7 +57,19 @@ Be fair but critical.`
       }
     )
 
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('OpenRouter API error:', response.status, errorData)
+      return null
+    }
+
     const data = await response.json()
+
+    if (!data.choices || !data.choices[0]) {
+      console.error('Invalid API response:', data)
+      return null
+    }
+
     const text = data.choices[0].message.content
 
     // Extract JSON
@@ -157,7 +169,19 @@ Be thorough and fair.`
       }
     )
 
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('OpenRouter API error:', response.status, errorData)
+      throw new Error(`API error: ${response.status}`)
+    }
+
     const data = await response.json()
+
+    if (!data.choices || !data.choices[0]) {
+      console.error('Invalid API response:', data)
+      throw new Error('Invalid API response structure')
+    }
+
     const text = data.choices[0].message.content
 
     const jsonMatch = text.match(/\{[\s\S]*\}/)
