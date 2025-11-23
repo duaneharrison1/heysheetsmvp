@@ -18,6 +18,7 @@ import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
 import { DebugPanel } from "@/components/debug/DebugPanel";
 import { DebugToggle } from "@/components/debug/DebugToggle";
+import { QAResultsPage } from "@/qa/components/QAResultsPage";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ const App = () => (
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
           <Route path="/admin/users" element={<SidebarLayout><AdminUsers /></SidebarLayout>} />
           <Route path="/admin/stores" element={<SidebarLayout><AdminStores /></SidebarLayout>} />
+          <Route path="/qa-results" element={<SidebarLayout><QAResultsPage /></SidebarLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

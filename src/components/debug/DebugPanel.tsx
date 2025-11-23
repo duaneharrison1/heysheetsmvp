@@ -4,14 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { HoverTooltip } from './HoverTooltip';
-import { ExternalLink, Copy, X, Loader2 } from 'lucide-react';
+import { ExternalLink, Copy, X, Loader2, BarChart3 } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
 import { formatRequestForAI, formatAllRequestsForAI } from '@/lib/debug/format-for-ai';
 import { DEBUG_CONFIG } from '@/config/debug';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 export function DebugPanel() {
+  const navigate = useNavigate();
+
   const {
     isPanelOpen,
     togglePanel,
@@ -28,6 +31,11 @@ export function DebugPanel() {
     getTotalCost,
     getCostBreakdown,
     clearHistory,
+    // Test mode
+    isTestMode,
+    currentTest,
+    evaluatorModel,
+    setEvaluatorModel,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -78,6 +86,9 @@ export function DebugPanel() {
 
         {/* Model Selector */}
         <div className="mb-3">
+          <label className="text-xs text-gray-400 mb-1 block">
+            Chat Model
+          </label>
           <select
             value={selectedModel}
             onChange={(e) => setModel(e.target.value)}
@@ -90,6 +101,26 @@ export function DebugPanel() {
             ))}
           </select>
         </div>
+
+        {/* Evaluator Model Selector - only in test mode */}
+        {isTestMode && (
+          <div className="mb-3">
+            <label className="text-xs text-gray-400 mb-1 block">
+              Evaluator Model
+            </label>
+            <select
+              value={evaluatorModel || ''}
+              onChange={(e) => setEvaluatorModel(e.target.value)}
+              className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
+            >
+              <option value="">Same as Chat Model</option>
+              <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo ($0.002)</option>
+              <option value="openai/gpt-4o-mini">GPT-4o Mini ($0.005)</option>
+              <option value="anthropic/claude-3-haiku">Claude 3 Haiku ($0.0015)</option>
+              <option value="x-ai/grok-beta">Grok Beta ($0.001)</option>
+            </select>
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
@@ -172,8 +203,46 @@ export function DebugPanel() {
         </div>
       </div>
 
+      {/* Test Results Section */}
+      {currentTest && (
+        <div className="p-4 border-t border-gray-800 bg-gray-900/50">
+          <h3 className="text-sm font-semibold mb-2 text-gray-100">
+            🧪 Test: {currentTest.scenarioName}
+          </h3>
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Progress:</span>
+              <span className="text-gray-100">
+                {currentTest.currentStepIndex} / {currentTest.totalSteps}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Status:</span>
+              <Badge
+                variant={
+                  currentTest.status === 'running' ? 'default' :
+                  currentTest.status === 'complete' ? 'default' :
+                  'secondary'
+                }
+                className="text-xs"
+              >
+                {currentTest.status}
+              </Badge>
+            </div>
+            {currentTest.results.length > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Results:</span>
+                <span className="text-gray-100">
+                  {currentTest.results.filter(r => r.passed).length} / {currentTest.results.length} passed
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-gray-800 space-y-2">
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -193,6 +262,19 @@ export function DebugPanel() {
             Clear History
           </Button>
         </div>
+
+        {/* NEW: View Test History button - only in test mode */}
+        {isTestMode && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/qa-results')}
+            className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
+          >
+            <BarChart3 className="w-3 h-3 mr-1" />
+            View Test History
+          </Button>
+        )}
       </div>
     </div>
   );

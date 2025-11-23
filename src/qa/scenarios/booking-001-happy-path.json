@@ -1,0 +1,70 @@
+{
+  "id": "booking-001",
+  "name": "Booking - Happy Path",
+  "description": "User successfully books Hand Building class with all information provided",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "What pottery classes do you have?",
+      "expected": {
+        "intent": "SERVICE_INQUIRY",
+        "minConfidence": 85,
+        "functions": ["get_services"],
+        "maxTimeMs": 5000,
+        "richContentType": "services",
+        "minItems": 1
+      },
+      "criteria": [
+        "Lists available pottery services",
+        "Includes prices for each service",
+        "Mentions class durations",
+        "Uses friendly, conversational tone"
+      ]
+    },
+    {
+      "id": "step-2",
+      "userMessage": "When is Hand Building available?",
+      "expected": {
+        "intent": "AVAILABILITY_CHECK",
+        "minConfidence": 90,
+        "functions": ["check_availability"],
+        "maxTimeMs": 8000,
+        "responseContains": ["available", "time"]
+      },
+      "criteria": [
+        "Shows specific available dates and times",
+        "Indicates remaining capacity",
+        "Information is clear and actionable"
+      ]
+    },
+    {
+      "id": "step-3",
+      "userMessage": "Book me for Tuesday at 2pm. My name is John Doe, email john@example.com",
+      "expected": {
+        "intent": "CREATE_BOOKING",
+        "minConfidence": 92,
+        "functions": ["create_booking"],
+        "maxTimeMs": 10000,
+        "calendarEventCreated": true,
+        "responseContains": ["confirmed", "booking"]
+      },
+      "criteria": [
+        "Confirms booking was successful",
+        "Repeats key details (service, date, time)",
+        "Confirms email notification",
+        "Thanks the customer"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Complete booking flow accomplished smoothly",
+      "Conversation felt natural and human-like",
+      "All information was accurate",
+      "User would be satisfied with the experience"
+    ],
+    "minQualityScore": 80
+  }
+}
