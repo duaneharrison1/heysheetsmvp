@@ -6,6 +6,9 @@ import { TestRunner } from '../lib/test-runner'
 import { toast } from 'sonner'
 import type { TestScenario } from '../lib/types'
 
+// Import scenarios eagerly to avoid build issues
+const scenarioModules = import.meta.glob('../scenarios/*.json', { eager: true })
+
 interface TestControlsProps {
   storeId: string
   onTestStart?: () => void
@@ -30,11 +33,10 @@ export function TestControls({ storeId, onTestStart, onTestComplete }: TestContr
 
     try {
       // Load scenario
-      const scenarioModules = import.meta.glob('../scenarios/*.json')
       let scenario: TestScenario | null = null
 
       for (const path in scenarioModules) {
-        const module = await scenarioModules[path]() as any
+        const module = scenarioModules[path] as any
         const s = module.default || module
         if (s.id === selectedScenario) {
           scenario = s
