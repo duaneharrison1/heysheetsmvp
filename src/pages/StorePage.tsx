@@ -229,6 +229,28 @@ export default function StorePage() {
         id: (Date.now() + 1).toString(),
         type: 'bot',
         content: aiResponse,
+        // Attach richContent if functionResult returned UI components
+        richContent: (() => {
+          try {
+            const fr = data.functionResult;
+            if (!fr) return undefined;
+            // Prefer explicit components array (HoursList -> 'hours')
+            if (Array.isArray(fr.components) && fr.components.length) {
+              const hoursComp = fr.components.find((c: any) => c.type === 'HoursList');
+              if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {
+                return { type: 'hours', data: hoursComp.props.hours };
+              }
+            }
+            // Fallback: if functionResult.data.hours exists
+            if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {
+              return { type: 'hours', data: fr.data.hours };
+            }
+            return undefined;
+          } catch (e) {
+            console.error('Error mapping functionResult.components to richContent', e);
+            return undefined;
+          }
+        })(),
         timestamp: new Date()
       };
       setMessages(prev => [...prev, botResponse]);

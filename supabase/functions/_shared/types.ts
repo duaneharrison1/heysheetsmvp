@@ -111,6 +111,10 @@ export interface FunctionResult {
   error?: string;
   message?: string;
   needs_clarification?: boolean;
+  // Optional UI component payload that frontend can render
+  components?: Array<Record<string, any>>;
+  // Version of the components payload schema
+  componentsVersion?: string;
 }
 
 /**

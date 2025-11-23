@@ -137,13 +137,47 @@ async function getStoreInfo(
     }
   }
 
+  // Build optional UI components payload (frontend will render if available)
+  const components: Array<Record<string, any>> = [];
+
+  // Normalize hours into a consistent array shape so UI components can consume it
+  function normalizeHours(raw: any): any[] {
+    if (!raw) return [];
+    // Already an array of day objects
+    if (Array.isArray(raw)) return raw;
+    // If it's a string (e.g. "Mon-Fri: 14:00-21:00"), return a single entry
+    if (typeof raw === 'string') {
+      return [{ day: 'Hours', openTime: raw, closeTime: '', isOpen: 'Yes' }];
+    }
+    // Unknown shape
+    return [];
+  }
+
+  let hoursArray: any[] = [];
+  if (Array.isArray(data.hours) && data.hours.length) {
+    hoursArray = data.hours;
+  } else if (Array.isArray(data.store_info) && data.store_info[0]?.hours) {
+    hoursArray = normalizeHours(data.store_info[0].hours);
+  }
+
+  if (hoursArray.length) {
+    components.push({
+      id: `hours-${storeId}`,
+      type: 'HoursList',
+      props: { hours: hoursArray }
+    });
+  }
+
   return {
     success: true,
     data: {
       store_name: store?.name || 'Unknown',
       info_type,
       ...data
-    }
+    },
+    message: 'Here is the requested store information.',
+    components,
+    componentsVersion: '1'
   };
 }
 
