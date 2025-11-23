@@ -674,10 +674,10 @@ export default function StorePage() {
               </div>
 
               {/* Test Controls (Pause/Resume/Stop) or Send/Run Test Button */}
-              {isRunningTest && currentTest ? (
+              {isRunningTest ? (
                 <div className="flex gap-2">
                   {/* Pause/Resume Button */}
-                  {currentTest.status === 'paused' ? (
+                  {currentTest?.status === 'paused' ? (
                     <Button
                       onClick={handleResumeTest}
                       size="sm"
