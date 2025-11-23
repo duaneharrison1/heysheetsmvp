@@ -28,8 +28,6 @@ export function DebugPanel() {
     getTotalCost,
     getCostBreakdown,
     clearHistory,
-    isTestMode,
-    setTestMode,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -91,18 +89,6 @@ export function DebugPanel() {
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Test Mode Toggle */}
-        <div className="mb-3">
-          <Button
-            variant={isTestMode ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setTestMode(!isTestMode)}
-            className="w-full bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
-          >
-            {isTestMode ? '🧪 Test Mode: ON' : 'Test Mode'}
-          </Button>
         </div>
 
         {/* Quick Stats */}
