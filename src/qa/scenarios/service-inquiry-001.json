@@ -1,0 +1,31 @@
+{
+  "id": "service-inquiry-001",
+  "name": "Service Inquiry - Basic",
+  "description": "User asks about available services",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "What services do you offer?",
+      "expected": {
+        "intent": ["SERVICE_INQUIRY", "INFO_REQUEST"],
+        "minConfidence": 85,
+        "functions": ["get_services"],
+        "maxTimeMs": 5000,
+        "richContentType": "services"
+      },
+      "criteria": [
+        "Lists all available services",
+        "Includes key details (price, duration)",
+        "Invites further questions"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Response was helpful and complete",
+      "Tone was friendly and professional"
+    ]
+  }
+}

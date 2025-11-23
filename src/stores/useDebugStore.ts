@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { TestExecution, TestStepResult } from '@/qa/lib/types'
 
 export interface Message {
   id: string
@@ -95,6 +96,12 @@ interface DebugStore {
     model: 'all' | string
   }
 
+  // NEW: Test mode state
+  isTestMode: boolean
+  selectedScenario: string | null
+  currentTest: TestExecution | null
+  evaluatorModel: string  // Default to chat model
+
   addRequest: (request: DebugRequest) => void
   updateRequest: (id: string, updates: Partial<DebugRequest>) => void
   addMessage: (message: Message) => void
@@ -105,6 +112,17 @@ interface DebugStore {
   clearHistory: () => void
   toggleRequestExpanded: (id: string) => void
   isRequestExpanded: (id: string) => boolean
+
+  // NEW: Test methods
+  setTestMode: (enabled: boolean) => void
+  setSelectedScenario: (scenarioId: string | null) => void
+  setEvaluatorModel: (model: string) => void
+  startTest: (execution: TestExecution) => void
+  updateTestExecution: (updates: Partial<TestExecution>) => void
+  addTestResult: (result: TestStepResult) => void
+  completeTest: () => void
+  pauseTest: () => void
+  stopTest: () => void
 
   getFilteredRequests: () => DebugRequest[]
   getAverageIntentTime: () => number
@@ -125,6 +143,12 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     ? localStorage.getItem('heysheets-debug-model') || 'anthropic/claude-3.5-sonnet'
     : 'anthropic/claude-3.5-sonnet',
   filters: { status: 'all', model: 'all' },
+
+  // NEW: Test state
+  isTestMode: false,
+  selectedScenario: null,
+  currentTest: null,
+  evaluatorModel: '', // Empty string means "same as chat model"
 
   addRequest: (request) =>
     set((state) => {
@@ -246,4 +270,72 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
       outputTokens,
     }
   },
+
+  // NEW: Test methods
+  setTestMode: (enabled) =>
+    set({
+      isTestMode: enabled,
+      selectedScenario: enabled ? get().selectedScenario : null,
+    }),
+
+  setSelectedScenario: (scenarioId) => set({ selectedScenario: scenarioId }),
+
+  setEvaluatorModel: (model) => set({ evaluatorModel: model }),
+
+  startTest: (execution) =>
+    set((state) => ({
+      currentTest: execution,
+      // Mark all requests from this test
+      requests: state.requests.map((r) => ({
+        ...r,
+        testRunId: execution.testRunId,
+      })),
+    })),
+
+  updateTestExecution: (updates) =>
+    set((state) => ({
+      currentTest: state.currentTest
+        ? { ...state.currentTest, ...updates }
+        : null,
+    })),
+
+  addTestResult: (result) =>
+    set((state) => {
+      if (!state.currentTest) return state
+
+      return {
+        currentTest: {
+          ...state.currentTest,
+          results: [...state.currentTest.results, result],
+          currentStepIndex: state.currentTest.currentStepIndex + 1,
+        },
+      }
+    }),
+
+  completeTest: () =>
+    set((state) => {
+      if (!state.currentTest) return state
+
+      return {
+        currentTest: {
+          ...state.currentTest,
+          status: 'complete',
+          endTime: Date.now(),
+        },
+      }
+    }),
+
+  pauseTest: () =>
+    set((state) => ({
+      currentTest: state.currentTest
+        ? { ...state.currentTest, status: 'paused' }
+        : null,
+    })),
+
+  stopTest: () =>
+    set((state) => ({
+      currentTest: state.currentTest
+        ? { ...state.currentTest, status: 'stopped', endTime: Date.now() }
+        : null,
+    })),
 }))

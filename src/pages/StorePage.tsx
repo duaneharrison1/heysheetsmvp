@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { H2, Lead } from "@/components/ui/heading";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
@@ -11,6 +12,11 @@ import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Face
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
+import { TestModeSwitch } from "@/qa/components/TestModeSwitch";
+import { ScenarioSelector } from "@/qa/components/ScenarioSelector";
+import { TestControls } from "@/qa/components/TestControls";
+import { toast } from "sonner";
+import type { TestStepResult } from "@/qa/lib/types";
 
 interface Message {
   id: string;
@@ -21,6 +27,8 @@ interface Message {
     type: string;
     data: any;
   };
+  testResult?: TestStepResult;  // NEW: For test mode
+  testSummary?: any;  // NEW: For test summary at end
 }
 
 // Store type for typing the supabase response used in this component
@@ -60,6 +68,10 @@ export default function StorePage() {
   const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
 
+  // Test mode state
+  const isTestMode = useDebugStore((state) => state.isTestMode);
+  const currentTest = useDebugStore((state) => state.currentTest);
+
   useEffect(() => {
     if (storeId) {
       loadStore();
@@ -75,6 +87,80 @@ export default function StorePage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // Listen for test execution and display messages in chat
+  useEffect(() => {
+    if (!currentTest) return;
+
+    // Add test messages to chat as they happen
+    const lastResult = currentTest.results[currentTest.results.length - 1];
+    if (!lastResult) return;
+
+    // Check if we already added this result
+    const alreadyAdded = messages.some(m => m.id === `test-user-${lastResult.stepIndex}`);
+    if (alreadyAdded) return;
+
+    // Add user message
+    setMessages(prev => [...prev, {
+      id: `test-user-${lastResult.stepIndex}`,
+      type: 'user',
+      content: lastResult.userMessage,
+      timestamp: new Date()
+    }]);
+
+    // Add bot message with test result
+    setTimeout(() => {
+      setMessages(prev => [...prev, {
+        id: `test-bot-${lastResult.stepIndex}`,
+        type: 'bot',
+        content: lastResult.botResponse,
+        timestamp: new Date(),
+        testResult: lastResult  // Include test result
+      }]);
+    }, 300);
+  }, [currentTest?.results.length]);
+
+  // Show test summary when test completes
+  useEffect(() => {
+    if (!currentTest) return;
+
+    if (currentTest.status === 'complete' && currentTest.endTime) {
+      // Check if summary already added
+      const summaryExists = messages.some(m => m.id === `test-summary-${currentTest.testRunId}`);
+      if (summaryExists) return;
+
+      // Generate summary
+      const passed = currentTest.results.filter(r => r.passed).length;
+      const failed = currentTest.results.filter(r => !r.passed).length;
+      const avgQuality = currentTest.results
+        .filter(r => r.quality)
+        .reduce((sum, r) => sum + (r.quality?.score || 0), 0) / currentTest.results.length;
+      const duration = ((currentTest.endTime - currentTest.startTime) / 1000).toFixed(1);
+
+      const summary = {
+        name: currentTest.scenarioName,
+        passed: passed === currentTest.totalSteps,
+        totalSteps: currentTest.totalSteps,
+        passedSteps: passed,
+        failedSteps: failed,
+        avgQuality: Math.round(avgQuality || 0),
+        duration: duration,
+        testRunId: currentTest.testRunId
+      };
+
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          id: `test-summary-${currentTest.testRunId}`,
+          type: 'bot',
+          content: '',
+          timestamp: new Date(),
+          testSummary: summary
+        }]);
+
+        toast.success('Test completed successfully!');
+      }, 500);
+    }
+  }, [currentTest?.status, currentTest?.endTime]);
 
   const loadStore = async () => {
     try {
@@ -497,12 +583,71 @@ export default function StorePage() {
 
           <div className="flex-1 p-6 overflow-y-auto space-y-4">
             {messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                storeLogo={store.name.substring(0, 2).toUpperCase()}
-                onActionClick={handleChatAction}
-              />
+              <div key={message.id}>
+                <ChatMessage
+                  message={message}
+                  storeLogo={store.name.substring(0, 2).toUpperCase()}
+                  onActionClick={handleChatAction}
+                />
+
+                {/* Test Result Badge */}
+                {message.testResult && (
+                  <div className="mt-2 flex items-center gap-2 text-xs ml-12">
+                    <Badge variant={message.testResult.passed ? 'default' : 'destructive'}>
+                      {message.testResult.passed ? '✅ PASS' : '❌ FAIL'}
+                    </Badge>
+                    <span className="text-muted-foreground">
+                      ⏱️ {message.testResult.technical.timeMs}ms
+                    </span>
+                    {message.testResult.quality && (
+                      <span className="text-muted-foreground">
+                        Quality: {message.testResult.quality.score}/100
+                      </span>
+                    )}
+                    <span className="text-muted-foreground">
+                      Intent: {message.testResult.technical.intentActual}
+                    </span>
+                  </div>
+                )}
+
+                {/* Test Summary Card */}
+                {message.testSummary && (
+                  <Card className="bg-muted mt-4 ml-12">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        {message.testSummary.passed ? '✅' : '❌'}
+                        Test Complete: {message.testSummary.name}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span>Results:</span>
+                          <span className="font-semibold">
+                            {message.testSummary.passedSteps}/{message.testSummary.totalSteps} passed
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Quality:</span>
+                          <span className="font-semibold">{message.testSummary.avgQuality}/100</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Duration:</span>
+                          <span className="font-semibold">{message.testSummary.duration}s</span>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          className="w-full mt-4"
+                          onClick={() => navigate('/qa-results')}
+                        >
+                          📊 View Full Results
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             ))}
 
             {quickActions.length > 0 && messages.length === 1 && (
@@ -541,27 +686,53 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+            {/* TEST MODE CONTROLS */}
+            <TestModeSwitch />
+
+            {isTestMode && (
+              <>
+                <ScenarioSelector />
+              </>
+            )}
+
+            {/* Message input */}
             <div className="flex gap-3 items-center">
               <Input
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === 'Enter' && !e.shiftKey && !isTestMode) {
                       e.preventDefault();
                       sendMessage(inputValue);
                     }
                   }}
                   placeholder="Type your message..."
+                  disabled={isTyping || isTestMode}
                   className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 />
-              <Button
-                onClick={() => sendMessage(inputValue)}
-                size="sm"
-                className="rounded-full w-11 h-11 p-0"
-                disabled={!inputValue.trim()}
-              >
-                <Send className="w-4 h-4" />
-              </Button>
+
+              {!isTestMode ? (
+                <Button
+                  onClick={() => sendMessage(inputValue)}
+                  size="sm"
+                  className="rounded-full w-11 h-11 p-0"
+                  disabled={!inputValue.trim() || isTyping}
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              ) : (
+                <TestControls
+                  storeId={storeId!}
+                  onTestStart={() => {
+                    // Clear existing messages when test starts
+                    setMessages([]);
+                  }}
+                  onTestComplete={() => {
+                    // Test completed
+                    console.log('Test completed');
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
