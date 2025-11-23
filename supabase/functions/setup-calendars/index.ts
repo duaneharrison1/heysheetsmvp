@@ -85,11 +85,12 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Setup calendars error:', error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('Setup calendars error:', errMsg, error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: errMsg
       }),
       {
         status: 500,

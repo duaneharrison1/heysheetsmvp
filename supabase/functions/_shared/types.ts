@@ -110,6 +110,7 @@ export interface FunctionResult {
   data?: any;
   error?: string;
   message?: string;
+  needs_clarification?: boolean;
 }
 
 /**

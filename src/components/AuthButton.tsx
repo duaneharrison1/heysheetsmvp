@@ -25,9 +25,9 @@ const AuthButton = () => {
         provider: 'google',
         options: { redirectTo: `${window.location.origin}/dashboard` },
       });
-      if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      if (error) toast.error(error.message ?? 'Sign in failed');
     } catch (error) {
-      toast({ title: 'Error', description: 'Sign in failed', variant: 'destructive' });
+      toast.error('Sign in failed');
     } finally {
       setLoading(false);
     }

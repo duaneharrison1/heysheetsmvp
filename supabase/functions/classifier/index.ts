@@ -65,7 +65,7 @@ const ClassificationSchema = {
 export async function classifyIntent(
   messages: Message[],
   context?: { storeData?: StoreData }
-): Promise<Classification> {
+): Promise<{ classification: Classification; usage: { input: number; output: number } }> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
   if (!OPENROUTER_API_KEY) {

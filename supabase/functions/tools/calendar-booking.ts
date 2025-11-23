@@ -316,6 +316,13 @@ export async function createBooking(
     // Get service from sheet
     const schema = JSON.parse(store.detected_schema);
     const servicesTab = findActualTabName('services', schema);
+    if (!servicesTab) {
+      console.error('[create_booking] Services tab not found in schema');
+      return {
+        success: false,
+        error: 'Services not configured',
+      };
+    }
     const servicesData = await loadSheetTab(storeId, servicesTab, authToken);
 
     const service = servicesData.find((s: any) =>
