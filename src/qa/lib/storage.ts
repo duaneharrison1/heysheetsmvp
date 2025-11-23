@@ -1,7 +1,6 @@
-import { put, list } from '@vercel/blob'
 import type { TestRunSummary } from './types'
 
-const BLOB_FILENAME = 'qa-test-results.json'
+const STORAGE_KEY = 'heysheets-qa-test-results'
 
 interface ResultsBlob {
   results: TestRunSummary[]
@@ -20,12 +19,8 @@ export async function saveTestResult(summary: TestRunSummary): Promise<void> {
       existing.results = existing.results.slice(-100)
     }
 
-    // Save back to blob
-    await put(BLOB_FILENAME, JSON.stringify(existing, null, 2), {
-      access: 'public',
-      contentType: 'application/json',
-      addRandomSuffix: false
-    })
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existing))
 
     console.log('✅ Test result saved:', summary.testRunId)
 
@@ -37,17 +32,13 @@ export async function saveTestResult(summary: TestRunSummary): Promise<void> {
 
 export async function loadTestResults(): Promise<ResultsBlob> {
   try {
-    const { blobs } = await list()
-    const resultsBlob = blobs.find(blob => blob.pathname === BLOB_FILENAME)
+    const stored = localStorage.getItem(STORAGE_KEY)
 
-    if (!resultsBlob) {
-      // No results yet
+    if (!stored) {
       return { results: [] }
     }
 
-    const response = await fetch(resultsBlob.url)
-    const data = await response.json()
-
+    const data = JSON.parse(stored)
     return data
 
   } catch (error) {
