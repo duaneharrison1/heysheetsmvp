@@ -11,9 +11,15 @@ import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Face
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
-import { TestModeSwitch } from "@/qa/components/TestModeSwitch";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { ScenarioSelector } from "@/qa/components/ScenarioSelector";
-import { TestControls } from "@/qa/components/TestControls";
+import { TestRunner } from "@/qa/lib/test-runner";
+import type { TestScenario } from "@/qa/lib/types";
+import { toast } from "sonner";
+
+// Import scenarios eagerly
+const scenarioModules = import.meta.glob('@/qa/scenarios/*.json', { eager: true });
 
 interface Message {
   id: string;
@@ -69,6 +75,13 @@ export default function StorePage() {
 
   // Test mode state
   const isTestMode = useDebugStore((state) => state.isTestMode);
+  const setTestMode = useDebugStore((state) => state.setTestMode);
+  const selectedScenario = useDebugStore((state) => state.selectedScenario);
+  const evaluatorModel = useDebugStore((state) => state.evaluatorModel);
+
+  // Test runner
+  const [testRunner] = useState(() => new TestRunner());
+  const [isRunningTest, setIsRunningTest] = useState(false);
 
   useEffect(() => {
     if (storeId) {
@@ -327,6 +340,55 @@ export default function StorePage() {
     }
   };
 
+  const handleRunTest = async () => {
+    if (!selectedScenario) {
+      toast.error('Please select a test scenario');
+      return;
+    }
+
+    if (!storeId) {
+      toast.error('No store ID');
+      return;
+    }
+
+    try {
+      setIsRunningTest(true);
+
+      // Load scenario
+      let scenario: TestScenario | null = null;
+      for (const path in scenarioModules) {
+        const module = scenarioModules[path] as any;
+        const s = module.default || module;
+        if (s.id === selectedScenario) {
+          scenario = s;
+          break;
+        }
+      }
+
+      if (!scenario) {
+        toast.error('Scenario not found');
+        return;
+      }
+
+      toast.info(`Running test: ${scenario.name}`);
+
+      // Run test
+      await testRunner.runScenario(
+        scenario,
+        storeId,
+        selectedModel,
+        evaluatorModel || selectedModel
+      );
+
+      toast.success(`Test complete: ${scenario.name}`);
+    } catch (error) {
+      console.error('Test failed:', error);
+      toast.error('Test execution failed');
+    } finally {
+      setIsRunningTest(false);
+    }
+  };
+
   const handleChatAction = (action: string) => {
     sendMessage(action);
   };
@@ -551,36 +613,56 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            {isTestMode ? (
-              <div className="space-y-3">
-                <TestModeSwitch />
-                <ScenarioSelector />
-                <TestControls storeId={storeId || ''} />
+            <div className="flex gap-3 items-center">
+              {/* Test Mode Switch - Always visible */}
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="test-mode-toggle"
+                  checked={isTestMode}
+                  onCheckedChange={setTestMode}
+                />
+                <Label htmlFor="test-mode-toggle" className="text-xs whitespace-nowrap cursor-pointer">
+                  {isTestMode ? '🧪 Test' : 'Test'}
+                </Label>
               </div>
-            ) : (
-              <div className="flex gap-3 items-center">
+
+              {/* Scenario Selector - Only visible when test mode is ON */}
+              {isTestMode && (
+                <div className="flex-1">
+                  <ScenarioSelector />
+                </div>
+              )}
+
+              {/* Input Field - Only visible when test mode is OFF */}
+              {!isTestMode && (
                 <Input
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage(inputValue);
-                      }
-                    }}
-                    placeholder="Type your message..."
-                    className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  />
-                <Button
-                  onClick={() => sendMessage(inputValue)}
-                  size="sm"
-                  className="rounded-full w-11 h-11 p-0"
-                  disabled={!inputValue.trim()}
-                >
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage(inputValue);
+                    }
+                  }}
+                  placeholder="Type your message..."
+                  className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                />
+              )}
+
+              {/* Send/Run Test Button - Changes based on test mode */}
+              <Button
+                onClick={isTestMode ? handleRunTest : () => sendMessage(inputValue)}
+                size="sm"
+                className="rounded-full w-11 h-11 p-0"
+                disabled={isTestMode ? !selectedScenario || isRunningTest : !inputValue.trim()}
+              >
+                {isRunningTest ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
                   <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
