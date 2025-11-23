@@ -10,10 +10,8 @@ import { formatRequestForAI, formatAllRequestsForAI } from '@/lib/debug/format-f
 import { DEBUG_CONFIG } from '@/config/debug';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useNavigate } from 'react-router-dom';
 
 export function DebugPanel() {
-  const navigate = useNavigate();
   const {
     isPanelOpen,
     togglePanel,
@@ -30,11 +28,6 @@ export function DebugPanel() {
     getTotalCost,
     getCostBreakdown,
     clearHistory,
-    // Test mode state
-    isTestMode,
-    currentTest,
-    evaluatorModel,
-    setEvaluatorModel,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -85,7 +78,6 @@ export function DebugPanel() {
 
         {/* Model Selector */}
         <div className="mb-3">
-          <label className="text-xs text-gray-400 block mb-1">Chat Model</label>
           <select
             value={selectedModel}
             onChange={(e) => setModel(e.target.value)}
@@ -98,47 +90,6 @@ export function DebugPanel() {
             ))}
           </select>
         </div>
-
-        {/* Evaluator Model Selector - Only in Test Mode */}
-        {isTestMode && (
-          <div className="mb-3">
-            <label className="text-xs text-gray-400 block mb-1">Evaluator Model</label>
-            <select
-              value={evaluatorModel}
-              onChange={(e) => setEvaluatorModel(e.target.value)}
-              className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
-            >
-              {DEBUG_CONFIG.models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Test Progress - Only when test is running */}
-        {currentTest && (
-          <div className="mb-3 p-3 bg-blue-900/20 border border-blue-800 rounded">
-            <div className="text-xs text-blue-300 font-semibold mb-2">
-              🧪 Test Running
-            </div>
-            <div className="text-xs text-gray-300">
-              {currentTest.scenarioName}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">
-              Step {currentTest.currentStepIndex + 1} of {currentTest.totalSteps}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/qa-results')}
-              className="w-full mt-2 h-7 bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700 hover:text-gray-100 text-xs"
-            >
-              View Test History
-            </Button>
-          </div>
-        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
