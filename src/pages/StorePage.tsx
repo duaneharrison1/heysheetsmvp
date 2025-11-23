@@ -21,6 +21,10 @@ interface Message {
     type: string;
     data: any;
   };
+  testResult?: {
+    passed: boolean;
+    qualityScore?: number;
+  };
 }
 
 // Store type for typing the supabase response used in this component
@@ -59,6 +63,9 @@ export default function StorePage() {
   const updateRequest = useDebugStore((state) => state.updateRequest);
   const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
+
+  // Test mode state
+  const isTestMode = useDebugStore((state) => state.isTestMode);
 
   useEffect(() => {
     if (storeId) {
@@ -541,28 +548,34 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            <div className="flex gap-3 items-center">
-              <Input
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage(inputValue);
-                    }
-                  }}
-                  placeholder="Type your message..."
-                  className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                />
-              <Button
-                onClick={() => sendMessage(inputValue)}
-                size="sm"
-                className="rounded-full w-11 h-11 p-0"
-                disabled={!inputValue.trim()}
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
+            {isTestMode ? (
+              <div className="text-center text-sm text-muted-foreground">
+                🧪 Test Mode Enabled - UI components will be added here
+              </div>
+            ) : (
+              <div className="flex gap-3 items-center">
+                <Input
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage(inputValue);
+                      }
+                    }}
+                    placeholder="Type your message..."
+                    className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  />
+                <Button
+                  onClick={() => sendMessage(inputValue)}
+                  size="sm"
+                  className="rounded-full w-11 h-11 p-0"
+                  disabled={!inputValue.trim()}
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
