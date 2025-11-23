@@ -148,7 +148,7 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   isTestMode: false,
   selectedScenario: null,
   currentTest: null,
-  evaluatorModel: '', // Empty string means "same as chat model"
+  evaluatorModel: 'x-ai/grok-4.1-fast', // Default evaluator model
 
   addRequest: (request) =>
     set((state) => {

@@ -20,6 +20,10 @@ interface Message {
   content: string;
   timestamp: Date;
   richContent?: any;
+  testResult?: {
+    passed: boolean;
+    qualityScore?: number;
+  };
 }
 
 interface ChatMessageProps {
@@ -249,6 +253,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
         <ChatBubble type={message.type} timestamp={message.timestamp}>
           <div className="text-sm leading-relaxed">{message.content}</div>
         </ChatBubble>
+        {message.testResult && (
+          <div className="mt-2">
+            <Badge variant={message.testResult.passed ? 'default' : 'destructive'} className="text-xs">
+              {message.testResult.passed ? '✅' : '❌'}
+              {message.testResult.qualityScore !== undefined && ` ${message.testResult.qualityScore}/100`}
+            </Badge>
+          </div>
+        )}
         {renderRichContent()}
       </div>
 
