@@ -249,6 +249,11 @@ export default function StorePage() {
               if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {
                 return { type: 'hours', data: hoursComp.props.hours };
               }
+
+              const leadFormComp = fr.components.find((c: any) => c.type === 'LeadForm');
+              if (leadFormComp && leadFormComp.props) {
+                return { type: 'lead_form', data: leadFormComp.props };
+              }
             }
             // Fallback: if functionResult.data.hours exists
             if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {

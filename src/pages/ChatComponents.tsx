@@ -298,7 +298,7 @@ const ChatComponentsShowcase: React.FC = () => {
 							<div className="text-xs text-muted-foreground mb-2 font-medium">
 								LeadForm
 							</div>
-							<LeadForm onSubmit={(d) => console.log('lead', d)} />
+							<LeadForm stackButtons onSubmit={(d) => console.log('lead', d)} />
 						</div>
 
 						<div>

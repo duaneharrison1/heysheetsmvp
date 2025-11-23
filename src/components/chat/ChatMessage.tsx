@@ -12,6 +12,7 @@ import ServiceCard from './ServiceCard';
 import ServicesGrid from './ServicesGrid';
 import HoursList from './HoursList';
 import BookingCard from './BookingCard';
+import LeadForm from './LeadForm';
 
 interface Message {
   id: string;
@@ -210,6 +211,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
                   {action}
                 </Button>
             ))}
+          </div>
+        );
+
+      case 'lead_form':
+        return (
+          <div className="mt-3">
+            <LeadForm 
+              {...data}
+              maxWidth="500px"
+              onSubmit={(formData: any) => {
+                console.log('[ChatMessage] LeadForm submitted:', formData);
+                onActionClick?.('submit_lead', formData);
+              }}
+            />
           </div>
         );
 

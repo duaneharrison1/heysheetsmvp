@@ -155,12 +155,12 @@ CONFIDENCE SCORING:
 - 85-100 (HIGH): Crystal clear intent and all required information present → needs_clarification = false
 
 CRITICAL RULES:
-1. Only call submit_lead if user EXPLICITLY offers contact info or asks to be contacted
+1. For LEAD_GENERATION intent, ALWAYS call submit_lead (even if contact info is missing - the function will return a form)
 2. Use get_services/get_products for browsing/searching (they handle semantic matching)
 3. Use get_store_info for general questions ("what do you offer?", "tell me about your studio")
 4. Parse relative dates ("tomorrow", "next Monday") into YYYY-MM-DD format
 5. Extract query parameter generously - even vague terms like "sake", "beginner", "functional" are useful
-6. If confidence < 70, provide a specific clarification_question
+6. If confidence < 70 AND not LEAD_GENERATION, provide a specific clarification_question
 7. Never hallucinate information - only extract what user actually said
 
 BOOKING FLOW:

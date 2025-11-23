@@ -374,7 +374,40 @@ async function submitLead(
   params: any,
   context: FunctionContext
 ): Promise<FunctionResult> {
-  // Validate base params
+  const { storeId, authToken, store } = context;
+
+  // Check if required fields are missing
+  const requiredFields = ['name', 'email'];
+  const missingFields = requiredFields.filter(field => !params[field] || params[field].trim() === '');
+
+  // If required info is missing, return LeadForm component
+  if (missingFields.length > 0) {
+    const components = [{
+      id: `lead-form-${storeId}-${Date.now()}`,
+      type: 'LeadForm',
+      props: {
+        // Pre-fill any data that was provided
+        defaultValues: {
+          name: params.name || '',
+          email: params.email || '',
+          phone: params.phone || '',
+          message: params.message || ''
+        }
+      }
+    }];
+
+    return {
+      success: false,
+      data: {
+        missing_fields: missingFields
+      },
+      message: `Please provide your contact information so we can assist you better.`,
+      components,
+      componentsVersion: '1'
+    };
+  }
+
+  // Validate params
   const validation = validateParams(SubmitLeadSchema, params);
   if (!validation.valid) {
     return {
@@ -382,8 +415,6 @@ async function submitLead(
       error: `Invalid parameters: ${validation.errors.join(', ')}`
     };
   }
-
-  const { storeId, authToken, store } = context;
 
   // Find leads tab
   const detectedSchema = store?.detected_schema || {};

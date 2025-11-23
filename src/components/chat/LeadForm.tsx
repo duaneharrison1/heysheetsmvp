@@ -5,11 +5,14 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { Send, RotateCcw } from 'lucide-react'
 
 export const LeadForm: React.FC<{
   onSubmit?: (data: any) => void
   maxWidth?: string
-}> = ({ onSubmit, maxWidth }) => {
+  /** Force buttons to stack vertically regardless of viewport */
+  stackButtons?: boolean
+}> = ({ onSubmit, maxWidth, stackButtons }) => {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -30,7 +33,7 @@ export const LeadForm: React.FC<{
 
   return (
     <Card
-      className={`w-full mx-auto ${maxWidth ? '' : 'max-w-full sm:max-w-md'} border border-border shadow-sm`}
+      className={`w-full ${maxWidth ? '' : 'mx-auto max-w-full sm:max-w-md'} border border-border shadow-sm`}
       style={maxWidth ? { maxWidth } : undefined}
     >
       <CardHeader className="pb-3 p-3 sm:p-6">
@@ -59,13 +62,15 @@ export const LeadForm: React.FC<{
             <Textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Short note or requirements" />
           </div>
 
-          <div className="flex gap-2">
-            <Button type="submit" className="flex-1" disabled={submitting}>
+          <div className={stackButtons ? 'flex flex-col gap-2' : 'flex flex-col md:flex-row gap-2'}>
+            <Button type="submit" className={stackButtons ? 'w-full' : 'w-full md:flex-1'} disabled={submitting}>
+              <Send className="w-4 h-4 mr-2" />
               {submitting ? 'Sending...' : 'Send Message'}
             </Button>
             <Button
               type="button"
               variant="outline"
+              className={stackButtons ? 'w-full' : 'w-full md:w-auto'}
               onClick={() => {
                 setName('')
                 setEmail('')
@@ -73,6 +78,7 @@ export const LeadForm: React.FC<{
                 setMessage('')
               }}
             >
+              <RotateCcw className="w-4 h-4 mr-2" />
               Reset
             </Button>
           </div>
