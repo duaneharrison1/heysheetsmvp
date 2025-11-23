@@ -16,11 +16,16 @@ export function ScenarioSelector() {
     // Load scenarios from imported modules
     const loadedScenarios: TestScenario[] = []
 
+    console.log('📦 Loading scenarios, scenarioModules:', scenarioModules)
+
     for (const path in scenarioModules) {
       const module = scenarioModules[path] as any
-      loadedScenarios.push(module.default || module)
+      const scenario = module.default || module
+      console.log('📄 Loaded scenario:', { path, scenario })
+      loadedScenarios.push(scenario)
     }
 
+    console.log('✅ All scenarios loaded:', loadedScenarios)
     setScenarios(loadedScenarios)
   }, [])
 
@@ -33,10 +38,19 @@ export function ScenarioSelector() {
     }
   }
 
+  const handleScenarioChange = (value: string) => {
+    console.log('🔄 Scenario changed to:', value)
+    setSelectedScenario(value)
+    console.log('✅ Called setSelectedScenario with:', value)
+  }
+
+  // Log current state
+  console.log('🎯 ScenarioSelector render - selectedScenario:', selectedScenario, 'scenarios count:', scenarios.length)
+
   return (
     <div className="mb-3">
       <div className="flex gap-2 mb-2">
-        <Select value={selectedScenario || ''} onValueChange={setSelectedScenario}>
+        <Select value={selectedScenario || ''} onValueChange={handleScenarioChange}>
           <SelectTrigger className="flex-1">
             <SelectValue placeholder="Select test scenario..." />
           </SelectTrigger>
