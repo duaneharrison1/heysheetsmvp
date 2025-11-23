@@ -140,8 +140,8 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   isPanelOpen: false, // Closed by default
   expandedRequests: new Set(),
   selectedModel: typeof localStorage !== 'undefined'
-    ? localStorage.getItem('heysheets-debug-model') || 'anthropic/claude-3.5-sonnet'
-    : 'anthropic/claude-3.5-sonnet',
+    ? localStorage.getItem('heysheets-debug-model') || 'x-ai/grok-4.1-fast'
+    : 'x-ai/grok-4.1-fast',
   filters: { status: 'all', model: 'all' },
 
   // NEW: Test state
