@@ -78,6 +78,7 @@ export default function StorePage() {
   const setTestMode = useDebugStore((state) => state.setTestMode);
   const selectedScenario = useDebugStore((state) => state.selectedScenario);
   const evaluatorModel = useDebugStore((state) => state.evaluatorModel);
+  const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
 
   // Test runner
   const [testRunner] = useState(() => new TestRunner());
@@ -613,43 +614,48 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            <div className="flex gap-3 items-center">
-              {/* Test Mode Switch - Always visible */}
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="test-mode-toggle"
-                  checked={isTestMode}
-                  onCheckedChange={setTestMode}
-                />
-                <Label htmlFor="test-mode-toggle" className="text-xs whitespace-nowrap cursor-pointer">
-                  {isTestMode ? '🧪 Test' : 'Test'}
-                </Label>
+            {/* Test Scenarios - Floating boxes above input when test mode ON */}
+            {isTestMode && (
+              <div className="mb-4">
+                <ScenarioSelector />
               </div>
+            )}
 
-              {/* Scenario Selector - Only visible when test mode is ON */}
-              {isTestMode && (
-                <div className="flex-1">
-                  <ScenarioSelector />
+            <div className="flex gap-3 items-center">
+              {/* Test Mode Switch - Only visible when Debug Panel is open */}
+              {isPanelOpen && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="test-mode-toggle"
+                    checked={isTestMode}
+                    onCheckedChange={setTestMode}
+                  />
+                  <Label htmlFor="test-mode-toggle" className="text-xs whitespace-nowrap cursor-pointer">
+                    {isTestMode ? '🧪 Test' : 'Test'}
+                  </Label>
                 </div>
               )}
 
-              {/* Input Field - Only visible when test mode is OFF */}
-              {!isTestMode && (
-                <Input
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
+              {/* Input Field - Always visible */}
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (isTestMode) {
+                      handleRunTest();
+                    } else {
                       sendMessage(inputValue);
                     }
-                  }}
-                  placeholder="Type your message..."
-                  className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                />
-              )}
+                  }
+                }}
+                placeholder={isTestMode ? "Select a scenario above and press Send to run test..." : "Type your message..."}
+                className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                disabled={isTestMode}
+              />
 
-              {/* Send/Run Test Button - Changes based on test mode */}
+              {/* Send/Run Test Button */}
               <Button
                 onClick={isTestMode ? handleRunTest : () => sendMessage(inputValue)}
                 size="sm"
