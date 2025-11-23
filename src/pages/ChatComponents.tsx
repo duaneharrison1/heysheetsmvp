@@ -7,6 +7,7 @@ import ChatBubble from '@/components/chat/ChatBubble';
 import ChatMessage from '@/components/chat/ChatMessage';
 import ProductCard from '@/components/chat/ProductCard';
 import ServiceCard from '@/components/chat/ServiceCard';
+import ServicesGrid from '@/components/chat/ServicesGrid';
 import HoursList from '@/components/chat/HoursList';
 import BookingCard from '@/components/chat/BookingCard';
 import LeadForm from '@/components/chat/LeadForm';
@@ -213,11 +214,10 @@ const ChatComponentsShowcase: React.FC = () => {
 									<div className="text-xs text-muted-foreground mb-2">
 										Services Grid
 									</div>
-									<ChatMessage
-										message={sampleMessageServices}
-										storeLogo={''}
-										onActionClick={(a, d) => console.log('action', a, d)}
-									/>
+																<ServicesGrid
+																	services={sampleMessageServices.richContent.data}
+																	onActionClick={(a, d) => console.log('action', a, d)}
+																/>
 								</div>
 								<div className="border-l-2 border-muted pl-3">
 									<div className="text-xs text-muted-foreground mb-2">

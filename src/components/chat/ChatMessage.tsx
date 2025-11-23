@@ -9,6 +9,7 @@ import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "luc
 import ChatBubble from './ChatBubble';
 import ProductCard from './ProductCard';
 import ServiceCard from './ServiceCard';
+import ServicesGrid from './ServicesGrid';
 import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 
@@ -127,8 +128,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
                 <div
                   key={index}
                   ref={(el) => { itemRefs.current[index] = el; }}
-                  className="flex-shrink-0 w-48 sm:w-56 md:w-64"
-                  style={maxItemHeight ? { height: `${maxItemHeight}px` } : undefined}
+                  className="flex-shrink-0 w-48 sm:w-56 md:w-64 box-border"
+                  style={maxItemHeight ? { minHeight: `${maxItemHeight}px` } : undefined}
                 >
                   <ProductCard product={product} onActionClick={onActionClick} />
                 </div>
@@ -155,15 +156,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
             </div>
           );
         }
+
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-            {data.slice(0, 4).map((service: any, index: number) => (
-              <ServiceCard 
-                key={index} 
-                service={service} 
-                onActionClick={onActionClick}
-              />
-            ))}
+          <div className="mt-3">
+            <ServicesGrid services={data} onActionClick={onActionClick} />
           </div>
         );
 

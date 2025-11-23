@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Package, ShoppingCart } from 'lucide-react'
+import { Package, ShoppingCart, Info } from 'lucide-react'
 
 export const ProductCard: React.FC<{
   product: any
@@ -39,24 +39,29 @@ export const ProductCard: React.FC<{
       </CardHeader>
       <CardContent className="pt-0 p-3 sm:p-4 flex-1 flex flex-col">
         <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4 line-clamp-3 leading-tight">{product.description}</p>
-        <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-          <Button 
-            size="sm" 
-            className="flex-1 min-w-0" 
-            onClick={() => onActionClick?.('add_to_cart', product)} 
+        <div className="flex flex-col gap-2 mt-auto">
+          <Button
+            size="sm"
+            className="w-full flex justify-center items-center"
+            onClick={() => onActionClick?.('add_to_cart', product)}
             disabled={parseInt(product.stock) === 0}
           >
-            <ShoppingCart className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Add to Cart</span>
-            <span className="sm:hidden">Add</span>
+            <span className="flex items-center justify-center gap-2 w-full">
+              <ShoppingCart className="h-3 w-3" />
+              <span className="hidden sm:inline truncate text-center">Add to Cart</span>
+              <span className="sm:hidden truncate text-center">Add</span>
+            </span>
           </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            className="px-3 sm:px-4 min-w-0" 
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full px-3 sm:px-4 flex justify-center items-center"
             onClick={() => onActionClick?.('view_details', product)}
           >
-            Details
+            <span className="flex items-center justify-center gap-2 w-full">
+              <Info className="h-3 w-3" />
+              <span className="truncate text-center">Details</span>
+            </span>
           </Button>
         </div>
       </CardContent>

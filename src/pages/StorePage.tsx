@@ -240,6 +240,10 @@ export default function StorePage() {
               if (productsComp && productsComp.props && Array.isArray(productsComp.props.products)) {
                 return { type: 'products', data: productsComp.props.products };
               }
+              const servicesComp = fr.components.find((c: any) => c.type === 'services' || c.type === 'Services');
+              if (servicesComp && servicesComp.props && Array.isArray(servicesComp.props.services)) {
+                return { type: 'services', data: servicesComp.props.services };
+              }
 
               const hoursComp = fr.components.find((c: any) => c.type === 'HoursList');
               if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {

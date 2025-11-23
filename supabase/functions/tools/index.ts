@@ -249,6 +249,17 @@ async function getServices(
     services = matches.map(m => m.item);
   }
 
+  // Build optional UI components payload (frontend will render if available)
+  const components: Array<Record<string, any>> = [];
+
+  if (Array.isArray(services) && services.length) {
+    components.push({
+      id: `services-${storeId}`,
+      type: 'services',
+      props: { services }
+    });
+  }
+
   return {
     success: true,
     data: {
@@ -256,7 +267,10 @@ async function getServices(
       count: services.length,
       query: query || null,
       category: category || null
-    }
+    },
+    message: `Found ${services.length} services.`,
+    components,
+    componentsVersion: '1'
   };
 }
 
