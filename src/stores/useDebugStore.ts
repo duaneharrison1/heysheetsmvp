@@ -82,6 +82,23 @@ export interface DebugRequest {
     message: string
     stack?: string
   }
+
+  // 🆕 TEST MODE: Optional test result data
+  testResult?: {
+    passed: boolean
+    technical?: {
+      intentCorrect: boolean
+      confidenceOK: boolean
+      functionsCorrect: boolean
+      timingOK: boolean
+      noErrors: boolean
+    }
+    quality?: {
+      score: number
+      passed: boolean
+      reasoning: string
+    }
+  }
 }
 
 interface DebugStore {

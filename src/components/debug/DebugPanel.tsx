@@ -125,12 +125,12 @@ export function DebugPanel() {
               {currentTest.scenarioName}
             </div>
             <div className="text-xs text-gray-400">
-              Step {currentTest.results.length} of {currentTest.totalSteps}
+              Step {Math.min(currentTest.results.length, currentTest.totalSteps)} of {currentTest.totalSteps}
             </div>
             <div className="mt-2 w-full bg-gray-800 rounded-full h-2">
               <div
                 className="bg-blue-500 h-2 rounded-full transition-all"
-                style={{ width: `${(currentTest.results.length / currentTest.totalSteps) * 100}%` }}
+                style={{ width: `${Math.min(100, (currentTest.results.length / currentTest.totalSteps) * 100)}%` }}
               />
             </div>
           </div>
@@ -338,6 +338,19 @@ function RequestCard({
         )
       )}
 
+      {/* 🆕 TEST RESULT BADGE (collapsed view) */}
+      {request.testResult && (
+        <div className="mb-2">
+          <Badge
+            variant={request.testResult.passed ? 'default' : 'destructive'}
+            className="text-xs"
+          >
+            {request.testResult.passed ? '✅ Test Passed' : '❌ Test Failed'}
+            {request.testResult.quality?.score && ` • ${request.testResult.quality.score}/100`}
+          </Badge>
+        </div>
+      )}
+
       {/* Error Preview */}
       {request.error && (
         <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded mb-2">
@@ -393,6 +406,55 @@ function RequestCard({
                     ⏭️ Response: skipped
                   </div>
                 ) : null}
+              </div>
+            </div>
+          )}
+
+          {/* 🆕 TEST RESULTS DETAILS (expanded view) */}
+          {request.testResult && (
+            <div className="text-xs text-gray-300">
+              <div className="text-gray-400 font-semibold mb-1">
+                Test Results:
+              </div>
+              <div className="space-y-1">
+                {/* Overall Pass/Fail */}
+                <div className={request.testResult.passed ? 'text-green-400' : 'text-red-400'}>
+                  {request.testResult.passed ? '✅ Passed' : '❌ Failed'}
+                </div>
+
+                {/* Technical Checks */}
+                {request.testResult.technical && (
+                  <div className="ml-2 space-y-0.5">
+                    <div className={request.testResult.technical.intentCorrect ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.intentCorrect ? '✓' : '✗'} Intent correct
+                    </div>
+                    <div className={request.testResult.technical.confidenceOK ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.confidenceOK ? '✓' : '✗'} Confidence OK
+                    </div>
+                    <div className={request.testResult.technical.functionsCorrect ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.functionsCorrect ? '✓' : '✗'} Functions correct
+                    </div>
+                    <div className={request.testResult.technical.timingOK ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.timingOK ? '✓' : '✗'} Timing OK
+                    </div>
+                    <div className={request.testResult.technical.noErrors ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.noErrors ? '✓' : '✗'} No errors
+                    </div>
+                  </div>
+                )}
+
+                {/* Quality Evaluation */}
+                {request.testResult.quality && (
+                  <div className="mt-2 p-2 bg-gray-800 rounded">
+                    <div className="text-gray-400 font-semibold mb-1">
+                      Quality: {request.testResult.quality.score}/100
+                      {request.testResult.quality.passed ? ' ✓' : ' ✗'}
+                    </div>
+                    <div className="text-gray-400 text-xs">
+                      {request.testResult.quality.reasoning}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

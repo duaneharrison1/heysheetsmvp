@@ -32,6 +32,21 @@ export class TestRunner {
     // Update store
     useDebugStore.getState().startTest(execution)
 
+    // 🆕 ADD TEST SCENARIO CARD to timeline
+    const scenarioRequestId = `test-scenario-${testRunId}`
+    useDebugStore.getState().addRequest({
+      id: scenarioRequestId,
+      timestamp: Date.now(),
+      userMessage: `📋 Test Scenario: ${scenario.name}`,
+      model: chatModel,
+      timings: { requestStart: Date.now() },
+      status: 'complete',
+      response: {
+        text: scenario.description || '',
+        duration: 0,
+      },
+    })
+
     // Build conversation history
     const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = []
 
@@ -103,7 +118,20 @@ export class TestRunner {
     const correlationId = generateCorrelationId()
     const stepStart = Date.now()
 
+    // 🆕 ADD DEBUG REQUEST (like normal chat mode)
+    useDebugStore.getState().addRequest({
+      id: correlationId,
+      timestamp: stepStart,
+      userMessage: step.userMessage,
+      model: chatModel,
+      timings: { requestStart: stepStart },
+      status: 'pending',
+    })
+
     try {
+      // Update status to classifying
+      useDebugStore.getState().updateRequest(correlationId, { status: 'classifying' })
+
       // Call Edge Function
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
@@ -142,6 +170,52 @@ export class TestRunner {
       // Extract rich content (same logic as StorePage)
       const richContent = this.extractRichContent(data.functionResult)
 
+      // Calculate passed status
+      const passed = technical.intentCorrect &&
+                     technical.confidenceOK &&
+                     technical.functionsCorrect &&
+                     technical.timingOK &&
+                     technical.noErrors &&
+                     (quality?.passed ?? true)
+
+      // 🆕 UPDATE DEBUG REQUEST with response data (like normal chat mode) + test results
+      useDebugStore.getState().updateRequest(correlationId, {
+        response: {
+          text: data.text,
+          richContent,
+          duration: 0,
+        },
+        timings: {
+          requestStart: stepStart,
+          totalDuration: timeMs,
+          intentDuration: data.debug?.intentDuration,
+          functionDuration: data.debug?.functionDuration,
+          responseDuration: data.debug?.responseDuration,
+        },
+        intent: data.debug?.intent,
+        functionCalls: data.debug?.functionCalls,
+        tokens: data.debug?.tokens,
+        cost: data.debug?.cost,
+        steps: data.debug?.steps,
+        status: 'complete',
+        // 🆕 ADD TEST RESULT DATA
+        testResult: {
+          passed,
+          technical: {
+            intentCorrect: technical.intentCorrect,
+            confidenceOK: technical.confidenceOK,
+            functionsCorrect: technical.functionsCorrect,
+            timingOK: technical.timingOK,
+            noErrors: technical.noErrors,
+          },
+          quality: quality ? {
+            score: quality.score,
+            passed: quality.passed,
+            reasoning: quality.reasoning,
+          } : undefined,
+        },
+      })
+
       // Build result
       const result: TestStepResult = {
         stepId: step.id,
@@ -152,18 +226,23 @@ export class TestRunner {
         correlationId,
         technical,
         quality,
-        passed: technical.intentCorrect &&
-                technical.confidenceOK &&
-                technical.functionsCorrect &&
-                technical.timingOK &&
-                technical.noErrors &&
-                (quality?.passed ?? true),
+        passed,
         timestamp: Date.now()
       }
 
       return result
 
     } catch (error) {
+      // 🆕 UPDATE DEBUG REQUEST with error
+      useDebugStore.getState().updateRequest(correlationId, {
+        status: 'error',
+        error: {
+          stage: 'request',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      })
+
       // Handle error
       return this.createErrorResult(step, stepIndex, correlationId, error)
     }
