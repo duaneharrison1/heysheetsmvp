@@ -367,22 +367,9 @@ function RequestCard({
         )
       )}
 
-      {/* 🆕 TEST RESULT BADGE (collapsed view) */}
-      {request.testResult && (
-        <div className="mb-2">
-          <Badge
-            variant={request.testResult.passed ? 'default' : 'destructive'}
-            className="text-xs"
-          >
-            {request.testResult.passed ? '✅ Test Passed' : '❌ Test Failed'}
-            {request.testResult.quality?.score && ` • ${request.testResult.quality.score}/100`}
-          </Badge>
-        </div>
-      )}
-
-      {/* 🆕 GOAL-BASED TURN BADGE (collapsed view) */}
+      {/* 🆕 GOAL-BASED TEST: Turn & Simulated badges */}
       {request.goalBasedTurn && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
           <Badge
             variant="outline"
             className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30"
@@ -394,9 +381,22 @@ function RequestCard({
               variant="outline"
               className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
             >
-              Simulated
+              🤖 Simulated
             </Badge>
           )}
+        </div>
+      )}
+
+      {/* 🆕 TEST RESULT BADGE (collapsed view) */}
+      {request.testResult && (
+        <div className="mb-2">
+          <Badge
+            variant={request.testResult.passed ? 'default' : 'destructive'}
+            className="text-xs"
+          >
+            {request.testResult.passed ? '✅ Test Passed' : '❌ Test Failed'}
+            {request.testResult.quality?.score && ` • ${request.testResult.quality.score}/100`}
+          </Badge>
         </div>
       )}
 

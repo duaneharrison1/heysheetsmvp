@@ -31,14 +31,6 @@ interface Message {
   goalBasedTurn?: GoalBasedTurnResult; // For goal-based bot messages
 }
 
-// Helper for performance colors
-function getPerformanceColor(score: number): string {
-  if (score >= 85) return 'bg-green-500/10 text-green-500 border-green-500/30'
-  if (score >= 70) return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-  if (score >= 50) return 'bg-orange-500/10 text-orange-500 border-orange-500/30'
-  return 'bg-red-500/10 text-red-500 border-red-500/30'
-}
-
 interface ChatMessageProps {
   message: Message;
   storeLogo: string;
@@ -268,21 +260,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
         </ChatBubble>
         {renderRichContent()}
 
-        {/* Goal-based test: Bot turn info */}
+        {/* Goal-based test: Bot turn badge (minimal - details in DebugPanel) */}
         {message.goalBasedTurn && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+          <div className="mt-1">
+            <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
               Turn {message.goalBasedTurn.turnIndex + 1}
-            </Badge>
-            <span className="text-muted-foreground">
-              {message.goalBasedTurn.technical.intent}
-            </span>
-            <Badge
-              variant="outline"
-              className={getPerformanceColor(message.goalBasedTurn.technical.performanceScore)}
-              title={`Response time: ${(message.goalBasedTurn.technical.timeMs / 1000).toFixed(1)}s`}
-            >
-              {(message.goalBasedTurn.technical.timeMs / 1000).toFixed(1)}s
             </Badge>
           </div>
         )}
