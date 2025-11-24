@@ -504,7 +504,7 @@ export default function StorePage() {
   }
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col">
 
       {/* Warning if no sheet */}
       {!hasSheet && isAuthenticated && (
