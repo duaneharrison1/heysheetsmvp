@@ -406,27 +406,18 @@ export default function StorePage() {
       }
 
       if (!scenario) {
-        toast.error('Scenario not found');
+        console.error('Scenario not found');
         return;
       }
 
-      toast.info(`Running test: ${scenario.name}`);
-
-      // Run test with callback to update UI
+      // Run test with callbacks to update UI progressively
       const execution = await testRunner.runScenario(
         scenario,
         storeId,
         selectedModel,
         evaluatorModel || selectedModel,
+        // onStepComplete - called after bot responds
         (result) => {
-          // Add user message
-          const userMsg: Message = {
-            id: `test-user-${result.stepIndex}`,
-            type: 'user',
-            content: result.userMessage,
-            timestamp: new Date()
-          };
-
           // Add bot message with test result and rich content
           const botMsg: Message = {
             id: `test-bot-${result.stepIndex}`,
@@ -440,7 +431,19 @@ export default function StorePage() {
             }
           };
 
-          setMessages(prev => [...prev, userMsg, botMsg]);
+          setMessages(prev => [...prev, botMsg]);
+        },
+        // onStepStart - called immediately when step starts
+        (userMessage, stepIndex) => {
+          // Add user message immediately
+          const userMsg: Message = {
+            id: `test-user-${stepIndex}`,
+            type: 'user',
+            content: userMessage,
+            timestamp: new Date()
+          };
+
+          setMessages(prev => [...prev, userMsg]);
         }
       );
 
@@ -464,10 +467,8 @@ export default function StorePage() {
 
       setMessages(prev => [...prev, summaryMsg]);
 
-      toast.success(`Test complete: ${scenario.name}`);
     } catch (error) {
       console.error('Test failed:', error);
-      toast.error('Test execution failed');
     } finally {
       setIsRunningTest(false);
     }
@@ -716,7 +717,7 @@ export default function StorePage() {
                       className="scale-75"
                     />
                     <Label htmlFor="test-mode-toggle" className="text-xs whitespace-nowrap cursor-pointer m-0">
-                      {isTestMode ? '🧪' : '💬'}
+                      {isTestMode ? 'Test' : 'Chat'}
                     </Label>
                   </div>
                 )}

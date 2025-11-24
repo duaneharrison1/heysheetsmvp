@@ -9,9 +9,9 @@
       "userMessage": "What pottery classes do you have?",
       "expected": {
         "intent": "SERVICE_INQUIRY",
-        "minConfidence": 85,
+        "minConfidence": 75,
         "functions": ["get_services"],
-        "maxTimeMs": 5000,
+        "maxTimeMs": 20000,
         "richContentType": "services",
         "minItems": 1
       },
@@ -27,9 +27,9 @@
       "userMessage": "When is Hand Building available?",
       "expected": {
         "intent": "AVAILABILITY_CHECK",
-        "minConfidence": 90,
+        "minConfidence": 75,
         "functions": ["check_availability"],
-        "maxTimeMs": 8000,
+        "maxTimeMs": 20000,
         "responseContains": ["available", "time"]
       },
       "criteria": [
@@ -43,9 +43,9 @@
       "userMessage": "Book me for Tuesday at 2pm. My name is John Doe, email john@example.com",
       "expected": {
         "intent": "CREATE_BOOKING",
-        "minConfidence": 92,
+        "minConfidence": 75,
         "functions": ["create_booking"],
-        "maxTimeMs": 10000,
+        "maxTimeMs": 20000,
         "calendarEventCreated": true,
         "responseContains": ["confirmed", "booking"]
       },

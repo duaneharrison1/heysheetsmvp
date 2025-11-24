@@ -11,7 +11,8 @@ export class TestRunner {
     storeId: string,
     chatModel: string,
     evaluatorModel: string,
-    onStepComplete?: (result: TestStepResult) => void
+    onStepComplete?: (result: TestStepResult) => void,
+    onStepStart?: (userMessage: string, stepIndex: number) => void
   ): Promise<TestExecution> {
 
     const testRunId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -81,6 +82,11 @@ export class TestRunner {
       }
       if (currentTest?.status === 'stopped') {
         break
+      }
+
+      // 🆕 Notify UI that step is starting (show user message immediately)
+      if (onStepStart) {
+        onStepStart(step.userMessage, i)
       }
 
       // Execute step
