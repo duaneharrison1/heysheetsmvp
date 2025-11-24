@@ -65,6 +65,7 @@ export interface TestStepResult {
 
   userMessage: string
   botResponse: string
+  richContent?: any  // Rich content from bot response (products, services, etc.)
 
   correlationId: string  // Links to debug request
 

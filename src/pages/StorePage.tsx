@@ -417,12 +417,13 @@ export default function StorePage() {
             timestamp: new Date()
           };
 
-          // Add bot message with test result
+          // Add bot message with test result and rich content
           const botMsg: Message = {
             id: `test-bot-${result.stepIndex}`,
             type: 'bot',
             content: result.botResponse,
             timestamp: new Date(),
+            richContent: result.richContent,  // Include rich content (products, services, etc.)
             testResult: {
               passed: result.passed,
               qualityScore: result.quality?.score

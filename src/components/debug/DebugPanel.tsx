@@ -125,12 +125,12 @@ export function DebugPanel() {
               {currentTest.scenarioName}
             </div>
             <div className="text-xs text-gray-400">
-              Step {currentTest.currentStepIndex + 1} of {currentTest.totalSteps}
+              Step {currentTest.results.length} of {currentTest.totalSteps}
             </div>
             <div className="mt-2 w-full bg-gray-800 rounded-full h-2">
               <div
                 className="bg-blue-500 h-2 rounded-full transition-all"
-                style={{ width: `${((currentTest.currentStepIndex + 1) / currentTest.totalSteps) * 100}%` }}
+                style={{ width: `${(currentTest.results.length / currentTest.totalSteps) * 100}%` }}
               />
             </div>
           </div>

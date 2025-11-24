@@ -72,9 +72,6 @@ export class TestRunner {
       if (onStepComplete) {
         onStepComplete(result)
       }
-
-      // Small delay between steps for visual clarity
-      await new Promise(resolve => setTimeout(resolve, 500))
     }
 
     // Overall evaluation
@@ -142,12 +139,16 @@ export class TestRunner {
         chatModel  // ← Use chat model for per-message eval
       )
 
+      // Extract rich content (same logic as StorePage)
+      const richContent = this.extractRichContent(data.functionResult)
+
       // Build result
       const result: TestStepResult = {
         stepId: step.id,
         stepIndex,
         userMessage: step.userMessage,
         botResponse: data.text,
+        richContent,
         correlationId,
         technical,
         quality,
@@ -231,6 +232,50 @@ export class TestRunner {
       },
       passed: false,
       timestamp: Date.now()
+    }
+  }
+
+  private extractRichContent(functionResult: any) {
+    try {
+      if (!functionResult) return undefined
+
+      // Prefer explicit components array (products -> 'products', HoursList -> 'hours')
+      if (Array.isArray(functionResult.components) && functionResult.components.length) {
+        const productsComp = functionResult.components.find((c: any) => c.type === 'products' || c.type === 'Products')
+        if (productsComp && productsComp.props && Array.isArray(productsComp.props.products)) {
+          return { type: 'products', data: productsComp.props.products }
+        }
+
+        const servicesComp = functionResult.components.find((c: any) => c.type === 'services' || c.type === 'Services')
+        if (servicesComp && servicesComp.props && Array.isArray(servicesComp.props.services)) {
+          return { type: 'services', data: servicesComp.props.services }
+        }
+
+        const hoursComp = functionResult.components.find((c: any) => c.type === 'HoursList')
+        if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {
+          return { type: 'hours', data: hoursComp.props.hours }
+        }
+
+        const leadFormComp = functionResult.components.find((c: any) => c.type === 'LeadForm')
+        if (leadFormComp && leadFormComp.props) {
+          return { type: 'lead_form', data: leadFormComp.props }
+        }
+      }
+
+      // Fallback: if functionResult.data.hours exists
+      if (functionResult.data && Array.isArray(functionResult.data.hours) && functionResult.data.hours.length) {
+        return { type: 'hours', data: functionResult.data.hours }
+      }
+
+      // Fallback: if functionResult.data.products exists
+      if (functionResult.data && Array.isArray(functionResult.data.products) && functionResult.data.products.length) {
+        return { type: 'products', data: functionResult.data.products }
+      }
+
+      return undefined
+    } catch (e) {
+      console.error('Error extracting richContent from functionResult', e)
+      return undefined
     }
   }
 
