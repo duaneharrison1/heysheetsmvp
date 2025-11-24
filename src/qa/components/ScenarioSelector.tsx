@@ -55,31 +55,7 @@ export function ScenarioSelector() {
 
   return (
     <div className="mb-3">
-      <div className="flex gap-2 mb-2">
-        <Select value={selectedScenario || ''} onValueChange={handleScenarioChange}>
-          <SelectTrigger className="flex-1">
-            <SelectValue placeholder="Select test scenario..." />
-          </SelectTrigger>
-          <SelectContent>
-            {scenarios.map(scenario => (
-              <SelectItem key={scenario.id} value={scenario.id}>
-                {scenario.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Button
-          onClick={handleTestButtonClick}
-          variant="outline"
-          size="sm"
-          disabled={!selectedScenario}
-        >
-          Test
-        </Button>
-      </div>
-
-      {/* WORKAROUND: Direct selection buttons since Select onValueChange isn't firing */}
+      {/* Scenario selection buttons */}
       <div className="flex flex-wrap gap-2 mb-2">
         {scenarios.map(scenario => (
           <Button
@@ -97,8 +73,8 @@ export function ScenarioSelector() {
       </div>
 
       {selectedScenario && (
-        <p className="text-xs text-muted-foreground mt-1">
-          Selected: {scenarios.find(s => s.id === selectedScenario)?.description}
+        <p className="text-xs text-muted-foreground">
+          {scenarios.find(s => s.id === selectedScenario)?.description}
         </p>
       )}
     </div>

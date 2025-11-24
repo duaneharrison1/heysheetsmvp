@@ -40,25 +40,38 @@ Scoring guide:
 Be fair but critical.`
 
   try {
+    // Use Supabase Edge Function instead of calling OpenRouter directly
     const response = await fetch(
-      'https://openrouter.ai/api/v1/chat/completions',
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          model,  // Use chat model
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,  // Low temp for consistency
-          max_tokens: 500
+          storeId: 'evaluation', // Dummy store ID for evaluation
+          model,
+          skipIntent: true  // Skip intent classification for evaluation
         })
       }
     )
 
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('Edge Function error:', response.status, errorData)
+      return null
+    }
+
     const data = await response.json()
-    const text = data.choices[0].message.content
+
+    // Edge Function returns { text: string } format
+    const text = data.text
+    if (!text) {
+      console.error('Invalid API response:', data)
+      return null
+    }
 
     // Extract JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -140,25 +153,38 @@ passed = true if score >= ${scenario.evaluation?.minQualityScore || 70}
 Be thorough and fair.`
 
   try {
+    // Use Supabase Edge Function instead of calling OpenRouter directly
     const response = await fetch(
-      'https://openrouter.ai/api/v1/chat/completions',
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          model: evaluatorModel,  // Use evaluator model
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-          max_tokens: 800
+          storeId: 'evaluation', // Dummy store ID for evaluation
+          model: evaluatorModel,
+          skipIntent: true  // Skip intent classification for evaluation
         })
       }
     )
 
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('Edge Function error:', response.status, errorData)
+      throw new Error(`API error: ${response.status}`)
+    }
+
     const data = await response.json()
-    const text = data.choices[0].message.content
+
+    // Edge Function returns { text: string } format
+    const text = data.text
+    if (!text) {
+      console.error('Invalid API response:', data)
+      throw new Error('Invalid API response structure')
+    }
 
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
