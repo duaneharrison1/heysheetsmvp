@@ -527,7 +527,7 @@ export default function StorePage() {
       )}
 
   {/* Main Content: Two Column Layout */}
-    <div className="flex-1 flex w-full min-h-0">
+    <div className="flex-1 flex w-full min-h-0 max-h-screen overflow-hidden">
         {/* Store Profile Side Panel */}
     <Card className="w-96 flex-shrink-0 rounded-none bg-transparent border border-border/10 shadow-[var(--shadow-card-sm)]">
           <CardContent className="p-6 flex-1 overflow-y-auto">
@@ -637,7 +637,7 @@ export default function StorePage() {
         </Card>
 
   {/* Chat Section */}
-  <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
+  <div className="flex-1 flex flex-col bg-muted min-w-0 max-h-screen overflow-hidden">
           {/* Chat header (bot profile) */}
           <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
             <Avatar className="w-10 h-10" variant="bot">
