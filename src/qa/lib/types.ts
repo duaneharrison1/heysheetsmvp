@@ -1,8 +1,9 @@
-// Test Scenario Definition
-export interface TestScenario {
+// Scripted Scenario (existing - exact messages and per-step expectations)
+export interface ScriptedScenario {
   id: string
   name: string
   description: string
+  type?: 'scripted'  // Optional for backwards compatibility
   storeId?: string  // Optional, use current store if not specified
 
   steps: TestStep[]
@@ -11,6 +12,50 @@ export interface TestScenario {
     criteria: string[]  // Overall evaluation criteria
     minQualityScore?: number
   }
+}
+
+// Goal-Based Scenario (AI generates user messages)
+export interface GoalBasedScenario {
+  id: string
+  name: string
+  description: string
+  type: 'goal-based'
+
+  goal: {
+    description: string           // What the simulated user is trying to achieve
+    successSignals?: string[]     // Words that indicate goal completion
+  }
+
+  user: {
+    persona: 'polite' | 'casual' | 'impatient' | 'confused' | 'verbose'
+    language: 'en' | 'zh-HK' | 'zh-TW' | 'ja'
+    behavior?: {
+      randomness?: 'predictable' | 'natural' | 'chaotic'
+      typos?: boolean
+      emoji?: boolean
+    }
+  }
+
+  limits: {
+    maxTurns: number              // Safety limit (default: 10)
+  }
+
+  evaluation: {
+    criteria: string[]
+    minQualityScore?: number      // Default: 70
+  }
+}
+
+// Union type for both scenario types
+export type TestScenario = ScriptedScenario | GoalBasedScenario
+
+// Helper to check scenario type
+export function isGoalBasedScenario(scenario: TestScenario): scenario is GoalBasedScenario {
+  return scenario.type === 'goal-based'
+}
+
+export function isScriptedScenario(scenario: TestScenario): scenario is ScriptedScenario {
+  return scenario.type !== 'goal-based'
 }
 
 export interface TestStep {
@@ -40,20 +85,46 @@ export interface TestStep {
   criteria?: string[]
 }
 
-// Test Execution State
+// Goal-based execution result (different from scripted)
+export interface GoalBasedTurnResult {
+  turnIndex: number
+  userMessage: string        // AI-generated message
+  botResponse: string
+  correlationId: string
+
+  // Technical data (informational, not pass/fail)
+  technical: {
+    intent: string
+    confidence: number
+    functions: string[]
+    timeMs: number
+    performanceScore: number
+  }
+
+  timestamp: number
+}
+
+// Test Execution State - supports both scripted and goal-based
 export interface TestExecution {
   testRunId: string
   scenarioId: string
   scenarioName: string
+  scenarioType?: 'scripted' | 'goal-based'  // NEW
   status: 'running' | 'paused' | 'stopped' | 'complete' | 'error'
 
-  currentStepIndex: number
-  totalSteps: number
+  // For scripted tests
+  currentStepIndex?: number
+  totalSteps?: number
+  results?: TestStepResult[]
+
+  // For goal-based tests
+  currentTurn?: number
+  maxTurns?: number
+  turns?: GoalBasedTurnResult[]
+  goalAchieved?: boolean
 
   startTime: number
   endTime?: number
-
-  results: TestStepResult[]
 
   model: string           // Chat model used
   evaluatorModel: string  // Evaluator model used
@@ -117,6 +188,7 @@ export interface TestRunSummary {
   testRunId: string
   scenarioId: string
   scenarioName: string
+  scenarioType?: 'scripted' | 'goal-based'  // NEW
   storeId: string
 
   timestamp: number
@@ -125,11 +197,16 @@ export interface TestRunSummary {
   model: string
   evaluatorModel: string
 
-  // Results
+  // Results (for scripted tests)
   totalSteps: number
   passedSteps: number
   failedSteps: number
   overallPassed: boolean
+
+  // Goal-based specific
+  totalTurns?: number
+  goalAchieved?: boolean
+  maxTurnsReached?: boolean
 
   // Performance
   avgQualityScore: number
@@ -145,5 +222,6 @@ export interface TestRunSummary {
   }
 
   // Full details
-  steps: TestStepResult[]
+  steps?: TestStepResult[]      // For scripted tests
+  turns?: GoalBasedTurnResult[] // For goal-based tests
 }

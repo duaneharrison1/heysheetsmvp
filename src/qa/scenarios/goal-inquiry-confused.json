@@ -1,0 +1,35 @@
+{
+  "id": "goal-inquiry-confused",
+  "name": "Goal: Learn About Classes (Confused User)",
+  "description": "AI simulates a confused user trying to understand what classes are available",
+  "type": "goal-based",
+
+  "goal": {
+    "description": "Understand what pottery classes are offered, their prices, and which one might be good for a beginner",
+    "successSignals": ["beginner", "recommend", "start with", "perfect for"]
+  },
+
+  "user": {
+    "persona": "confused",
+    "language": "en",
+    "behavior": {
+      "randomness": "natural",
+      "typos": false,
+      "emoji": false
+    }
+  },
+
+  "limits": {
+    "maxTurns": 8
+  },
+
+  "evaluation": {
+    "criteria": [
+      "Bot provided clear information about classes",
+      "Bot helped clarify user's confusion",
+      "Bot made appropriate recommendations for beginners",
+      "User's questions were answered patiently"
+    ],
+    "minQualityScore": 70
+  }
+}
