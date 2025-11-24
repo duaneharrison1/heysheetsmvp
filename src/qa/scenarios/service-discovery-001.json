@@ -1,0 +1,34 @@
+{
+  "id": "service-discovery-001",
+  "name": "Service Discovery - Classes with Semantic Search",
+  "description": "User asks about classes and mentions specific interest in sake cups",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "What classes do you have? I'd like to learn how to make sake cups",
+      "expected": {
+        "intent": "SERVICE_INQUIRY",
+        "minConfidence": 70,
+        "functions": ["get_services"],
+        "maxTimeMs": 15000,
+        "richContentType": "services"
+      },
+      "criteria": [
+        "Lists available classes",
+        "Highlights or mentions sake-related options if available",
+        "Shows relevant details (price, duration)",
+        "Responds to the specific interest"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Semantic search found relevant classes",
+      "User's specific interest (sake cups) was addressed",
+      "Response helps user make a decision"
+    ],
+    "minQualityScore": 80
+  }
+}

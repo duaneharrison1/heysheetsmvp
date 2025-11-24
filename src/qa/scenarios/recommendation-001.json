@@ -1,0 +1,33 @@
+{
+  "id": "recommendation-001",
+  "name": "Recommendation - Vague Gift Request",
+  "description": "User has vague intent, needs recommendation for gift-making",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "I want to make a gift for my mom",
+      "expected": {
+        "intent": ["SERVICE_INQUIRY", "INFO_REQUEST"],
+        "minConfidence": 60,
+        "functions": ["get_services", "get_store_info"],
+        "maxTimeMs": 15000
+      },
+      "criteria": [
+        "Understands the gift-making intent",
+        "Recommends suitable classes or products",
+        "Explains why options are good for gifts",
+        "May ask clarifying questions about preferences"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Vague request was understood correctly",
+      "Recommendations were relevant and helpful",
+      "Conversation felt natural, not robotic"
+    ],
+    "minQualityScore": 75
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "id": "booking-flow-001",
+  "name": "Booking Flow - Availability Check to Booking",
+  "description": "User checks availability and books with all details provided",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "Is the intro pottery class available Saturday 2pm?",
+      "expected": {
+        "intent": "BOOKING_REQUEST",
+        "minConfidence": 70,
+        "functions": ["check_availability"],
+        "maxTimeMs": 20000,
+        "responseContains": ["available"]
+      },
+      "criteria": [
+        "Checks actual calendar availability",
+        "Shows if spots are available",
+        "Invites user to book if available"
+      ]
+    },
+    {
+      "id": "step-2",
+      "userMessage": "Yes please book it. My name is John Smith, email is john@test.com",
+      "expected": {
+        "intent": "BOOKING_REQUEST",
+        "minConfidence": 70,
+        "functions": ["create_booking"],
+        "maxTimeMs": 20000,
+        "calendarEventCreated": true,
+        "responseContains": ["confirm"]
+      },
+      "criteria": [
+        "Confirms booking was created",
+        "Repeats key details (service, date, time)",
+        "Thanks the customer"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Complete booking flow was smooth",
+      "All customer details were captured",
+      "Calendar event was created",
+      "User knows what to expect next"
+    ],
+    "minQualityScore": 85
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "misc-policy-001",
+  "name": "Misc Data - Return Policy",
+  "description": "User asks about return/refund policy",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "What's your return policy?",
+      "expected": {
+        "intent": ["OTHER", "INFO_REQUEST"],
+        "minConfidence": 60,
+        "functions": ["get_misc_data", "get_store_info"],
+        "maxTimeMs": 15000
+      },
+      "criteria": [
+        "Finds relevant policy information",
+        "Clearly explains the policy",
+        "Information is accurate to store data"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Policy question was understood",
+      "Relevant information was provided",
+      "User got a clear answer"
+    ],
+    "minQualityScore": 75
+  }
+}
