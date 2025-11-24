@@ -18,12 +18,17 @@ interface SimulatorResult {
  */
 export async function generateInitialMessage(
   scenario: GoalBasedScenario,
-  evaluatorModel: string
+  evaluatorModel: string,
+  storeId: string
 ): Promise<SimulatorResult> {
 
   const prompt = buildSimulatorPrompt(scenario, [], null, true)
 
-  const response = await callEvaluatorModel(evaluatorModel, prompt)
+  console.log('[UserSimulator] Generating initial message with model:', evaluatorModel)
+
+  const response = await callEvaluatorModel(evaluatorModel, prompt, storeId)
+
+  console.log('[UserSimulator] Initial message response:', response)
 
   return parseSimulatorResponse(response)
 }
@@ -35,12 +40,17 @@ export async function generateNextMessage(
   scenario: GoalBasedScenario,
   conversationHistory: Array<{ role: 'user' | 'assistant', content: string }>,
   lastBotResponse: string,
-  evaluatorModel: string
+  evaluatorModel: string,
+  storeId: string
 ): Promise<SimulatorResult> {
 
   const prompt = buildSimulatorPrompt(scenario, conversationHistory, lastBotResponse, false)
 
-  const response = await callEvaluatorModel(evaluatorModel, prompt)
+  console.log('[UserSimulator] Generating next message, turn:', conversationHistory.length / 2 + 1)
+
+  const response = await callEvaluatorModel(evaluatorModel, prompt, storeId)
+
+  console.log('[UserSimulator] Next message response:', response)
 
   return parseSimulatorResponse(response)
 }
@@ -124,27 +134,48 @@ YOUR RESPONSE (just the customer message OR [GOAL_COMPLETE]):`
 /**
  * Call the evaluator model via the existing chat-completion edge function
  */
-async function callEvaluatorModel(model: string, prompt: string): Promise<string> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: prompt }],
-        storeId: '_system_', // Special ID for system calls
-        model: model,
-        skipIntent: true,    // Skip intent classification
-        skipFunctions: true  // Skip function execution
-      })
-    }
-  )
+async function callEvaluatorModel(model: string, prompt: string, storeId: string): Promise<string> {
+  try {
+    console.log('[UserSimulator] Calling API with storeId:', storeId, 'model:', model)
 
-  const data = await response.json()
-  return data.text || data.response || ''
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+          storeId: storeId,
+          model: model,
+          skipIntent: true,    // Skip intent classification
+          skipFunctions: true  // Skip function execution
+        })
+      }
+    )
+
+    if (!response.ok) {
+      console.error('[UserSimulator] API error:', response.status, response.statusText)
+      return ''
+    }
+
+    const data = await response.json()
+    console.log('[UserSimulator] API response data:', JSON.stringify(data).slice(0, 200))
+
+    // Try multiple possible response fields
+    const text = data.text || data.response || data.content || data.message || ''
+
+    if (!text) {
+      console.error('[UserSimulator] No text in response, full data:', data)
+    }
+
+    return text
+  } catch (error) {
+    console.error('[UserSimulator] Error calling evaluator model:', error)
+    return ''
+  }
 }
 
 /**

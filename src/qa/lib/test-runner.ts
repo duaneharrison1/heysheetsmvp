@@ -625,7 +625,7 @@ export class TestRunner {
     const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = []
 
     // Generate initial user message
-    let simulatorResult = await generateInitialMessage(scenario, evaluatorModel)
+    let simulatorResult = await generateInitialMessage(scenario, evaluatorModel, storeId)
 
     // Main conversation loop
     let turn = 0
@@ -688,7 +688,8 @@ export class TestRunner {
         scenario,
         conversationHistory,
         turnResult.botResponse,
-        evaluatorModel
+        evaluatorModel,
+        storeId
       )
 
       // Check if AI signaled goal complete

@@ -284,7 +284,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
               variant="outline"
               className={getPerformanceColor(message.goalBasedTurn.technical.performanceScore)}
             >
-              {message.goalBasedTurn.technical.performanceScore}/100
+              {Math.round(message.goalBasedTurn.technical.performanceScore)}/100
             </Badge>
           </div>
         )}
