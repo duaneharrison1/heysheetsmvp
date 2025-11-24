@@ -530,7 +530,33 @@ export default function StorePage() {
         // Technical Results Section
         summaryContent += `**📊 Technical Results**\n\n`;
         summaryContent += `**Per-Step Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n`;
-        summaryContent += `**Duration:** ${duration.toFixed(1)}s (${(duration / totalSteps).toFixed(1)}s per step)\n\n`;
+
+        // Add duration with performance warning if needed
+        const avgTimePerStep = duration / totalSteps;
+        let durationLine = `**Duration:** ${duration.toFixed(1)}s (${avgTimePerStep.toFixed(1)}s per step)`;
+
+        // Add performance tier indicator
+        if (avgTimePerStep < 3) {
+          durationLine += ` 🏆 Excellent`;
+        } else if (avgTimePerStep < 5) {
+          durationLine += ` ✅ Good`;
+        } else if (avgTimePerStep < 10) {
+          durationLine += ` 👍 Acceptable`;
+        } else if (avgTimePerStep < 15) {
+          durationLine += ` 🐌 Slow`;
+        } else {
+          durationLine += ` ❌ Unacceptable`;
+        }
+
+        summaryContent += durationLine + `\n\n`;
+
+        // Add performance warning if slow
+        if (avgTimePerStep >= 15) {
+          summaryContent += `⚠️ **Performance Warning:** Response times exceeded 15s per step. This may indicate issues with function execution or API latency.\n\n`;
+        } else if (avgTimePerStep >= 10) {
+          summaryContent += `⚠️ **Performance Note:** Response times were slower than ideal (>10s). Consider investigating function performance.\n\n`;
+        }
+
         summaryContent += `**Model:** ${execution.model}\n\n`;
         summaryContent += `**Evaluator Model:** ${execution.evaluatorModel}\n\n`;
 
@@ -800,8 +826,8 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            {/* Test Scenarios - Floating boxes above input when test mode ON */}
-            {isTestMode && (
+            {/* Test Scenarios - Floating boxes above input when test mode ON and not running */}
+            {isTestMode && !isRunningTest && (
               <div className="mb-4">
                 <ScenarioSelector />
               </div>

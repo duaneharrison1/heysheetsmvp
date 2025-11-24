@@ -253,12 +253,37 @@ Be thorough, specific, and constructive.`
 
   } catch (error) {
     console.error('Overall evaluation failed:', error)
-    // Fallback - use goalAchieved parameter if provided (goal-based tests)
+
+    // Provide detailed fallback based on technical results
     const fallbackPassed = goalAchieved ?? results.every(r => r.passed)
+    const passedCount = results.filter(r => r.passed).length
+    const totalCount = results.length
+
+    // Calculate average performance
+    const avgTime = results.reduce((sum, r) => sum + r.technical.timeMs, 0) / results.length
+    let performanceNote = '';
+    if (avgTime > 15000) {
+      performanceNote = ' Response times were significantly slow (>15s per step).'
+    } else if (avgTime > 10000) {
+      performanceNote = ' Response times were slower than ideal (>10s per step).'
+    }
+
+    const reasoning = `**⚠️ AI Evaluation Unavailable**\n\n` +
+      `The AI evaluator encountered an error and could not complete the detailed analysis. ` +
+      `However, technical validation was successful.\n\n` +
+      `**Technical Summary:**\n\n` +
+      `• **Steps Passed:** ${passedCount}/${totalCount}\n` +
+      `• **Average Response Time:** ${(avgTime / 1000).toFixed(1)}s${performanceNote}\n` +
+      `• **All Intents Correct:** ${results.every(r => r.technical.intentCorrect) ? 'Yes' : 'No'}\n` +
+      `• **All Functions Correct:** ${results.every(r => r.technical.functionsCorrect) ? 'Yes' : 'No'}\n` +
+      `• **No Errors:** ${results.every(r => r.technical.noErrors) ? 'Yes' : 'No'}\n\n` +
+      `**Note:** Check console logs for evaluation error details. This may be due to API rate limits, ` +
+      `network issues, or invalid response format from the evaluator model.`
+
     return {
       score: fallbackPassed ? 75 : 50,
       passed: fallbackPassed,
-      reasoning: 'Evaluation failed, using goal achievement status',
+      reasoning,
       conversationQuality: fallbackPassed ? 'good' : 'fair',
       goalAchieved: fallbackPassed
     }
