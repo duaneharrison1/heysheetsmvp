@@ -402,12 +402,35 @@ export default function StorePage() {
 
       toast.info(`Running test: ${scenario.name}`);
 
-      // Run test
+      // Run test with callback to update UI
       await testRunner.runScenario(
         scenario,
         storeId,
         selectedModel,
-        evaluatorModel || selectedModel
+        evaluatorModel || selectedModel,
+        (result) => {
+          // Add user message
+          const userMsg: Message = {
+            id: `test-user-${result.stepIndex}`,
+            type: 'user',
+            content: result.userMessage,
+            timestamp: new Date()
+          };
+
+          // Add bot message with test result
+          const botMsg: Message = {
+            id: `test-bot-${result.stepIndex}`,
+            type: 'bot',
+            content: result.botResponse,
+            timestamp: new Date(),
+            testResult: {
+              passed: result.passed,
+              qualityScore: result.quality?.score
+            }
+          };
+
+          setMessages(prev => [...prev, userMsg, botMsg]);
+        }
       );
 
       toast.success(`Test complete: ${scenario.name}`);
