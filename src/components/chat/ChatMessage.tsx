@@ -260,15 +260,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
         </ChatBubble>
         {renderRichContent()}
 
-        {/* Goal-based test: Bot turn badge (minimal - details in DebugPanel) */}
-        {message.goalBasedTurn && (
-          <div className="mt-1">
-            <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
-              Turn {message.goalBasedTurn.turnIndex + 1}
-            </Badge>
-          </div>
-        )}
-
         {/* Goal-based test: Simulated user badge */}
         {message.isSimulated && message.type === 'user' && (
           <div className="mt-1">

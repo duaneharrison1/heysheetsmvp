@@ -187,41 +187,6 @@ export function DebugPanel() {
             </Card>
           </HoverTooltip>
         </div>
-
-        {/* Goal-based test progress - compact version */}
-        {currentTest && currentTest.scenarioType === 'goal-based' && (
-          <div className="mt-3 p-2 bg-gray-900/50 rounded border border-gray-800">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-400 truncate flex-1" title={currentTest.scenarioName}>
-                {currentTest.scenarioName}
-              </span>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[10px] px-1.5 py-0",
-                  currentTest.status === 'complete' && currentTest.goalAchieved
-                    ? "bg-green-500/20 text-green-400 border-green-500/30"
-                    : currentTest.status === 'complete'
-                    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                )}
-              >
-                {currentTest.status === 'complete'
-                  ? (currentTest.goalAchieved ? 'Done' : 'Max')
-                  : `${currentTest.currentTurn || 0}/${currentTest.maxTurns}`
-                }
-              </Badge>
-            </div>
-            {currentTest.status === 'running' && (
-              <div className="w-full bg-gray-800 rounded-full h-1 mt-1.5">
-                <div
-                  className="bg-blue-500 h-1 rounded-full transition-all"
-                  style={{ width: `${((currentTest.currentTurn || 0) / (currentTest.maxTurns || 10)) * 100}%` }}
-                ></div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Request History */}
