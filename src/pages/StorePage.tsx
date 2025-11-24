@@ -504,7 +504,7 @@ export default function StorePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
 
       {/* Warning if no sheet */}
       {!hasSheet && isAuthenticated && (
@@ -748,20 +748,18 @@ export default function StorePage() {
                       onClick={handleResumeTest}
                       size="sm"
                       variant="default"
-                      className="flex items-center gap-2"
+                      className="rounded-full w-11 h-11 p-0"
                     >
                       <Play className="w-4 h-4" />
-                      Resume
                     </Button>
                   ) : (
                     <Button
                       onClick={handlePauseTest}
                       size="sm"
                       variant="secondary"
-                      className="flex items-center gap-2"
+                      className="rounded-full w-11 h-11 p-0"
                     >
                       <Pause className="w-4 h-4" />
-                      Pause
                     </Button>
                   )}
 

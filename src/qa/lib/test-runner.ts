@@ -273,8 +273,12 @@ export class TestRunner {
       ? expected.intent
       : [expected.intent]
 
-    const intentCorrect = expectedIntents.includes(actual.intent)
-    const confidenceOK = actual.confidence >= (expected.minConfidence || 85)
+    // 🔧 FIX: Intent and confidence are in actual.debug, not actual directly
+    const actualIntent = actual.debug?.intent?.detected || actual.intent
+    const actualConfidence = actual.debug?.intent?.confidence || actual.confidence || 0
+
+    const intentCorrect = expectedIntents.includes(actualIntent)
+    const confidenceOK = actualConfidence >= (expected.minConfidence || 85)
 
     const actualFunctions = actual.debug?.functionCalls?.map((f: any) => f.name) || []
     const functionsCorrect = expected.functions
@@ -286,11 +290,11 @@ export class TestRunner {
 
     return {
       intentCorrect,
-      intentActual: actual.intent,
+      intentActual: actualIntent,
       intentExpected: expectedIntents,
 
       confidenceOK,
-      confidence: actual.confidence,
+      confidence: actualConfidence,
       minConfidence: expected.minConfidence || 85,
 
       functionsCorrect,
