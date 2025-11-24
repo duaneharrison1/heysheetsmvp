@@ -88,10 +88,19 @@ export interface DebugRequest {
     passed: boolean
     technical?: {
       intentCorrect: boolean
+      intentActual?: string
+      intentExpected?: string | string[]
       confidenceOK: boolean
+      confidence?: number
+      minConfidence?: number
       functionsCorrect: boolean
+      functionsActual?: string[]
+      functionsExpected?: string[]
       timingOK: boolean
+      timeMs?: number
+      maxTimeMs?: number
       noErrors: boolean
+      error?: string
     }
     quality?: {
       score: number

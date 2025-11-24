@@ -359,8 +359,8 @@ function RequestCard({
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
-          {/* Response Text (especially useful for test scenario details) */}
-          {request.response?.text && (
+          {/* Response Text (ONLY for test scenario cards) */}
+          {request.response?.text && request.userMessage.startsWith('📋 Test Scenario:') && (
             <div className="text-xs text-gray-300">
               <div className="text-gray-400 font-semibold mb-1">
                 Details:
@@ -437,23 +437,51 @@ function RequestCard({
                   <div className="ml-2 space-y-0.5">
                     <div className={request.testResult.technical.intentCorrect ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.intentCorrect ? '✓' : '✗'} Intent correct
+                      {!request.testResult.technical.intentCorrect && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Expected: {Array.isArray((request.testResult.technical as any).intentExpected)
+                            ? (request.testResult.technical as any).intentExpected.join(' or ')
+                            : (request.testResult.technical as any).intentExpected}
+                          <br />
+                          Got: {(request.testResult.technical as any).intentActual || 'none'}
+                        </div>
+                      )}
                     </div>
                     <div className={request.testResult.technical.confidenceOK ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.confidenceOK ? '✓' : '✗'} Confidence OK
+                      {!request.testResult.technical.confidenceOK && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Min: {(request.testResult.technical as any).minConfidence}%,
+                          Got: {Math.round((request.testResult.technical as any).confidence || 0)}%
+                        </div>
+                      )}
                     </div>
                     <div className={request.testResult.technical.functionsCorrect ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.functionsCorrect ? '✓' : '✗'} Functions correct
+                      {!request.testResult.technical.functionsCorrect && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Expected: {((request.testResult.technical as any).functionsExpected || []).join(', ') || 'none'}
+                          <br />
+                          Got: {((request.testResult.technical as any).functionsActual || []).join(', ') || 'none'}
+                        </div>
+                      )}
                     </div>
                     <div className={request.testResult.technical.timingOK ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.timingOK ? '✓' : '✗'} Timing OK
-                      {!request.testResult.technical.timingOK && request.timings?.totalDuration && (
-                        <span className="text-xs ml-1">
-                          ({(request.timings.totalDuration / 1000).toFixed(1)}s &gt; expected)
-                        </span>
+                      {!request.testResult.technical.timingOK && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Max: {((request.testResult.technical as any).maxTimeMs / 1000).toFixed(1)}s,
+                          Got: {((request.testResult.technical as any).timeMs / 1000).toFixed(1)}s
+                        </div>
                       )}
                     </div>
                     <div className={request.testResult.technical.noErrors ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.noErrors ? '✓' : '✗'} No errors
+                      {!request.testResult.technical.noErrors && (request.testResult.technical as any).error && (
+                        <div className="text-xs ml-4 text-red-300">
+                          {(request.testResult.technical as any).error}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

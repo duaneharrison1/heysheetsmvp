@@ -218,15 +218,24 @@ export class TestRunner {
         cost: data.debug?.cost,
         steps: data.debug?.steps,
         status: 'complete',
-        // 🆕 ADD TEST RESULT DATA
+        // 🆕 ADD TEST RESULT DATA (with full diagnostic info)
         testResult: {
           passed,
           technical: {
             intentCorrect: technical.intentCorrect,
+            intentActual: technical.intentActual,
+            intentExpected: technical.intentExpected,
             confidenceOK: technical.confidenceOK,
+            confidence: technical.confidence,
+            minConfidence: technical.minConfidence,
             functionsCorrect: technical.functionsCorrect,
+            functionsActual: technical.functionsActual,
+            functionsExpected: technical.functionsExpected,
             timingOK: technical.timingOK,
+            timeMs: technical.timeMs,
+            maxTimeMs: technical.maxTimeMs,
             noErrors: technical.noErrors,
+            error: technical.error,
           },
           quality: quality ? {
             score: quality.score,
