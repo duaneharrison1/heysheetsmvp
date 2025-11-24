@@ -176,15 +176,15 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   isPanelOpen: false, // Closed by default
   expandedRequests: new Set(),
   selectedModel: typeof localStorage !== 'undefined'
-    ? localStorage.getItem('heysheets-debug-model') || 'x-ai/grok-4.1-fast'
-    : 'x-ai/grok-4.1-fast',
+    ? localStorage.getItem('heysheets-debug-model') || 'meta-llama/llama-3.1-70b-instruct'
+    : 'meta-llama/llama-3.1-70b-instruct',
   filters: { status: 'all', model: 'all' },
 
   // NEW: Test state
   isTestMode: false,
   selectedScenario: null,
   currentTest: null,
-  evaluatorModel: 'x-ai/grok-4.1-fast', // Default evaluator model
+  evaluatorModel: 'meta-llama/llama-3.1-70b-instruct', // Default evaluator model
   clearChatRequested: false,
 
   addRequest: (request) =>
