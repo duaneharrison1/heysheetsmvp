@@ -61,7 +61,7 @@ serve(async (req) => {
       );
     }
 
-    log(requestId, '💬 User message', { messageCount: messages.length, storeId });
+    log(requestId, '💬 User message', { messageCount: messages.length, storeId, model: model || 'x-ai/grok-4.1-fast (default)' });
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -130,7 +130,7 @@ serve(async (req) => {
     log(requestId, '🎯 Classifying intent...');
     const classifyStart = performance.now();
 
-    const { classification, usage: classifyUsage } = await classifyIntent(messages, { storeData });
+    const { classification, usage: classifyUsage } = await classifyIntent(messages, { storeData }, model);
 
     const classifyDuration = performance.now() - classifyStart;
     log(requestId, `✅ Intent: ${classification.intent} (${classifyDuration.toFixed(0)}ms)`, {
@@ -172,7 +172,8 @@ serve(async (req) => {
       messages,
       classification,
       functionResult,
-      storeConfig
+      storeConfig,
+      model
     );
 
     const responseDuration = performance.now() - responseStart;
