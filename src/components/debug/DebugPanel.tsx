@@ -10,8 +10,11 @@ import { formatRequestForAI, formatAllRequestsForAI } from '@/lib/debug/format-f
 import { DEBUG_CONFIG } from '@/config/debug';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useEffect, useRef } from 'react';
 
 export function DebugPanel() {
+  const timelineRef = useRef<HTMLDivElement>(null);
+
   const {
     isPanelOpen,
     togglePanel,
@@ -28,6 +31,7 @@ export function DebugPanel() {
     getTotalCost,
     getCostBreakdown,
     clearHistory,
+    clearAll,
     isTestMode,
     currentTest,
     evaluatorModel,
@@ -63,6 +67,16 @@ export function DebugPanel() {
     const model = DEBUG_CONFIG.models.find(m => m.id === modelId);
     return model?.name || modelId;
   };
+
+  // 🆕 Reverse requests array for timeline (oldest first, newest last)
+  const reversedRequests = [...requests].reverse();
+
+  // 🆕 Auto-scroll to bottom when new requests arrive
+  useEffect(() => {
+    if (timelineRef.current && requests.length > 0) {
+      timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
+    }
+  }, [requests.length]);
 
   if (!isPanelOpen) return null;
 
@@ -111,28 +125,6 @@ export function DebugPanel() {
                 </option>
               ))}
             </select>
-          </div>
-        )}
-
-        {/* Test Progress - Only when test is running */}
-        {currentTest && (
-          <div className="mb-3 p-3 bg-blue-900/20 border border-blue-800 rounded">
-            <div className="text-xs text-blue-300 font-semibold mb-2 flex items-center gap-2">
-              🧪 Test Running
-              {currentTest.status === 'paused' && <Badge variant="secondary" className="text-xs">Paused</Badge>}
-            </div>
-            <div className="text-xs text-gray-300 mb-1">
-              {currentTest.scenarioName}
-            </div>
-            <div className="text-xs text-gray-400">
-              Step {Math.min(currentTest.results.length, currentTest.totalSteps)} of {currentTest.totalSteps}
-            </div>
-            <div className="mt-2 w-full bg-gray-800 rounded-full h-2">
-              <div
-                className="bg-blue-500 h-2 rounded-full transition-all"
-                style={{ width: `${Math.min(100, (currentTest.results.length / currentTest.totalSteps) * 100)}%` }}
-              />
-            </div>
           </div>
         )}
 
@@ -196,14 +188,14 @@ export function DebugPanel() {
       </div>
 
       {/* Request History */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-950" style={{ scrollbarColor: '#374151 #111827', scrollbarWidth: 'thin' }}>
+      <div ref={timelineRef} className="flex-1 overflow-y-auto p-4 bg-gray-950" style={{ scrollbarColor: '#374151 #111827', scrollbarWidth: 'thin' }}>
         <div className="space-y-3">
-          {requests.length === 0 ? (
+          {reversedRequests.length === 0 ? (
             <div className="text-center text-gray-500 mt-8">
               No requests yet. Start chatting!
             </div>
           ) : (
-            requests.map((request) => (
+            reversedRequests.map((request) => (
               <RequestCard
                 key={request.id}
                 request={request}
@@ -232,10 +224,10 @@ export function DebugPanel() {
           <Button
             variant="outline"
             size="sm"
-            onClick={clearHistory}
+            onClick={clearAll}
             className="flex-1 bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
           >
-            Clear History
+            Clear Chat
           </Button>
         </div>
       </div>
@@ -436,6 +428,11 @@ function RequestCard({
                     </div>
                     <div className={request.testResult.technical.timingOK ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.timingOK ? '✓' : '✗'} Timing OK
+                      {!request.testResult.technical.timingOK && request.timings?.totalDuration && (
+                        <span className="text-xs ml-1">
+                          ({(request.timings.totalDuration / 1000).toFixed(1)}s &gt; expected)
+                        </span>
+                      )}
                     </div>
                     <div className={request.testResult.technical.noErrors ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.noErrors ? '✓' : '✗'} No errors

@@ -32,8 +32,28 @@ export class TestRunner {
     // Update store
     useDebugStore.getState().startTest(execution)
 
-    // 🆕 ADD TEST SCENARIO CARD to timeline
+    // 🆕 ADD TEST SCENARIO CARD to timeline with detailed info
     const scenarioRequestId = `test-scenario-${testRunId}`
+    const scenarioDetails = [
+      `**${scenario.description || 'No description'}**`,
+      '',
+      `**Steps:** ${scenario.steps.length}`,
+      '',
+      '**Test Steps:**',
+      ...scenario.steps.map((step, idx) => {
+        const expectedIntent = Array.isArray(step.expected?.intent)
+          ? step.expected.intent.join(' or ')
+          : step.expected?.intent || 'any';
+        return `${idx + 1}. "${step.userMessage}" (expects: ${expectedIntent})`;
+      }),
+      '',
+      '**Success Criteria:**',
+      ...(scenario.evaluation?.criteria || []).map(c => `• ${c}`),
+      scenario.evaluation?.minQualityScore
+        ? `• Min quality score: ${scenario.evaluation.minQualityScore}/100`
+        : '',
+    ].filter(Boolean).join('\n');
+
     useDebugStore.getState().addRequest({
       id: scenarioRequestId,
       timestamp: Date.now(),
@@ -42,7 +62,7 @@ export class TestRunner {
       timings: { requestStart: Date.now() },
       status: 'complete',
       response: {
-        text: scenario.description || '',
+        text: scenarioDetails,
         duration: 0,
       },
     })

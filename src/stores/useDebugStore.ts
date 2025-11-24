@@ -118,6 +118,7 @@ interface DebugStore {
   selectedScenario: string | null
   currentTest: TestExecution | null
   evaluatorModel: string  // Default to chat model
+  clearChatRequested: boolean  // Flag to signal chat should be cleared
 
   addRequest: (request: DebugRequest) => void
   updateRequest: (id: string, updates: Partial<DebugRequest>) => void
@@ -127,6 +128,8 @@ interface DebugStore {
   setFilter: (key: string, value: any) => void
   togglePanel: () => void
   clearHistory: () => void
+  clearAll: () => void  // Clears debug panel + signals chat to clear
+  acknowledgeClearChat: () => void  // Reset the clearChatRequested flag
   toggleRequestExpanded: (id: string) => void
   isRequestExpanded: (id: string) => boolean
 
@@ -166,6 +169,7 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   selectedScenario: null,
   currentTest: null,
   evaluatorModel: 'x-ai/grok-4.1-fast', // Default evaluator model
+  clearChatRequested: false,
 
   addRequest: (request) =>
     set((state) => {
@@ -229,6 +233,15 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   },
 
   clearHistory: () => set({ requests: [], messages: [], expandedRequests: new Set() }),
+
+  clearAll: () => set({
+    requests: [],
+    messages: [],
+    expandedRequests: new Set(),
+    clearChatRequested: true  // Signal chat to clear
+  }),
+
+  acknowledgeClearChat: () => set({ clearChatRequested: false }),
 
   getFilteredRequests: () => {
     const { requests, filters } = get()

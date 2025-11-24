@@ -80,10 +80,20 @@ export default function StorePage() {
   const evaluatorModel = useDebugStore((state) => state.evaluatorModel);
   const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
   const currentTest = useDebugStore((state) => state.currentTest);
+  const clearChatRequested = useDebugStore((state) => state.clearChatRequested);
+  const acknowledgeClearChat = useDebugStore((state) => state.acknowledgeClearChat);
 
   // Test runner
   const [testRunner] = useState(() => new TestRunner());
   const [isRunningTest, setIsRunningTest] = useState(false);
+
+  // 🆕 Listen for clear chat request from debug panel
+  useEffect(() => {
+    if (clearChatRequested) {
+      setMessages([]);
+      acknowledgeClearChat();
+    }
+  }, [clearChatRequested, acknowledgeClearChat]);
 
   // Debug logging for button state
   useEffect(() => {
