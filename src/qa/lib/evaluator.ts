@@ -1,4 +1,5 @@
-import type { TestScenario, TestStepResult } from './types'
+import type { TestScenario, TestStepResult, GoalBasedScenario } from './types'
+import { isGoalBasedScenario } from './types'
 
 export async function evaluateStepQuality(
   userMessage: string,
@@ -98,7 +99,8 @@ export async function evaluateOverallQuality(
   scenario: TestScenario,
   results: TestStepResult[],
   conversationHistory: Array<{ role: string, content: string }>,
-  evaluatorModel: string  // Evaluator model - used for overall evaluation
+  evaluatorModel: string,  // Evaluator model - used for overall evaluation
+  goalAchieved?: boolean   // NEW: Pass in for goal-based tests
 ): Promise<{
   score: number
   passed: boolean
@@ -117,7 +119,50 @@ export async function evaluateOverallQuality(
     .map(msg => `${msg.role === 'user' ? 'User' : 'Bot'}: ${msg.content}`)
     .join('\n\n')
 
-  const prompt = `You are an expert evaluator assessing a complete chatbot conversation for quality.
+  // Build different prompts for scripted vs goal-based tests
+  const isGoalBased = isGoalBasedScenario(scenario)
+
+  let prompt: string
+
+  if (isGoalBased) {
+    const goalScenario = scenario as GoalBasedScenario
+    prompt = `You are evaluating a chatbot conversation where an AI-simulated user was trying to achieve a goal.
+
+SCENARIO TYPE: Goal-Based Test
+GOAL: ${goalScenario.goal.description}
+USER PERSONA: ${goalScenario.user.persona}
+TURNS TAKEN: ${results.length}
+MAX TURNS ALLOWED: ${goalScenario.limits.maxTurns}
+GOAL ACHIEVED (by signal detection): ${goalAchieved ? 'Yes' : 'No/Unknown'}
+
+CONVERSATION:
+${conversationText}
+
+EVALUATION CRITERIA:
+${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+Evaluate the conversation:
+1. Did the chatbot help the user achieve their goal?
+2. Did the chatbot handle the user's persona appropriately?
+3. Was the conversation natural and efficient?
+4. Overall quality score (0-100)?
+
+Respond with JSON only:
+{
+  "score": 85,
+  "passed": true,
+  "reasoning": "**Goal Achievement:** The chatbot successfully helped the user book a class. The booking was confirmed and details were provided.\\n\\n**Persona Handling:** The chatbot handled the casual tone well, matching the user's informal style.\\n\\n**Conversation Efficiency:** Completed in 4 turns, which is efficient for a booking flow.\\n\\n**Summary:** Excellent overall performance. The conversation achieved its goal efficiently while maintaining a friendly tone.",
+  "conversationQuality": "good",
+  "goalAchieved": true
+}
+
+conversationQuality options: "excellent", "good", "fair", "poor"
+passed = true if score >= ${scenario.evaluation?.minQualityScore || 70} AND goal was achieved
+
+Be thorough and fair.`
+  } else {
+    // Existing prompt for scripted tests
+    prompt = `You are an expert evaluator assessing a complete chatbot conversation for quality.
 
 SCENARIO: ${scenario.name}
 ${scenario.description}
@@ -161,6 +206,7 @@ conversationQuality options: "excellent", "good", "fair", "poor"
 passed = true if score >= ${scenario.evaluation?.minQualityScore || 70}
 
 Be thorough, specific, and constructive.`
+  }
 
   try {
     // Use Supabase Edge Function instead of calling OpenRouter directly
@@ -207,14 +253,14 @@ Be thorough, specific, and constructive.`
 
   } catch (error) {
     console.error('Overall evaluation failed:', error)
-    // Fallback
-    const allPassed = results.every(r => r.passed)
+    // Fallback - use goalAchieved parameter if provided (goal-based tests)
+    const fallbackPassed = goalAchieved ?? results.every(r => r.passed)
     return {
-      score: allPassed ? 75 : 50,
-      passed: allPassed,
-      reasoning: 'Evaluation failed, using technical results only',
-      conversationQuality: allPassed ? 'good' : 'fair',
-      goalAchieved: allPassed
+      score: fallbackPassed ? 75 : 50,
+      passed: fallbackPassed,
+      reasoning: 'Evaluation failed, using goal achievement status',
+      conversationQuality: fallbackPassed ? 'good' : 'fair',
+      goalAchieved: fallbackPassed
     }
   }
 }

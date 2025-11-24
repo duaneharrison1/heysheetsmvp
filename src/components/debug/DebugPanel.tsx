@@ -187,6 +187,53 @@ export function DebugPanel() {
             </Card>
           </HoverTooltip>
         </div>
+
+        {/* Goal-based test progress */}
+        {currentTest && currentTest.scenarioType === 'goal-based' && (
+          <div className="mt-4 p-3 bg-gray-900 rounded border border-gray-800">
+            <h3 className="text-sm font-semibold mb-2 text-gray-100">
+              Goal-Based Test: {currentTest.scenarioName}
+            </h3>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Progress:</span>
+                <span className="text-white">
+                  Turn {currentTest.currentTurn || 0} / {currentTest.maxTurns} max
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-400">Status:</span>
+                <Badge
+                  variant={
+                    currentTest.status === 'running' ? 'default' :
+                    currentTest.goalAchieved ? 'default' : 'secondary'
+                  }
+                  className={cn(
+                    "text-xs",
+                    currentTest.status === 'complete' && currentTest.goalAchieved
+                      ? "bg-green-500/20 text-green-400"
+                      : currentTest.status === 'complete'
+                      ? "bg-yellow-500/20 text-yellow-400"
+                      : ""
+                  )}
+                >
+                  {currentTest.status === 'complete'
+                    ? (currentTest.goalAchieved ? 'Goal Achieved' : 'Max Turns Reached')
+                    : currentTest.status
+                  }
+                </Badge>
+              </div>
+              {currentTest.status === 'running' && (
+                <div className="w-full bg-gray-800 rounded-full h-1.5 mt-1">
+                  <div
+                    className="bg-blue-500 h-1.5 rounded-full transition-all"
+                    style={{ width: `${((currentTest.currentTurn || 0) / (currentTest.maxTurns || 10)) * 100}%` }}
+                  ></div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Request History */}
@@ -345,6 +392,40 @@ function RequestCard({
         </div>
       )}
 
+      {/* 🆕 GOAL-BASED TURN BADGE (collapsed view) */}
+      {request.goalBasedTurn && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Badge
+            variant="outline"
+            className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30"
+          >
+            Turn {request.goalBasedTurn.turnIndex + 1}
+          </Badge>
+          {request.goalBasedTurn.isSimulated && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
+            >
+              Simulated
+            </Badge>
+          )}
+          {request.goalBasedTurn.performanceScore !== undefined && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-xs",
+                request.goalBasedTurn.performanceScore >= 85 ? "bg-green-500/10 text-green-400 border-green-500/30" :
+                request.goalBasedTurn.performanceScore >= 70 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
+                request.goalBasedTurn.performanceScore >= 50 ? "bg-orange-500/10 text-orange-400 border-orange-500/30" :
+                "bg-red-500/10 text-red-400 border-red-500/30"
+              )}
+            >
+              {request.goalBasedTurn.performanceScore}/100
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* Error Preview */}
       {request.error && (
         <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded mb-2">
@@ -355,8 +436,11 @@ function RequestCard({
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
-          {/* Response Text (ONLY for test scenario cards) */}
-          {request.response?.text && request.userMessage.startsWith('📋 Test Scenario:') && (
+          {/* Response Text (for test scenario cards - scripted and goal-based) */}
+          {request.response?.text && (
+            request.userMessage.startsWith('📋 Test Scenario:') ||
+            request.userMessage.startsWith('🎯 Goal-Based Test:')
+          ) && (
             <div className="text-xs text-gray-300">
               <div className="text-gray-400 font-semibold mb-1">
                 Details:
