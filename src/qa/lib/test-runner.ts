@@ -123,6 +123,9 @@ export class TestRunner {
       evaluatorModel || chatModel
     )
 
+    // Store overall evaluation result
+    execution.overallEvaluation = overallEval
+
     // Complete test
     execution.status = 'complete'
     execution.endTime = Date.now()
@@ -196,13 +199,16 @@ export class TestRunner {
       // Extract rich content (same logic as StorePage)
       const richContent = this.extractRichContent(data.functionResult)
 
-      // Calculate passed status
+      // Calculate passed status (timing is informational only, not pass/fail)
       const passed = technical.intentCorrect &&
                      technical.confidenceOK &&
                      technical.functionsCorrect &&
-                     technical.timingOK &&
+                     // timingOK removed - timing is a performance metric, not pass/fail
                      technical.noErrors &&
                      (quality?.passed ?? true)
+
+      // Calculate performance score based on timing (0-100)
+      const performanceScore = this.calculatePerformanceScore(timeMs)
 
       // 🆕 UPDATE DEBUG REQUEST with response data (like normal chat mode) + test results
       useDebugStore.getState().updateRequest(correlationId, {
@@ -227,6 +233,7 @@ export class TestRunner {
         // 🆕 ADD TEST RESULT DATA (with full diagnostic info)
         testResult: {
           passed,
+          performanceScore,
           technical: {
             intentCorrect: technical.intentCorrect,
             intentActual: technical.intentActual,
@@ -419,5 +426,41 @@ export class TestRunner {
 
   stop() {
     useDebugStore.getState().stopTest()
+  }
+
+  /**
+   * Calculate performance score based on response time
+   * Tiered scoring system:
+   * - Excellent (90-100): < 8s
+   * - Good (70-89): 8-15s
+   * - Acceptable (50-69): 15-25s
+   * - Slow (0-49): > 25s
+   */
+  private calculatePerformanceScore(timeMs: number): number {
+    const seconds = timeMs / 1000
+
+    if (seconds < 8) {
+      // Excellent: 90-100 (scale from 5s-8s)
+      return Math.max(90, Math.min(100, 100 - ((seconds - 5) / 3) * 10))
+    } else if (seconds < 15) {
+      // Good: 70-89 (scale from 8s-15s)
+      return Math.max(70, Math.min(89, 89 - ((seconds - 8) / 7) * 19))
+    } else if (seconds < 25) {
+      // Acceptable: 50-69 (scale from 15s-25s)
+      return Math.max(50, Math.min(69, 69 - ((seconds - 15) / 10) * 19))
+    } else {
+      // Slow: 0-49 (scale from 25s+)
+      return Math.max(0, Math.min(49, 49 - ((seconds - 25) / 20) * 49))
+    }
+  }
+
+  /**
+   * Get performance tier and color based on score
+   */
+  private getPerformanceTier(score: number): { tier: string; color: string } {
+    if (score >= 90) return { tier: 'Excellent', color: 'green' }
+    if (score >= 70) return { tier: 'Good', color: 'blue' }
+    if (score >= 50) return { tier: 'Acceptable', color: 'yellow' }
+    return { tier: 'Slow', color: 'orange' }
   }
 }

@@ -86,6 +86,7 @@ export interface DebugRequest {
   // 🆕 TEST MODE: Optional test result data
   testResult?: {
     passed: boolean
+    performanceScore?: number  // 0-100 score based on timing (not pass/fail)
     technical?: {
       intentCorrect: boolean
       intentActual?: string
@@ -96,7 +97,7 @@ export interface DebugRequest {
       functionsCorrect: boolean
       functionsActual?: string[]
       functionsExpected?: string[]
-      timingOK: boolean
+      timingOK: boolean  // Kept for backwards compatibility, not used in pass/fail
       timeMs?: number
       maxTimeMs?: number
       noErrors: boolean
@@ -106,6 +107,12 @@ export interface DebugRequest {
       score: number
       passed: boolean
       reasoning: string
+    }
+    overall?: {  // Overall test evaluation (after all steps)
+      score: number
+      passed: boolean
+      reasoning: string
+      evaluatorModel: string
     }
   }
 }
