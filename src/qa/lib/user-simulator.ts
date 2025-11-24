@@ -132,40 +132,39 @@ YOUR RESPONSE (just the customer message OR [GOAL_COMPLETE]):`
 }
 
 /**
- * Call the evaluator model via the existing chat-completion edge function
+ * Call the LLM directly via OpenRouter (bypasses chatbot flow)
  */
-async function callEvaluatorModel(model: string, prompt: string, storeId: string): Promise<string> {
+async function callEvaluatorModel(model: string, prompt: string, _storeId: string): Promise<string> {
   try {
-    console.log('[UserSimulator] Calling API with storeId:', storeId, 'model:', model)
+    console.log('[UserSimulator] Calling OpenRouter directly with model:', model)
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: prompt }],
-          storeId: storeId,
-          model: model,
-          skipIntent: true,    // Skip intent classification
-          skipFunctions: true  // Skip function execution
-        })
-      }
-    )
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'HeySheets QA'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 500
+      })
+    })
 
     if (!response.ok) {
-      console.error('[UserSimulator] API error:', response.status, response.statusText)
+      const errorText = await response.text()
+      console.error('[UserSimulator] OpenRouter error:', response.status, errorText)
       return ''
     }
 
     const data = await response.json()
-    console.log('[UserSimulator] API response data:', JSON.stringify(data).slice(0, 200))
+    console.log('[UserSimulator] OpenRouter response:', JSON.stringify(data).slice(0, 300))
 
-    // Try multiple possible response fields
-    const text = data.text || data.response || data.content || data.message || ''
+    // OpenRouter returns standard OpenAI format
+    const text = data.choices?.[0]?.message?.content || ''
 
     if (!text) {
       console.error('[UserSimulator] No text in response, full data:', data)
@@ -173,7 +172,7 @@ async function callEvaluatorModel(model: string, prompt: string, storeId: string
 
     return text
   } catch (error) {
-    console.error('[UserSimulator] Error calling evaluator model:', error)
+    console.error('[UserSimulator] Error calling OpenRouter:', error)
     return ''
   }
 }
