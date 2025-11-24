@@ -332,6 +332,26 @@ function RequestCard({
         )
       )}
 
+      {/* 🆕 GOAL-BASED TEST: Turn & Simulated badges */}
+      {request.goalBasedTurn && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30"
+          >
+            Turn {request.goalBasedTurn.turnIndex + 1}
+          </Badge>
+          {request.goalBasedTurn.isSimulated && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
+            >
+              🤖 Simulated
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* 🆕 TEST RESULT BADGE (collapsed view) */}
       {request.testResult && (
         <div className="mb-2">
@@ -355,8 +375,11 @@ function RequestCard({
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
-          {/* Response Text (ONLY for test scenario cards) */}
-          {request.response?.text && request.userMessage.startsWith('📋 Test Scenario:') && (
+          {/* Response Text (for test scenario cards - scripted and goal-based) */}
+          {request.response?.text && (
+            request.userMessage.startsWith('📋 Test Scenario:') ||
+            request.userMessage.startsWith('🎯 Goal-Based Test:')
+          ) && (
             <div className="text-xs text-gray-300">
               <div className="text-gray-400 font-semibold mb-1">
                 Details:

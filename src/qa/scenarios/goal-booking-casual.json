@@ -1,0 +1,35 @@
+{
+  "id": "goal-booking-casual",
+  "name": "Goal: Book Pottery Class (Casual)",
+  "description": "AI simulates a casual user trying to book a Hand Building class",
+  "type": "goal-based",
+
+  "goal": {
+    "description": "Book a Hand Building pottery class for sometime next week",
+    "successSignals": ["confirmed", "booked", "see you", "looking forward"]
+  },
+
+  "user": {
+    "persona": "casual",
+    "language": "en",
+    "behavior": {
+      "randomness": "natural",
+      "typos": false,
+      "emoji": true
+    }
+  },
+
+  "limits": {
+    "maxTurns": 10
+  },
+
+  "evaluation": {
+    "criteria": [
+      "Booking was successfully created",
+      "Bot handled casual tone appropriately",
+      "Conversation felt natural and friendly",
+      "All necessary information was collected"
+    ],
+    "minQualityScore": 75
+  }
+}

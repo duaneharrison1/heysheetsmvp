@@ -1,13 +1,65 @@
 import { generateCorrelationId } from '@/lib/debug/correlation-id'
 import { useDebugStore } from '@/stores/useDebugStore'
-import type { TestScenario, TestExecution, TestStepResult, TestStep } from './types'
+import type {
+  TestScenario,
+  ScriptedScenario,
+  GoalBasedScenario,
+  TestExecution,
+  TestStepResult,
+  TestStep,
+  GoalBasedTurnResult,
+  TestRunSummary
+} from './types'
+import { isGoalBasedScenario, isScriptedScenario } from './types'
 import { evaluateStepQuality, evaluateOverallQuality } from './evaluator'
+import {
+  generateInitialMessage,
+  generateNextMessage,
+  checkSuccessSignals
+} from './user-simulator'
 
 export class TestRunner {
   private abortController: AbortController | null = null
+  private storeId: string = ''
 
+  // Main entry point - dispatches to scripted or goal-based
   async runScenario(
     scenario: TestScenario,
+    storeId: string,
+    chatModel: string,
+    evaluatorModel: string,
+    onStepComplete?: (result: TestStepResult) => void,
+    onStepStart?: (userMessage: string, stepIndex: number) => void,
+    callbacks?: {
+      onTurnStart?: (turn: number, userMessage: string) => void
+      onTurnComplete?: (result: GoalBasedTurnResult) => void
+    }
+  ): Promise<TestExecution> {
+    this.storeId = storeId
+
+    if (isGoalBasedScenario(scenario)) {
+      return this.runGoalBasedScenario(
+        scenario,
+        storeId,
+        chatModel,
+        evaluatorModel,
+        callbacks
+      )
+    } else {
+      return this.runScriptedScenario(
+        scenario as ScriptedScenario,
+        storeId,
+        chatModel,
+        evaluatorModel,
+        onStepComplete,
+        onStepStart
+      )
+    }
+  }
+
+  // Run scripted scenario (existing logic)
+  async runScriptedScenario(
+    scenario: ScriptedScenario,
     storeId: string,
     chatModel: string,
     evaluatorModel: string,
@@ -21,6 +73,7 @@ export class TestRunner {
       testRunId,
       scenarioId: scenario.id,
       scenarioName: scenario.name,
+      scenarioType: 'scripted',
       status: 'running',
       currentStepIndex: 0,
       totalSteps: scenario.steps.length,
@@ -497,5 +550,329 @@ export class TestRunner {
     if (score >= 50) return { tier: 'Acceptable', color: 'yellow', emoji: '⚠️' }
     if (score >= 25) return { tier: 'Slow', color: 'red', emoji: '🐌' }
     return { tier: 'Unacceptable', color: 'red', emoji: '❌' }
+  }
+
+  // ==========================================
+  // GOAL-BASED TEST EXECUTION
+  // ==========================================
+
+  /**
+   * Run a goal-based scenario where AI generates user messages
+   */
+  async runGoalBasedScenario(
+    scenario: GoalBasedScenario,
+    storeId: string,
+    chatModel: string,
+    evaluatorModel: string,
+    callbacks?: {
+      onTurnStart?: (turn: number, userMessage: string) => void
+      onTurnComplete?: (result: GoalBasedTurnResult) => void
+    }
+  ): Promise<TestExecution> {
+
+    const testRunId = `test-goal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    const execution: TestExecution = {
+      testRunId,
+      scenarioId: scenario.id,
+      scenarioName: scenario.name,
+      scenarioType: 'goal-based',
+      status: 'running',
+      currentTurn: 0,
+      maxTurns: scenario.limits.maxTurns,
+      turns: [],
+      goalAchieved: false,
+      startTime: Date.now(),
+      model: chatModel,
+      evaluatorModel
+    }
+
+    // Update store
+    useDebugStore.getState().startTest(execution)
+
+    // Add test scenario card to timeline
+    const scenarioRequestId = `test-scenario-${testRunId}`
+    const scenarioDetails = [
+      `**${scenario.description}**`,
+      '',
+      `**Type:** Goal-Based Test`,
+      `**Goal:** ${scenario.goal.description}`,
+      `**User Persona:** ${scenario.user.persona}`,
+      `**Language:** ${scenario.user.language}`,
+      `**Max Turns:** ${scenario.limits.maxTurns}`,
+      '',
+      '**Success Signals:**',
+      ...(scenario.goal.successSignals || []).map(s => `• ${s}`),
+      '',
+      '**Evaluation Criteria:**',
+      ...(scenario.evaluation?.criteria || []).map(c => `• ${c}`),
+    ].filter(Boolean).join('\n')
+
+    useDebugStore.getState().addRequest({
+      id: scenarioRequestId,
+      timestamp: Date.now(),
+      userMessage: `🎯 Goal-Based Test: ${scenario.name}`,
+      model: chatModel,
+      timings: { requestStart: Date.now() },
+      status: 'complete',
+      response: {
+        text: scenarioDetails,
+        duration: 0,
+      },
+    })
+
+    // Build conversation history
+    const conversationHistory: Array<{ role: 'user' | 'assistant', content: string }> = []
+
+    // Generate initial user message
+    let simulatorResult = await generateInitialMessage(scenario, evaluatorModel, storeId)
+
+    // Main conversation loop
+    let turn = 0
+    while (!simulatorResult.goalComplete && turn < scenario.limits.maxTurns) {
+      const currentTest = useDebugStore.getState().currentTest
+
+      // Check for pause/stop
+      if (currentTest?.status === 'paused') {
+        await this.waitForResume()
+      }
+      if (currentTest?.status === 'stopped') {
+        break
+      }
+
+      const userMessage = simulatorResult.message
+
+      // Callback: Turn starting
+      callbacks?.onTurnStart?.(turn, userMessage)
+
+      // Small delay for natural feel
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
+
+      // Execute the turn (send to chatbot)
+      const turnResult = await this.executeGoalBasedTurn(
+        turn,
+        userMessage,
+        storeId,
+        chatModel,
+        conversationHistory
+      )
+
+      // Store turn result
+      execution.turns!.push(turnResult)
+      execution.currentTurn = turn + 1
+
+      // Update conversation history
+      conversationHistory.push(
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: turnResult.botResponse }
+      )
+
+      // Callback: Turn complete
+      callbacks?.onTurnComplete?.(turnResult)
+
+      // Update store
+      useDebugStore.getState().updateTestExecution({
+        currentTurn: turn + 1,
+        turns: [...execution.turns!]
+      })
+
+      // Check for success signals in bot response
+      if (scenario.goal.successSignals &&
+          checkSuccessSignals(turnResult.botResponse, scenario.goal.successSignals)) {
+        execution.goalAchieved = true
+        break
+      }
+
+      // Generate next user message
+      simulatorResult = await generateNextMessage(
+        scenario,
+        conversationHistory,
+        turnResult.botResponse,
+        evaluatorModel,
+        storeId
+      )
+
+      // Check if AI signaled goal complete
+      if (simulatorResult.goalComplete) {
+        execution.goalAchieved = true
+        break
+      }
+
+      turn++
+    }
+
+    // Run overall evaluation
+    const overallEval = await evaluateOverallQuality(
+      scenario,
+      execution.turns!.map(t => ({
+        stepId: `turn-${t.turnIndex}`,
+        stepIndex: t.turnIndex,
+        userMessage: t.userMessage,
+        botResponse: t.botResponse,
+        correlationId: t.correlationId,
+        technical: {
+          intentCorrect: true, // N/A for goal-based
+          intentActual: t.technical.intent,
+          intentExpected: '',
+          confidenceOK: true,
+          confidence: t.technical.confidence,
+          minConfidence: 0,
+          functionsCorrect: true,
+          functionsActual: t.technical.functions,
+          functionsExpected: [],
+          timingOK: true,
+          timeMs: t.technical.timeMs,
+          maxTimeMs: 0,
+          noErrors: true
+        },
+        passed: true,
+        timestamp: t.timestamp
+      })),
+      conversationHistory,
+      evaluatorModel,
+      execution.goalAchieved  // Pass goal achievement status
+    )
+
+    // Store overall evaluation
+    execution.overallEvaluation = overallEval
+
+    // Complete execution
+    execution.status = 'complete'
+    execution.endTime = Date.now()
+    execution.goalAchieved = execution.goalAchieved || overallEval.goalAchieved
+
+    useDebugStore.getState().completeTest()
+
+    return execution
+  }
+
+  /**
+   * Execute a single turn in goal-based test
+   */
+  private async executeGoalBasedTurn(
+    turnIndex: number,
+    userMessage: string,
+    storeId: string,
+    chatModel: string,
+    conversationHistory: Array<{ role: string, content: string }>
+  ): Promise<GoalBasedTurnResult> {
+
+    const correlationId = generateCorrelationId()
+    const turnStart = Date.now()
+
+    // Add debug request (like normal chat mode)
+    useDebugStore.getState().addRequest({
+      id: correlationId,
+      timestamp: turnStart,
+      userMessage: userMessage,
+      model: chatModel,
+      timings: { requestStart: turnStart },
+      status: 'pending',
+      goalBasedTurn: {
+        turnIndex,
+        userMessage,
+        isSimulated: true
+      }
+    })
+
+    try {
+      // Update status to classifying
+      useDebugStore.getState().updateRequest(correlationId, { status: 'classifying' })
+
+      // Call Edge Function
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'X-Request-ID': correlationId,
+          },
+          body: JSON.stringify({
+            messages: [
+              ...conversationHistory,
+              { role: 'user', content: userMessage }
+            ],
+            storeId,
+            model: chatModel,
+          })
+        }
+      )
+
+      const data = await response.json()
+      const timeMs = Date.now() - turnStart
+
+      const performanceScore = this.calculatePerformanceScore(timeMs)
+
+      // Update debug request with response
+      useDebugStore.getState().updateRequest(correlationId, {
+        response: {
+          text: data.text,
+          richContent: this.extractRichContent(data.functionResult),
+          duration: 0,
+        },
+        timings: {
+          requestStart: turnStart,
+          totalDuration: timeMs,
+          intentDuration: data.debug?.intentDuration,
+          functionDuration: data.debug?.functionDuration,
+          responseDuration: data.debug?.responseDuration,
+        },
+        intent: data.debug?.intent,
+        functionCalls: data.debug?.functionCalls,
+        tokens: data.debug?.tokens,
+        cost: data.debug?.cost,
+        steps: data.debug?.steps,
+        status: 'complete',
+        goalBasedTurn: {
+          turnIndex,
+          userMessage,
+          isSimulated: true,
+          performanceScore,
+        }
+      })
+
+      return {
+        turnIndex,
+        userMessage,
+        botResponse: data.text || '',
+        correlationId,
+        technical: {
+          intent: data.debug?.intent?.detected || data.intent || 'UNKNOWN',
+          confidence: data.debug?.intent?.confidence || data.confidence || 0,
+          functions: data.debug?.functionCalls?.map((f: any) => f.name) || [],
+          timeMs,
+          performanceScore
+        },
+        timestamp: Date.now()
+      }
+
+    } catch (error: any) {
+      // Update debug request with error
+      useDebugStore.getState().updateRequest(correlationId, {
+        status: 'error',
+        error: {
+          stage: 'request',
+          message: error.message || 'Unknown error',
+          stack: error.stack,
+        },
+      })
+
+      return {
+        turnIndex,
+        userMessage,
+        botResponse: `Error: ${error.message}`,
+        correlationId,
+        technical: {
+          intent: 'ERROR',
+          confidence: 0,
+          functions: [],
+          timeMs: Date.now() - turnStart,
+          performanceScore: 0
+        },
+        timestamp: Date.now()
+      }
+    }
   }
 }

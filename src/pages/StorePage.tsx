@@ -15,7 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScenarioSelector } from "@/qa/components/ScenarioSelector";
 import { TestRunner } from "@/qa/lib/test-runner";
-import type { TestScenario } from "@/qa/lib/types";
+import type { TestScenario, GoalBasedTurnResult } from "@/qa/lib/types";
+import { isGoalBasedScenario } from "@/qa/lib/types";
 import { toast } from "sonner";
 
 // Import scenarios eagerly
@@ -34,6 +35,9 @@ interface Message {
     passed: boolean;
     qualityScore?: number;
   };
+  // Goal-based test fields
+  isSimulated?: boolean;              // For goal-based user messages
+  goalBasedTurn?: GoalBasedTurnResult; // For goal-based bot messages
 }
 
 // Store type for typing the supabase response used in this component
@@ -394,6 +398,9 @@ export default function StorePage() {
     try {
       setIsRunningTest(true);
 
+      // Clear chat for new test
+      setMessages([]);
+
       // Load scenario
       let scenario: TestScenario | null = null;
       for (const path in scenarioModules) {
@@ -410,13 +417,16 @@ export default function StorePage() {
         return;
       }
 
+      // Check if this is a goal-based test
+      const isGoalBased = isGoalBasedScenario(scenario);
+
       // Run test with callbacks to update UI progressively
       const execution = await testRunner.runScenario(
         scenario,
         storeId,
         selectedModel,
         evaluatorModel || selectedModel,
-        // onStepComplete - called after bot responds
+        // onStepComplete - called after bot responds (scripted tests)
         (result) => {
           // Add bot message with test result and rich content
           const botMsg: Message = {
@@ -433,7 +443,7 @@ export default function StorePage() {
 
           setMessages(prev => [...prev, botMsg]);
         },
-        // onStepStart - called when step starts
+        // onStepStart - called when step starts (scripted tests)
         async (userMessage, stepIndex) => {
           // Add slight delay (1-2s) to feel more natural
           const delay = 1000 + Math.random() * 1000  // 1-2 seconds
@@ -448,76 +458,133 @@ export default function StorePage() {
           };
 
           setMessages(prev => [...prev, userMsg]);
+        },
+        // Goal-based test callbacks
+        {
+          onTurnStart: (turn, userMessage) => {
+            // Add user message to chat (simulated)
+            setMessages(prev => [...prev, {
+              id: `goal-user-${turn}`,
+              type: 'user',
+              content: userMessage,
+              timestamp: new Date(),
+              isSimulated: true  // Flag for styling
+            }]);
+          },
+          onTurnComplete: (result) => {
+            // Add bot message to chat
+            setMessages(prev => [...prev, {
+              id: `goal-bot-${result.turnIndex}`,
+              type: 'bot',
+              content: result.botResponse,
+              timestamp: new Date(),
+              goalBasedTurn: result  // Include turn data for display
+            }]);
+          }
         }
       );
 
-      // 🆕 ADD TEST SUMMARY MESSAGE
-      const passedSteps = execution.results.filter(r => r.passed).length;
-      const totalSteps = execution.results.length;
-      const allPassed = passedSteps === totalSteps;
-      const duration = execution.endTime ? (execution.endTime - execution.startTime) / 1000 : 0;
+      // Build summary based on test type
+      let summaryContent: string;
 
-      // Build summary content with overall evaluation
-      let summaryContent = `**Test Complete: ${scenario.name}**\n\n`;
-      summaryContent += `---\n\n`;
+      if (isGoalBased) {
+        // Goal-based test summary
+        const totalTurns = execution.turns?.length || 0;
+        const maxTurns = execution.maxTurns || 10;
+        const duration = execution.endTime ? (execution.endTime - execution.startTime) / 1000 : 0;
 
-      // Technical Results Section
-      summaryContent += `**📊 Technical Results**\n\n`;
-      summaryContent += `**Per-Step Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n`;
+        summaryContent = `**🎯 Goal-Based Test Complete: ${scenario.name}**\n\n`;
+        summaryContent += `---\n\n`;
 
-      // Add duration with performance warning if needed
-      const avgTimePerStep = duration / totalSteps;
-      let durationLine = `**Duration:** ${duration.toFixed(1)}s (${avgTimePerStep.toFixed(1)}s per step)`;
+        // Result
+        summaryContent += `**Result:** ${execution.goalAchieved ? '✅ Goal Achieved' : '⚠️ Goal Not Achieved'}\n\n`;
+        summaryContent += `**Turns:** ${totalTurns} / ${maxTurns} max\n\n`;
+        summaryContent += `**Duration:** ${duration.toFixed(1)}s\n\n`;
+        summaryContent += `**Model:** ${execution.model}\n\n`;
 
-      // Add performance tier indicator
-      if (avgTimePerStep < 3) {
-        durationLine += ` 🏆 Excellent`;
-      } else if (avgTimePerStep < 5) {
-        durationLine += ` ✅ Good`;
-      } else if (avgTimePerStep < 10) {
-        durationLine += ` 👍 Acceptable`;
-      } else if (avgTimePerStep < 15) {
-        durationLine += ` 🐌 Slow`;
+        // Add overall evaluation if available
+        if (execution.overallEvaluation) {
+          summaryContent += `---\n\n`;
+          summaryContent += `**🤖 AI Quality Evaluation**\n\n`;
+          summaryContent += `**Score:** ${execution.overallEvaluation.score}/100\n\n`;
+          summaryContent += `**Quality:** ${execution.overallEvaluation.conversationQuality}\n\n`;
+          summaryContent += `---\n\n`;
+          summaryContent += `**📝 Analysis**\n\n`;
+          summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
+        }
+
+        summaryContent += `---\n\n`;
+        summaryContent += execution.goalAchieved && execution.overallEvaluation?.passed
+          ? '✨ **Excellent!** Goal achieved with high conversation quality.'
+          : '⚠️ **Review Needed:** See the debug panel for detailed turn-by-turn analysis.';
       } else {
-        durationLine += ` ❌ Unacceptable`;
-      }
+        // Scripted test summary (existing logic)
+        const passedSteps = execution.results?.filter(r => r.passed).length || 0;
+        const totalSteps = execution.results?.length || 0;
+        const allPassed = passedSteps === totalSteps;
+        const duration = execution.endTime ? (execution.endTime - execution.startTime) / 1000 : 0;
 
-      summaryContent += durationLine + `\n\n`;
+        summaryContent = `**Test Complete: ${scenario.name}**\n\n`;
+        summaryContent += `---\n\n`;
 
-      // Add performance warning if slow
-      if (avgTimePerStep >= 15) {
-        summaryContent += `⚠️ **Performance Warning:** Response times exceeded 15s per step. This may indicate issues with function execution or API latency.\n\n`;
-      } else if (avgTimePerStep >= 10) {
-        summaryContent += `⚠️ **Performance Note:** Response times were slower than ideal (>10s). Consider investigating function performance.\n\n`;
-      }
+        // Technical Results Section
+        summaryContent += `**📊 Technical Results**\n\n`;
+        summaryContent += `**Per-Step Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n`;
 
-      summaryContent += `**Model:** ${execution.model}\n\n`;
-      summaryContent += `**Evaluator Model:** ${execution.evaluatorModel}\n\n`;
+        // Add duration with performance warning if needed
+        const avgTimePerStep = duration / totalSteps;
+        let durationLine = `**Duration:** ${duration.toFixed(1)}s (${avgTimePerStep.toFixed(1)}s per step)`;
 
-      // Add overall evaluation if available
-      if (execution.overallEvaluation) {
-        const overallEmoji = execution.overallEvaluation.passed ? '✅' : '❌';
-        const qualityLabel = (execution.overallEvaluation as any).conversationQuality || 'unknown';
-        const goalEmoji = (execution.overallEvaluation as any).goalAchieved ? '🎯' : '❌';
+        // Add performance tier indicator
+        if (avgTimePerStep < 3) {
+          durationLine += ` 🏆 Excellent`;
+        } else if (avgTimePerStep < 5) {
+          durationLine += ` ✅ Good`;
+        } else if (avgTimePerStep < 10) {
+          durationLine += ` 👍 Acceptable`;
+        } else if (avgTimePerStep < 15) {
+          durationLine += ` 🐌 Slow`;
+        } else {
+          durationLine += ` ❌ Unacceptable`;
+        }
+
+        summaryContent += durationLine + `\n\n`;
+
+        // Add performance warning if slow
+        if (avgTimePerStep >= 15) {
+          summaryContent += `⚠️ **Performance Warning:** Response times exceeded 15s per step. This may indicate issues with function execution or API latency.\n\n`;
+        } else if (avgTimePerStep >= 10) {
+          summaryContent += `⚠️ **Performance Note:** Response times were slower than ideal (>10s). Consider investigating function performance.\n\n`;
+        }
+
+        summaryContent += `**Model:** ${execution.model}\n\n`;
+        summaryContent += `**Evaluator Model:** ${execution.evaluatorModel}\n\n`;
+
+        // Add overall evaluation if available
+        if (execution.overallEvaluation) {
+          const overallEmoji = execution.overallEvaluation.passed ? '✅' : '❌';
+          const qualityLabel = (execution.overallEvaluation as any).conversationQuality || 'unknown';
+          const goalEmoji = (execution.overallEvaluation as any).goalAchieved ? '🎯' : '❌';
+
+          summaryContent += `---\n\n`;
+          summaryContent += `**🤖 AI Quality Evaluation**\n\n`;
+          summaryContent += `**Overall Result:** ${overallEmoji} ${execution.overallEvaluation.passed ? '**PASSED**' : '**FAILED**'}\n\n`;
+          summaryContent += `**Quality Score:** ${execution.overallEvaluation.score}/100\n\n`;
+          summaryContent += `**Conversation Quality:** ${qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1)}\n\n`;
+          summaryContent += `**Goal Achieved:** ${goalEmoji} ${(execution.overallEvaluation as any).goalAchieved ? 'Yes' : 'No'}\n\n`;
+          summaryContent += `---\n\n`;
+          summaryContent += `**📝 Detailed Analysis**\n\n`;
+          summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
+        } else {
+          summaryContent += `---\n\n`;
+          summaryContent += `**Note:** Overall evaluation is still processing or was not available.\n\n`;
+        }
 
         summaryContent += `---\n\n`;
-        summaryContent += `**🤖 AI Quality Evaluation**\n\n`;
-        summaryContent += `**Overall Result:** ${overallEmoji} ${execution.overallEvaluation.passed ? '**PASSED**' : '**FAILED**'}\n\n`;
-        summaryContent += `**Quality Score:** ${execution.overallEvaluation.score}/100\n\n`;
-        summaryContent += `**Conversation Quality:** ${qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1)}\n\n`;
-        summaryContent += `**Goal Achieved:** ${goalEmoji} ${(execution.overallEvaluation as any).goalAchieved ? 'Yes' : 'No'}\n\n`;
-        summaryContent += `---\n\n`;
-        summaryContent += `**📝 Detailed Analysis**\n\n`;
-        summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
-      } else {
-        summaryContent += `---\n\n`;
-        summaryContent += `**Note:** Overall evaluation is still processing or was not available.\n\n`;
+        summaryContent += allPassed && execution.overallEvaluation?.passed
+          ? '✨ **Excellent!** All technical checks passed and conversation quality is high.'
+          : '⚠️ **Review Needed:** See the debug panel for detailed step-by-step results and improvement opportunities.';
       }
-
-      summaryContent += `---\n\n`;
-      summaryContent += allPassed && execution.overallEvaluation?.passed
-        ? '✨ **Excellent!** All technical checks passed and conversation quality is high.'
-        : '⚠️ **Review Needed:** See the debug panel for detailed step-by-step results and improvement opportunities.';
 
       const summaryMsg: Message = {
         id: `test-summary-${execution.testRunId}`,

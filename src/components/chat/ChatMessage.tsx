@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Bot, User } from 'lucide-react';
+import { Bot, User, Cpu } from 'lucide-react';
 import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "lucide-react";
 import ChatBubble from './ChatBubble';
 import ProductCard from './ProductCard';
@@ -14,6 +14,7 @@ import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 import LeadForm from './LeadForm';
 import { parseMarkdown } from '@/lib/markdown';
+import type { GoalBasedTurnResult } from '@/qa/lib/types';
 
 interface Message {
   id: string;
@@ -25,6 +26,9 @@ interface Message {
     passed: boolean;
     qualityScore?: number;
   };
+  // Goal-based test fields
+  isSimulated?: boolean;              // For goal-based user messages
+  goalBasedTurn?: GoalBasedTurnResult; // For goal-based bot messages
 }
 
 interface ChatMessageProps {
@@ -255,6 +259,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
           <div className="text-sm leading-relaxed">{parseMarkdown(message.content)}</div>
         </ChatBubble>
         {renderRichContent()}
+
+        {/* Goal-based test: Simulated user badge */}
+        {message.isSimulated && message.type === 'user' && (
+          <div className="mt-1">
+            <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30">
+              <Cpu className="w-3 h-3 mr-1" />
+              Simulated User
+            </Badge>
+          </div>
+        )}
       </div>
 
       {message.type === 'user' && (

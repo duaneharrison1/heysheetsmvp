@@ -64,7 +64,8 @@ const ClassificationSchema = {
 
 export async function classifyIntent(
   messages: Message[],
-  context?: { storeData?: StoreData }
+  context?: { storeData?: StoreData },
+  model?: string
 ): Promise<{ classification: Classification; usage: { input: number; output: number } }> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
@@ -196,7 +197,7 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
       'X-Title': 'HeySheets MVP'
     },
     body: JSON.stringify({
-      model: 'anthropic/claude-3.5-sonnet',
+      model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
       messages: [{ role: 'user', content: classificationPrompt }],
       response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
       temperature: 0.1, // Very low temp for consistency

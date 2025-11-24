@@ -115,6 +115,14 @@ export interface DebugRequest {
       evaluatorModel: string
     }
   }
+
+  // 🆕 GOAL-BASED TEST: Turn information
+  goalBasedTurn?: {
+    turnIndex: number
+    userMessage: string
+    isSimulated: true
+    performanceScore?: number
+  }
 }
 
 interface DebugStore {
