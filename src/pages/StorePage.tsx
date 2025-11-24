@@ -403,7 +403,7 @@ export default function StorePage() {
       toast.info(`Running test: ${scenario.name}`);
 
       // Run test with callback to update UI
-      await testRunner.runScenario(
+      const execution = await testRunner.runScenario(
         scenario,
         storeId,
         selectedModel,
@@ -433,6 +433,26 @@ export default function StorePage() {
           setMessages(prev => [...prev, userMsg, botMsg]);
         }
       );
+
+      // 🆕 ADD TEST SUMMARY MESSAGE
+      const passedSteps = execution.results.filter(r => r.passed).length;
+      const totalSteps = execution.results.length;
+      const allPassed = passedSteps === totalSteps;
+      const duration = execution.endTime ? (execution.endTime - execution.startTime) / 1000 : 0;
+
+      const summaryMsg: Message = {
+        id: `test-summary-${execution.testRunId}`,
+        type: 'bot',
+        content: `**Test Complete: ${scenario.name}**\n\n` +
+          `**Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n` +
+          `**Duration:** ${duration.toFixed(1)}s\n\n` +
+          `${allPassed
+            ? 'Great! All test steps completed successfully.'
+            : `Some steps failed. Check the debug panel for details.`}`,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, summaryMsg]);
 
       toast.success(`Test complete: ${scenario.name}`);
     } catch (error) {
