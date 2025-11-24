@@ -430,37 +430,42 @@ export class TestRunner {
 
   /**
    * Calculate performance score based on response time
-   * Tiered scoring system:
-   * - Excellent (90-100): < 8s
-   * - Good (70-89): 8-15s
-   * - Acceptable (50-69): 15-25s
-   * - Slow (0-49): > 25s
+   * UX-focused tiered scoring system:
+   * 🏆 Excellent (90-100): < 3s - Feels instant, delightful
+   * ✅ Good (70-89): 3-5s - User stays engaged
+   * ⚠️ Acceptable (50-69): 5-10s - Noticeable but tolerable
+   * 🐌 Slow (25-49): 10-15s - User getting impatient (RED)
+   * ❌ Unacceptable (0-24): > 15s - User frustrated (RED)
    */
   private calculatePerformanceScore(timeMs: number): number {
     const seconds = timeMs / 1000
 
-    if (seconds < 8) {
-      // Excellent: 90-100 (scale from 5s-8s)
-      return Math.max(90, Math.min(100, 100 - ((seconds - 5) / 3) * 10))
+    if (seconds < 3) {
+      // Excellent: 90-100 (feels instant)
+      return Math.max(90, Math.min(100, 100 - (seconds / 3) * 10))
+    } else if (seconds < 5) {
+      // Good: 70-89 (user stays engaged)
+      return Math.max(70, Math.min(89, 89 - ((seconds - 3) / 2) * 19))
+    } else if (seconds < 10) {
+      // Acceptable: 50-69 (noticeable but tolerable)
+      return Math.max(50, Math.min(69, 69 - ((seconds - 5) / 5) * 19))
     } else if (seconds < 15) {
-      // Good: 70-89 (scale from 8s-15s)
-      return Math.max(70, Math.min(89, 89 - ((seconds - 8) / 7) * 19))
-    } else if (seconds < 25) {
-      // Acceptable: 50-69 (scale from 15s-25s)
-      return Math.max(50, Math.min(69, 69 - ((seconds - 15) / 10) * 19))
+      // Slow: 25-49 (user getting impatient) - RED WARNING
+      return Math.max(25, Math.min(49, 49 - ((seconds - 10) / 5) * 24))
     } else {
-      // Slow: 0-49 (scale from 25s+)
-      return Math.max(0, Math.min(49, 49 - ((seconds - 25) / 20) * 49))
+      // Unacceptable: 0-24 (user frustrated) - RED WARNING
+      return Math.max(0, Math.min(24, 24 - ((seconds - 15) / 10) * 24))
     }
   }
 
   /**
    * Get performance tier and color based on score
    */
-  private getPerformanceTier(score: number): { tier: string; color: string } {
-    if (score >= 90) return { tier: 'Excellent', color: 'green' }
-    if (score >= 70) return { tier: 'Good', color: 'blue' }
-    if (score >= 50) return { tier: 'Acceptable', color: 'yellow' }
-    return { tier: 'Slow', color: 'orange' }
+  private getPerformanceTier(score: number): { tier: string; color: string; emoji: string } {
+    if (score >= 90) return { tier: 'Excellent', color: 'green', emoji: '🏆' }
+    if (score >= 70) return { tier: 'Good', color: 'blue', emoji: '✅' }
+    if (score >= 50) return { tier: 'Acceptable', color: 'yellow', emoji: '⚠️' }
+    if (score >= 25) return { tier: 'Slow', color: 'red', emoji: '🐌' }
+    return { tier: 'Unacceptable', color: 'red', emoji: '❌' }
   }
 }

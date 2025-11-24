@@ -467,16 +467,22 @@ function RequestCard({
                       <div className={
                         request.testResult.performanceScore >= 90 ? 'text-green-400' :
                         request.testResult.performanceScore >= 70 ? 'text-blue-400' :
-                        request.testResult.performanceScore >= 50 ? 'text-yellow-400' : 'text-orange-400'
+                        request.testResult.performanceScore >= 50 ? 'text-yellow-400' :
+                        request.testResult.performanceScore >= 25 ? 'text-red-400' : 'text-red-500'
                       }>
-                        ⚡ Performance: {request.testResult.performanceScore.toFixed(0)}/100
+                        {request.testResult.performanceScore >= 90 ? '🏆' :
+                         request.testResult.performanceScore >= 70 ? '✅' :
+                         request.testResult.performanceScore >= 50 ? '⚠️' :
+                         request.testResult.performanceScore >= 25 ? '🐌' : '❌'}
+                        {' '}Performance: {request.testResult.performanceScore.toFixed(0)}/100
                         <span className="text-xs ml-2">
                           ({((request.testResult.technical as any).timeMs / 1000).toFixed(1)}s)
                         </span>
                         <span className="text-xs ml-2">
                           {request.testResult.performanceScore >= 90 ? 'Excellent' :
                            request.testResult.performanceScore >= 70 ? 'Good' :
-                           request.testResult.performanceScore >= 50 ? 'Acceptable' : 'Slow'}
+                           request.testResult.performanceScore >= 50 ? 'Acceptable' :
+                           request.testResult.performanceScore >= 25 ? 'Slow' : 'Unacceptable'}
                         </span>
                       </div>
                     )}
