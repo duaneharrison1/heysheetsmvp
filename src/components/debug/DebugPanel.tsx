@@ -8,7 +8,6 @@ import { ExternalLink, Copy, X, Loader2 } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
 import { formatRequestForAI, formatAllRequestsForAI } from '@/lib/debug/format-for-ai';
 import { DEBUG_CONFIG } from '@/config/debug';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEffect, useRef } from 'react';
 
@@ -44,18 +43,15 @@ export function DebugPanel() {
 
     const formatted = formatRequestForAI(request, messages);
     navigator.clipboard.writeText(formatted);
-    toast.success('Copied with conversation context!');
   };
 
   const handleCopyAll = () => {
     if (requests.length === 0) {
-      toast.error('No requests to copy');
       return;
     }
 
     const formatted = formatAllRequestsForAI(requests, messages);
     navigator.clipboard.writeText(formatted);
-    toast.success(`Copied ${requests.length} requests!`);
   };
 
   const minMaxResponse = getMinMaxResponseTime();
