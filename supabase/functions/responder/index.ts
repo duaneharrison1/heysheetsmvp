@@ -8,7 +8,8 @@ export async function generateResponse(
   messages: Message[],
   classification: Classification,
   functionResult?: FunctionResult,
-  store?: StoreConfig
+  store?: StoreConfig,
+  model?: string
 ): Promise<{ text: string; usage: { input: number; output: number } }> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
@@ -93,7 +94,7 @@ RESPOND NATURALLY:`;
       'X-Title': 'HeySheets MVP'
     },
     body: JSON.stringify({
-      model: 'anthropic/claude-3.5-sonnet',
+      model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
       messages: [{ role: 'user', content: responsePrompt }],
       max_tokens: 500,
       temperature: 0.7 // Higher temperature for more natural, varied responses
