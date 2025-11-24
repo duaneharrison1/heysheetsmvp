@@ -94,7 +94,7 @@ RESPOND NATURALLY:`;
       'X-Title': 'HeySheets MVP'
     },
     body: JSON.stringify({
-      model: model || 'meta-llama/llama-3.1-70b-instruct', // Use selected model or default to Llama
+      model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
       messages: [{ role: 'user', content: responsePrompt }],
       max_tokens: 500,
       temperature: 0.7 // Higher temperature for more natural, varied responses

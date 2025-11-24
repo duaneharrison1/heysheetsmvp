@@ -197,7 +197,7 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
       'X-Title': 'HeySheets MVP'
     },
     body: JSON.stringify({
-      model: model || 'meta-llama/llama-3.1-70b-instruct', // Use selected model or default to Llama
+      model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
       messages: [{ role: 'user', content: classificationPrompt }],
       response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
       temperature: 0.1, // Very low temp for consistency

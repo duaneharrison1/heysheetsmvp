@@ -61,7 +61,7 @@ serve(async (req) => {
       );
     }
 
-    log(requestId, '💬 User message', { messageCount: messages.length, storeId, model: model || 'meta-llama/llama-3.1-70b-instruct (default)' });
+    log(requestId, '💬 User message', { messageCount: messages.length, storeId, model: model || 'x-ai/grok-4.1-fast (default)' });
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -183,20 +183,20 @@ serve(async (req) => {
     const totalInputTokens = classifyUsage.input + responseUsage.input;
     const totalOutputTokens = classifyUsage.output + responseUsage.output;
 
-    // Get pricing based on actual model used (fallback to Llama 3.1 70B if not found)
+    // Get pricing based on actual model used (fallback to Grok 4.1 Fast if not found)
     const modelPricing: Record<string, { input: number; output: number }> = {
-      'anthropic/claude-3.5-sonnet': { input: 3.0, output: 15.0 },
-      'google/gemini-2.0-flash-001': { input: 0.10, output: 0.40 },
-      'anthropic/claude-3.5-haiku': { input: 1.0, output: 5.0 },
+      'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
+      'google/gemini-3-pro-preview': { input: 2.0, output: 12.0 },
+      'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
+      'openai/gpt-5.1': { input: 0.30, output: 1.20 },
+      'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
+      'deepseek/deepseek-chat-v3.1': { input: 0.27, output: 1.10 },
+      'minimax/minimax-m2': { input: 0.26, output: 1.02 },
+      'qwen/qwen3-235b-a22b-2507': { input: 0.22, output: 0.95 },
+      'x-ai/grok-4.1-fast': { input: 0.20, output: 0.50 },
       'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
-      'google/gemini-flash-1.5': { input: 0.075, output: 0.30 },
-      'deepseek/deepseek-chat': { input: 0.14, output: 0.28 },
-      'x-ai/grok-2': { input: 2.0, output: 10.0 },
-      'qwen/qwen-2.5-72b-instruct': { input: 0.35, output: 0.40 },
-      'meta-llama/llama-3.1-70b-instruct': { input: 0.52, output: 0.75 },
-      'mistralai/mistral-small-24b-instruct-2501': { input: 0.10, output: 0.30 },
     };
-    const pricing = model ? (modelPricing[model] ?? modelPricing['meta-llama/llama-3.1-70b-instruct']) : modelPricing['meta-llama/llama-3.1-70b-instruct'];
+    const pricing = model ? (modelPricing[model] ?? modelPricing['x-ai/grok-4.1-fast']) : modelPricing['x-ai/grok-4.1-fast'];
 
     const inputCost = (totalInputTokens / 1_000_000) * pricing.input;
     const outputCost = (totalOutputTokens / 1_000_000) * pricing.output;
