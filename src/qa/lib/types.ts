@@ -63,6 +63,8 @@ export interface TestExecution {
     score: number
     passed: boolean
     reasoning: string
+    conversationQuality: string  // "excellent" | "good" | "fair" | "poor"
+    goalAchieved: boolean
   }
 }
 

@@ -188,24 +188,15 @@ export class TestRunner {
       // Technical validation
       const technical = this.validateTechnical(step.expected, data, timeMs)
 
-      // AI quality evaluation (using CHAT model - per-message)
-      const quality = await evaluateStepQuality(
-        step.userMessage,
-        data.text,
-        step.criteria || [],
-        chatModel  // ← Use chat model for per-message eval
-      )
-
       // Extract rich content (same logic as StorePage)
       const richContent = this.extractRichContent(data.functionResult)
 
-      // Calculate passed status (timing is informational only, not pass/fail)
-      const passed = technical.intentCorrect &&
-                     technical.confidenceOK &&
-                     technical.functionsCorrect &&
-                     // timingOK removed - timing is a performance metric, not pass/fail
-                     technical.noErrors &&
-                     (quality?.passed ?? true)
+      // Calculate passed status WITHOUT quality (will update async)
+      // For now, only technical checks determine pass/fail
+      const passedTechnical = technical.intentCorrect &&
+                              technical.confidenceOK &&
+                              technical.functionsCorrect &&
+                              technical.noErrors
 
       // Calculate performance score based on timing (0-100)
       const performanceScore = this.calculatePerformanceScore(timeMs)
@@ -232,7 +223,7 @@ export class TestRunner {
         status: 'complete',
         // 🆕 ADD TEST RESULT DATA (with full diagnostic info)
         testResult: {
-          passed,
+          passed: passedTechnical,  // Initial pass based on technical only
           performanceScore,
           technical: {
             intentCorrect: technical.intentCorrect,
@@ -250,15 +241,54 @@ export class TestRunner {
             noErrors: technical.noErrors,
             error: technical.error,
           },
-          quality: quality ? {
-            score: quality.score,
-            passed: quality.passed,
-            reasoning: quality.reasoning,
-          } : undefined,
+          quality: undefined,  // Will be updated async
         },
       })
 
-      // Build result
+      // 🚀 Run quality evaluation ASYNC (non-blocking)
+      evaluateStepQuality(
+        step.userMessage,
+        data.text,
+        step.criteria || [],
+        chatModel
+      ).then(quality => {
+        if (quality) {
+          // Update the request with quality score and recalculate passed
+          const finalPassed = passedTechnical && quality.passed
+          useDebugStore.getState().updateRequest(correlationId, {
+            testResult: {
+              passed: finalPassed,
+              performanceScore,
+              technical: {
+                intentCorrect: technical.intentCorrect,
+                intentActual: technical.intentActual,
+                intentExpected: technical.intentExpected,
+                confidenceOK: technical.confidenceOK,
+                confidence: technical.confidence,
+                minConfidence: technical.minConfidence,
+                functionsCorrect: technical.functionsCorrect,
+                functionsActual: technical.functionsActual,
+                functionsExpected: technical.functionsExpected,
+                timingOK: technical.timingOK,
+                timeMs: technical.timeMs,
+                maxTimeMs: technical.maxTimeMs,
+                noErrors: technical.noErrors,
+                error: technical.error,
+              },
+              quality: {
+                score: quality.score,
+                passed: quality.passed,
+                reasoning: quality.reasoning,
+              },
+            },
+          })
+        }
+      }).catch(err => {
+        console.error('Quality evaluation failed:', err)
+        // Keep technical-only result if quality eval fails
+      })
+
+      // Build result (quality will be updated async)
       const result: TestStepResult = {
         stepId: step.id,
         stepIndex,
@@ -267,8 +297,8 @@ export class TestRunner {
         richContent,
         correlationId,
         technical,
-        quality,
-        passed,
+        quality: undefined,  // Will be updated async
+        passed: passedTechnical,  // Initial pass based on technical only
         timestamp: Date.now()
       }
 

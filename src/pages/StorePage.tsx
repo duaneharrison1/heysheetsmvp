@@ -433,9 +433,13 @@ export default function StorePage() {
 
           setMessages(prev => [...prev, botMsg]);
         },
-        // onStepStart - called immediately when step starts
-        (userMessage, stepIndex) => {
-          // Add user message immediately
+        // onStepStart - called when step starts
+        async (userMessage, stepIndex) => {
+          // Add slight delay (1-2s) to feel more natural
+          const delay = 1000 + Math.random() * 1000  // 1-2 seconds
+          await new Promise(resolve => setTimeout(resolve, delay))
+
+          // Add user message after delay
           const userMsg: Message = {
             id: `test-user-${stepIndex}`,
             type: 'user',
@@ -461,15 +465,23 @@ export default function StorePage() {
       // Add overall evaluation if available
       if (execution.overallEvaluation) {
         const overallEmoji = execution.overallEvaluation.passed ? '✅' : '❌';
-        summaryContent += `**Overall Evaluation:** ${overallEmoji} ${execution.overallEvaluation.passed ? 'PASSED' : 'FAILED'}\n`;
-        summaryContent += `**Score:** ${execution.overallEvaluation.score}/100\n`;
-        summaryContent += `**Evaluator:** ${execution.evaluatorModel}\n\n`;
-        summaryContent += `**Reasoning:**\n${execution.overallEvaluation.reasoning}\n\n`;
+        const qualityLabel = (execution.overallEvaluation as any).conversationQuality || 'unknown';
+        const goalEmoji = (execution.overallEvaluation as any).goalAchieved ? '🎯' : '❌';
+
+        summaryContent += `---\n\n`;
+        summaryContent += `**Overall Evaluation:** ${overallEmoji} ${execution.overallEvaluation.passed ? 'PASSED' : 'FAILED'}\n\n`;
+        summaryContent += `**Quality Score:** ${execution.overallEvaluation.score}/100\n\n`;
+        summaryContent += `**Conversation Quality:** ${qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1)}\n\n`;
+        summaryContent += `**Goal Achieved:** ${goalEmoji} ${(execution.overallEvaluation as any).goalAchieved ? 'Yes' : 'No'}\n\n`;
+        summaryContent += `**Evaluator Model:** ${execution.evaluatorModel}\n\n`;
+        summaryContent += `**Detailed Reasoning:**\n\n`;
+        summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
       }
 
+      summaryContent += `---\n\n`;
       summaryContent += allPassed && execution.overallEvaluation?.passed
-        ? 'Excellent! All checks passed and conversation quality is high.'
-        : 'Review the debug panel for detailed results.';
+        ? '✨ Excellent! All checks passed and conversation quality is high.'
+        : '📊 Review the debug panel for detailed step-by-step results.';
 
       const summaryMsg: Message = {
         id: `test-summary-${execution.testRunId}`,
