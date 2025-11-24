@@ -51,7 +51,55 @@ serve(async (req) => {
   try {
     // Parse request
     const body: ChatCompletionRequest = await req.json();
-    const { messages, storeId, model } = body;
+    const { messages, storeId, model, simpleMode } = body;
+
+    // 🆕 SIMPLE MODE: Just do a raw LLM call, no chatbot logic
+    if (simpleMode) {
+      log(requestId, '🔧 Simple mode - raw LLM call');
+
+      const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+      if (!OPENROUTER_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://heysheets.com',
+          'X-Title': 'HeySheets QA'
+        },
+        body: JSON.stringify({
+          model: model || 'x-ai/grok-4.1-fast',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 500
+        })
+      });
+
+      if (!openRouterResponse.ok) {
+        const errorText = await openRouterResponse.text();
+        log(requestId, '❌ OpenRouter error', { status: openRouterResponse.status, error: errorText });
+        return new Response(
+          JSON.stringify({ error: 'LLM call failed', details: errorText }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const openRouterData = await openRouterResponse.json();
+      const text = openRouterData.choices?.[0]?.message?.content || '';
+
+      log(requestId, '✅ Simple mode complete', { textLength: text.length });
+
+      return new Response(
+        JSON.stringify({ text }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
+      );
+    }
 
     if (!messages || messages.length === 0 || !storeId) {
       log(requestId, '❌ Missing required fields');
