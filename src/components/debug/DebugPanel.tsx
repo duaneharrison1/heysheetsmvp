@@ -397,20 +397,6 @@ function RequestCard({
               Simulated
             </Badge>
           )}
-          {request.goalBasedTurn.performanceScore !== undefined && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs",
-                request.goalBasedTurn.performanceScore >= 85 ? "bg-green-500/10 text-green-400 border-green-500/30" :
-                request.goalBasedTurn.performanceScore >= 70 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
-                request.goalBasedTurn.performanceScore >= 50 ? "bg-orange-500/10 text-orange-400 border-orange-500/30" :
-                "bg-red-500/10 text-red-400 border-red-500/30"
-              )}
-            >
-              {Math.round(request.goalBasedTurn.performanceScore)}/100
-            </Badge>
-          )}
         </div>
       )}
 

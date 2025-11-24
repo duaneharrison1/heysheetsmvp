@@ -277,14 +277,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
             <span className="text-muted-foreground">
               {message.goalBasedTurn.technical.intent}
             </span>
-            <span className="text-muted-foreground">
-              {(message.goalBasedTurn.technical.timeMs / 1000).toFixed(1)}s
-            </span>
             <Badge
               variant="outline"
               className={getPerformanceColor(message.goalBasedTurn.technical.performanceScore)}
+              title={`Response time: ${(message.goalBasedTurn.technical.timeMs / 1000).toFixed(1)}s`}
             >
-              {Math.round(message.goalBasedTurn.technical.performanceScore)}/100
+              {(message.goalBasedTurn.technical.timeMs / 1000).toFixed(1)}s
             </Badge>
           </div>
         )}
