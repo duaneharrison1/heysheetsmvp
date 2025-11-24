@@ -189,6 +189,7 @@ serve(async (req) => {
       'google/gemini-3-pro-preview': { input: 2.0, output: 12.0 },
       'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
       'openai/gpt-5.1': { input: 0.30, output: 1.20 },
+      'openai/gpt-5.1-chat': { input: 0.30, output: 1.20 },
       'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
       'deepseek/deepseek-chat-v3.1': { input: 0.27, output: 1.10 },
       'minimax/minimax-m2': { input: 0.26, output: 1.02 },
