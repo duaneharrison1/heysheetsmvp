@@ -459,8 +459,14 @@ export default function StorePage() {
 
       // Build summary content with overall evaluation
       let summaryContent = `**Test Complete: ${scenario.name}**\n\n`;
+      summaryContent += `---\n\n`;
+
+      // Technical Results Section
+      summaryContent += `**📊 Technical Results**\n\n`;
       summaryContent += `**Per-Step Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n`;
-      summaryContent += `**Duration:** ${duration.toFixed(1)}s\n\n`;
+      summaryContent += `**Duration:** ${duration.toFixed(1)}s (${(duration / totalSteps).toFixed(1)}s per step)\n\n`;
+      summaryContent += `**Model:** ${execution.model}\n\n`;
+      summaryContent += `**Evaluator Model:** ${execution.evaluatorModel}\n\n`;
 
       // Add overall evaluation if available
       if (execution.overallEvaluation) {
@@ -469,19 +475,23 @@ export default function StorePage() {
         const goalEmoji = (execution.overallEvaluation as any).goalAchieved ? '🎯' : '❌';
 
         summaryContent += `---\n\n`;
-        summaryContent += `**Overall Evaluation:** ${overallEmoji} ${execution.overallEvaluation.passed ? 'PASSED' : 'FAILED'}\n\n`;
+        summaryContent += `**🤖 AI Quality Evaluation**\n\n`;
+        summaryContent += `**Overall Result:** ${overallEmoji} ${execution.overallEvaluation.passed ? '**PASSED**' : '**FAILED**'}\n\n`;
         summaryContent += `**Quality Score:** ${execution.overallEvaluation.score}/100\n\n`;
         summaryContent += `**Conversation Quality:** ${qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1)}\n\n`;
         summaryContent += `**Goal Achieved:** ${goalEmoji} ${(execution.overallEvaluation as any).goalAchieved ? 'Yes' : 'No'}\n\n`;
-        summaryContent += `**Evaluator Model:** ${execution.evaluatorModel}\n\n`;
-        summaryContent += `**Detailed Reasoning:**\n\n`;
+        summaryContent += `---\n\n`;
+        summaryContent += `**📝 Detailed Analysis**\n\n`;
         summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
+      } else {
+        summaryContent += `---\n\n`;
+        summaryContent += `**Note:** Overall evaluation is still processing or was not available.\n\n`;
       }
 
       summaryContent += `---\n\n`;
       summaryContent += allPassed && execution.overallEvaluation?.passed
-        ? '✨ Excellent! All checks passed and conversation quality is high.'
-        : '📊 Review the debug panel for detailed step-by-step results.';
+        ? '✨ **Excellent!** All technical checks passed and conversation quality is high.'
+        : '⚠️ **Review Needed:** See the debug panel for detailed step-by-step results and improvement opportunities.';
 
       const summaryMsg: Message = {
         id: `test-summary-${execution.testRunId}`,

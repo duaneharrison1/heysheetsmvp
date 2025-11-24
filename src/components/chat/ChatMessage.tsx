@@ -13,6 +13,7 @@ import ServicesGrid from './ServicesGrid';
 import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 import LeadForm from './LeadForm';
+import { parseMarkdown } from '@/lib/markdown';
 
 interface Message {
   id: string;
@@ -251,7 +252,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
 
       <div className={`max-w-[85%] min-w-0 overflow-hidden box-border ${message.type === 'user' ? 'max-w-[70%]' : ''}`}>
         <ChatBubble type={message.type} timestamp={message.timestamp}>
-          <div className="text-sm leading-relaxed">{message.content}</div>
+          <div className="text-sm leading-relaxed">{parseMarkdown(message.content)}</div>
         </ChatBubble>
         {renderRichContent()}
       </div>
