@@ -1,0 +1,34 @@
+{
+  "id": "store-info-001",
+  "name": "Store Info - Hours and Location",
+  "description": "User asks about business hours and location in one message",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "What are your hours and where are you located?",
+      "expected": {
+        "intent": "INFO_REQUEST",
+        "minConfidence": 70,
+        "functions": ["get_store_info"],
+        "maxTimeMs": 15000,
+        "responseContains": ["hour"]
+      },
+      "criteria": [
+        "Provides business hours clearly",
+        "Includes location or address if available",
+        "Information is accurate and complete",
+        "Friendly, helpful tone"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "User got the information they asked for",
+      "Response was clear and easy to understand",
+      "No unnecessary follow-up needed"
+    ],
+    "minQualityScore": 80
+  }
+}

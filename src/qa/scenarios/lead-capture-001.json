@@ -1,0 +1,33 @@
+{
+  "id": "lead-capture-001",
+  "name": "Lead Capture - Contact Request",
+  "description": "User wants to be contacted about classes",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "Can someone contact me about classes?",
+      "expected": {
+        "intent": "LEAD_GENERATION",
+        "minConfidence": 70,
+        "functions": ["submit_lead"],
+        "maxTimeMs": 15000
+      },
+      "criteria": [
+        "Recognizes lead capture intent",
+        "Asks for contact details OR shows lead form",
+        "Explains what happens next",
+        "Friendly and not pushy"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Lead capture flow was triggered correctly",
+      "User understands how they'll be contacted",
+      "Experience felt helpful, not salesy"
+    ],
+    "minQualityScore": 80
+  }
+}

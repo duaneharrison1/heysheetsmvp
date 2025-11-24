@@ -1,0 +1,34 @@
+{
+  "id": "product-inquiry-001",
+  "name": "Product Inquiry - Browse Products",
+  "description": "User asks about products available for purchase",
+
+  "steps": [
+    {
+      "id": "step-1",
+      "userMessage": "Do you sell any pottery items or gift sets?",
+      "expected": {
+        "intent": "PRODUCT_INQUIRY",
+        "minConfidence": 70,
+        "functions": ["get_products"],
+        "maxTimeMs": 15000,
+        "richContentType": "products"
+      },
+      "criteria": [
+        "Lists available products",
+        "Shows relevant details (price, description)",
+        "Highlights gift-appropriate items if available",
+        "Invites further questions about products"
+      ]
+    }
+  ],
+
+  "evaluation": {
+    "criteria": [
+      "Product inquiry was understood correctly",
+      "Response included relevant product information",
+      "User can make a purchasing decision based on response"
+    ],
+    "minQualityScore": 80
+  }
+}
