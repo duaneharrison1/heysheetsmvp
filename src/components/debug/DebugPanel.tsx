@@ -71,10 +71,16 @@ export function DebugPanel() {
   // 🆕 Reverse requests array for timeline (oldest first, newest last)
   const reversedRequests = [...requests].reverse();
 
-  // 🆕 Auto-scroll to bottom when new requests arrive
+  // 🆕 Auto-scroll to bottom when new requests arrive (smooth)
   useEffect(() => {
     if (timelineRef.current && requests.length > 0) {
-      timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        timelineRef.current?.scrollTo({
+          top: timelineRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }, 100);
     }
   }, [requests.length]);
 
@@ -353,6 +359,18 @@ function RequestCard({
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
+          {/* Response Text (especially useful for test scenario details) */}
+          {request.response?.text && (
+            <div className="text-xs text-gray-300">
+              <div className="text-gray-400 font-semibold mb-1">
+                Details:
+              </div>
+              <div className="text-gray-300 whitespace-pre-wrap bg-gray-800 p-2 rounded">
+                {request.response.text}
+              </div>
+            </div>
+          )}
+
           {/* Timeline */}
           {request.timings.intentDuration && (
             <div className="text-xs text-gray-300">
