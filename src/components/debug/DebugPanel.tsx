@@ -188,50 +188,38 @@ export function DebugPanel() {
           </HoverTooltip>
         </div>
 
-        {/* Goal-based test progress */}
+        {/* Goal-based test progress - compact version */}
         {currentTest && currentTest.scenarioType === 'goal-based' && (
-          <div className="mt-4 p-3 bg-gray-900 rounded border border-gray-800">
-            <h3 className="text-sm font-semibold mb-2 text-gray-100">
-              Goal-Based Test: {currentTest.scenarioName}
-            </h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Progress:</span>
-                <span className="text-white">
-                  Turn {currentTest.currentTurn || 0} / {currentTest.maxTurns} max
-                </span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Status:</span>
-                <Badge
-                  variant={
-                    currentTest.status === 'running' ? 'default' :
-                    currentTest.goalAchieved ? 'default' : 'secondary'
-                  }
-                  className={cn(
-                    "text-xs",
-                    currentTest.status === 'complete' && currentTest.goalAchieved
-                      ? "bg-green-500/20 text-green-400"
-                      : currentTest.status === 'complete'
-                      ? "bg-yellow-500/20 text-yellow-400"
-                      : ""
-                  )}
-                >
-                  {currentTest.status === 'complete'
-                    ? (currentTest.goalAchieved ? 'Goal Achieved' : 'Max Turns Reached')
-                    : currentTest.status
-                  }
-                </Badge>
-              </div>
-              {currentTest.status === 'running' && (
-                <div className="w-full bg-gray-800 rounded-full h-1.5 mt-1">
-                  <div
-                    className="bg-blue-500 h-1.5 rounded-full transition-all"
-                    style={{ width: `${((currentTest.currentTurn || 0) / (currentTest.maxTurns || 10)) * 100}%` }}
-                  ></div>
-                </div>
-              )}
+          <div className="mt-3 p-2 bg-gray-900/50 rounded border border-gray-800">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-400 truncate flex-1" title={currentTest.scenarioName}>
+                {currentTest.scenarioName}
+              </span>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] px-1.5 py-0",
+                  currentTest.status === 'complete' && currentTest.goalAchieved
+                    ? "bg-green-500/20 text-green-400 border-green-500/30"
+                    : currentTest.status === 'complete'
+                    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                    : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                )}
+              >
+                {currentTest.status === 'complete'
+                  ? (currentTest.goalAchieved ? 'Done' : 'Max')
+                  : `${currentTest.currentTurn || 0}/${currentTest.maxTurns}`
+                }
+              </Badge>
             </div>
+            {currentTest.status === 'running' && (
+              <div className="w-full bg-gray-800 rounded-full h-1 mt-1.5">
+                <div
+                  className="bg-blue-500 h-1 rounded-full transition-all"
+                  style={{ width: `${((currentTest.currentTurn || 0) / (currentTest.maxTurns || 10)) * 100}%` }}
+                ></div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -379,22 +367,9 @@ function RequestCard({
         )
       )}
 
-      {/* 🆕 TEST RESULT BADGE (collapsed view) */}
-      {request.testResult && (
-        <div className="mb-2">
-          <Badge
-            variant={request.testResult.passed ? 'default' : 'destructive'}
-            className="text-xs"
-          >
-            {request.testResult.passed ? '✅ Test Passed' : '❌ Test Failed'}
-            {request.testResult.quality?.score && ` • ${request.testResult.quality.score}/100`}
-          </Badge>
-        </div>
-      )}
-
-      {/* 🆕 GOAL-BASED TURN BADGE (collapsed view) */}
+      {/* 🆕 GOAL-BASED TEST: Turn & Simulated badges */}
       {request.goalBasedTurn && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
           <Badge
             variant="outline"
             className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30"
@@ -406,23 +381,22 @@ function RequestCard({
               variant="outline"
               className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
             >
-              Simulated
+              🤖 Simulated
             </Badge>
           )}
-          {request.goalBasedTurn.performanceScore !== undefined && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs",
-                request.goalBasedTurn.performanceScore >= 85 ? "bg-green-500/10 text-green-400 border-green-500/30" :
-                request.goalBasedTurn.performanceScore >= 70 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" :
-                request.goalBasedTurn.performanceScore >= 50 ? "bg-orange-500/10 text-orange-400 border-orange-500/30" :
-                "bg-red-500/10 text-red-400 border-red-500/30"
-              )}
-            >
-              {request.goalBasedTurn.performanceScore}/100
-            </Badge>
-          )}
+        </div>
+      )}
+
+      {/* 🆕 TEST RESULT BADGE (collapsed view) */}
+      {request.testResult && (
+        <div className="mb-2">
+          <Badge
+            variant={request.testResult.passed ? 'default' : 'destructive'}
+            className="text-xs"
+          >
+            {request.testResult.passed ? '✅ Test Passed' : '❌ Test Failed'}
+            {request.testResult.quality?.score && ` • ${request.testResult.quality.score}/100`}
+          </Badge>
         </div>
       )}
 
