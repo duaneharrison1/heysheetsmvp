@@ -117,7 +117,7 @@ export async function evaluateOverallQuality(
     .map(msg => `${msg.role === 'user' ? 'User' : 'Bot'}: ${msg.content}`)
     .join('\n\n')
 
-  const prompt = `You are evaluating a complete chatbot conversation for quality.
+  const prompt = `You are an expert evaluator assessing a complete chatbot conversation for quality.
 
 SCENARIO: ${scenario.name}
 ${scenario.description}
@@ -133,24 +133,34 @@ TECHNICAL RESULTS:
 - Steps passed: ${results.filter(r => r.passed).length}
 - Steps failed: ${results.filter(r => !r.passed).length}
 
-Evaluate the overall conversation quality:
-1. Was the goal achieved?
-2. How was the conversation quality?
-3. Overall score (0-100)
+Provide a DETAILED evaluation with score breakdown:
+
+1. **Goal Achievement** - Did the conversation achieve its intended purpose?
+2. **Response Quality** - Were responses helpful, accurate, and appropriate?
+3. **Conversation Flow** - Was the interaction natural and well-structured?
+4. **Technical Accuracy** - Did the bot correctly identify intents and use appropriate functions?
+5. **User Experience** - Would a real user be satisfied with this interaction?
 
 Respond with JSON only:
 {
   "score": 88,
   "passed": true,
-  "reasoning": "Booking flow completed successfully. All steps passed. Conversation was natural and helpful.",
+  "reasoning": "**Goal Achievement (95/100):** The booking flow completed successfully. All required information was collected and the booking was confirmed.\\n\\n**Response Quality (90/100):** Responses were clear, friendly, and included all necessary details. One minor improvement: could have proactively mentioned cancellation policy.\\n\\n**Conversation Flow (85/100):** Natural progression through the booking steps. Slight delay in one transition but overall smooth.\\n\\n**Technical Accuracy (90/100):** All intents correctly identified. Functions executed without errors. High confidence scores throughout.\\n\\n**User Experience (88/100):** Professional and efficient interaction. User would likely be satisfied and complete the booking.\\n\\n**Summary:** Excellent overall performance. The conversation achieved its goal efficiently while maintaining a friendly, professional tone. Minor areas for improvement in proactive communication.",
   "conversationQuality": "excellent",
   "goalAchieved": true
 }
 
+**IMPORTANT FORMATTING:**
+- Use \\n\\n for paragraph breaks in reasoning
+- Use **bold** for section headings
+- Include specific scores for each dimension (e.g., "Goal Achievement (95/100)")
+- Provide specific examples from the conversation
+- End with a brief summary paragraph
+
 conversationQuality options: "excellent", "good", "fair", "poor"
 passed = true if score >= ${scenario.evaluation?.minQualityScore || 70}
 
-Be thorough and fair.`
+Be thorough, specific, and constructive.`
 
   try {
     // Use Supabase Edge Function instead of calling OpenRouter directly
