@@ -453,15 +453,28 @@ export default function StorePage() {
       const allPassed = passedSteps === totalSteps;
       const duration = execution.endTime ? (execution.endTime - execution.startTime) / 1000 : 0;
 
+      // Build summary content with overall evaluation
+      let summaryContent = `**Test Complete: ${scenario.name}**\n\n`;
+      summaryContent += `**Per-Step Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n`;
+      summaryContent += `**Duration:** ${duration.toFixed(1)}s\n\n`;
+
+      // Add overall evaluation if available
+      if (execution.overallEvaluation) {
+        const overallEmoji = execution.overallEvaluation.passed ? '✅' : '❌';
+        summaryContent += `**Overall Evaluation:** ${overallEmoji} ${execution.overallEvaluation.passed ? 'PASSED' : 'FAILED'}\n`;
+        summaryContent += `**Score:** ${execution.overallEvaluation.score}/100\n`;
+        summaryContent += `**Evaluator:** ${execution.evaluatorModel}\n\n`;
+        summaryContent += `**Reasoning:**\n${execution.overallEvaluation.reasoning}\n\n`;
+      }
+
+      summaryContent += allPassed && execution.overallEvaluation?.passed
+        ? 'Excellent! All checks passed and conversation quality is high.'
+        : 'Review the debug panel for detailed results.';
+
       const summaryMsg: Message = {
         id: `test-summary-${execution.testRunId}`,
         type: 'bot',
-        content: `**Test Complete: ${scenario.name}**\n\n` +
-          `**Results:** ${allPassed ? '✅ All steps passed' : `⚠️ ${passedSteps}/${totalSteps} steps passed`}\n\n` +
-          `**Duration:** ${duration.toFixed(1)}s\n\n` +
-          `${allPassed
-            ? 'Great! All test steps completed successfully.'
-            : `Some steps failed. Check the debug panel for details.`}`,
+        content: summaryContent,
         timestamp: new Date()
       };
 

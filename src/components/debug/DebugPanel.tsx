@@ -462,15 +462,30 @@ function RequestCard({
                         </div>
                       )}
                     </div>
-                    <div className={request.testResult.technical.timingOK ? 'text-gray-400' : 'text-red-400'}>
-                      {request.testResult.technical.timingOK ? '✓' : '✗'} Timing OK
-                      {!request.testResult.technical.timingOK && (
-                        <div className="text-xs ml-4 text-red-300">
-                          Max: {((request.testResult.technical as any).maxTimeMs / 1000).toFixed(1)}s,
-                          Got: {((request.testResult.technical as any).timeMs / 1000).toFixed(1)}s
-                        </div>
-                      )}
-                    </div>
+                    {/* Performance Score (color-coded, not pass/fail) */}
+                    {request.testResult.performanceScore !== undefined && (
+                      <div className={
+                        request.testResult.performanceScore >= 90 ? 'text-green-400' :
+                        request.testResult.performanceScore >= 70 ? 'text-blue-400' :
+                        request.testResult.performanceScore >= 50 ? 'text-yellow-400' :
+                        request.testResult.performanceScore >= 25 ? 'text-red-400' : 'text-red-500'
+                      }>
+                        {request.testResult.performanceScore >= 90 ? '🏆' :
+                         request.testResult.performanceScore >= 70 ? '✅' :
+                         request.testResult.performanceScore >= 50 ? '⚠️' :
+                         request.testResult.performanceScore >= 25 ? '🐌' : '❌'}
+                        {' '}Performance: {request.testResult.performanceScore.toFixed(0)}/100
+                        <span className="text-xs ml-2">
+                          ({((request.testResult.technical as any).timeMs / 1000).toFixed(1)}s)
+                        </span>
+                        <span className="text-xs ml-2">
+                          {request.testResult.performanceScore >= 90 ? 'Excellent' :
+                           request.testResult.performanceScore >= 70 ? 'Good' :
+                           request.testResult.performanceScore >= 50 ? 'Acceptable' :
+                           request.testResult.performanceScore >= 25 ? 'Slow' : 'Unacceptable'}
+                        </span>
+                      </div>
+                    )}
                     <div className={request.testResult.technical.noErrors ? 'text-gray-400' : 'text-red-400'}>
                       {request.testResult.technical.noErrors ? '✓' : '✗'} No errors
                       {!request.testResult.technical.noErrors && (request.testResult.technical as any).error && (

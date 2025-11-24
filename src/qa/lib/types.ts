@@ -57,6 +57,13 @@ export interface TestExecution {
 
   model: string           // Chat model used
   evaluatorModel: string  // Evaluator model used
+
+  // Overall evaluation (after all steps complete)
+  overallEvaluation?: {
+    score: number
+    passed: boolean
+    reasoning: string
+  }
 }
 
 export interface TestStepResult {

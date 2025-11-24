@@ -123,6 +123,9 @@ export class TestRunner {
       evaluatorModel || chatModel
     )
 
+    // Store overall evaluation result
+    execution.overallEvaluation = overallEval
+
     // Complete test
     execution.status = 'complete'
     execution.endTime = Date.now()
@@ -196,13 +199,16 @@ export class TestRunner {
       // Extract rich content (same logic as StorePage)
       const richContent = this.extractRichContent(data.functionResult)
 
-      // Calculate passed status
+      // Calculate passed status (timing is informational only, not pass/fail)
       const passed = technical.intentCorrect &&
                      technical.confidenceOK &&
                      technical.functionsCorrect &&
-                     technical.timingOK &&
+                     // timingOK removed - timing is a performance metric, not pass/fail
                      technical.noErrors &&
                      (quality?.passed ?? true)
+
+      // Calculate performance score based on timing (0-100)
+      const performanceScore = this.calculatePerformanceScore(timeMs)
 
       // 🆕 UPDATE DEBUG REQUEST with response data (like normal chat mode) + test results
       useDebugStore.getState().updateRequest(correlationId, {
@@ -227,6 +233,7 @@ export class TestRunner {
         // 🆕 ADD TEST RESULT DATA (with full diagnostic info)
         testResult: {
           passed,
+          performanceScore,
           technical: {
             intentCorrect: technical.intentCorrect,
             intentActual: technical.intentActual,
@@ -419,5 +426,46 @@ export class TestRunner {
 
   stop() {
     useDebugStore.getState().stopTest()
+  }
+
+  /**
+   * Calculate performance score based on response time
+   * UX-focused tiered scoring system:
+   * 🏆 Excellent (90-100): < 3s - Feels instant, delightful
+   * ✅ Good (70-89): 3-5s - User stays engaged
+   * ⚠️ Acceptable (50-69): 5-10s - Noticeable but tolerable
+   * 🐌 Slow (25-49): 10-15s - User getting impatient (RED)
+   * ❌ Unacceptable (0-24): > 15s - User frustrated (RED)
+   */
+  private calculatePerformanceScore(timeMs: number): number {
+    const seconds = timeMs / 1000
+
+    if (seconds < 3) {
+      // Excellent: 90-100 (feels instant)
+      return Math.max(90, Math.min(100, 100 - (seconds / 3) * 10))
+    } else if (seconds < 5) {
+      // Good: 70-89 (user stays engaged)
+      return Math.max(70, Math.min(89, 89 - ((seconds - 3) / 2) * 19))
+    } else if (seconds < 10) {
+      // Acceptable: 50-69 (noticeable but tolerable)
+      return Math.max(50, Math.min(69, 69 - ((seconds - 5) / 5) * 19))
+    } else if (seconds < 15) {
+      // Slow: 25-49 (user getting impatient) - RED WARNING
+      return Math.max(25, Math.min(49, 49 - ((seconds - 10) / 5) * 24))
+    } else {
+      // Unacceptable: 0-24 (user frustrated) - RED WARNING
+      return Math.max(0, Math.min(24, 24 - ((seconds - 15) / 10) * 24))
+    }
+  }
+
+  /**
+   * Get performance tier and color based on score
+   */
+  private getPerformanceTier(score: number): { tier: string; color: string; emoji: string } {
+    if (score >= 90) return { tier: 'Excellent', color: 'green', emoji: '🏆' }
+    if (score >= 70) return { tier: 'Good', color: 'blue', emoji: '✅' }
+    if (score >= 50) return { tier: 'Acceptable', color: 'yellow', emoji: '⚠️' }
+    if (score >= 25) return { tier: 'Slow', color: 'red', emoji: '🐌' }
+    return { tier: 'Unacceptable', color: 'red', emoji: '❌' }
   }
 }
