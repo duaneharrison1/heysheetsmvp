@@ -52,9 +52,8 @@ Be fair but critical.`
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
-          storeId: 'evaluation', // Dummy store ID for evaluation
           model,
-          skipIntent: true  // Skip intent classification for evaluation
+          simpleMode: true  // Use simple mode for raw LLM evaluation
         })
       }
     )
@@ -220,9 +219,8 @@ Be thorough, specific, and constructive.`
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
-          storeId: 'evaluation', // Dummy store ID for evaluation
           model: evaluatorModel,
-          skipIntent: true  // Skip intent classification for evaluation
+          simpleMode: true  // Use simple mode for raw LLM evaluation
         })
       }
     )
