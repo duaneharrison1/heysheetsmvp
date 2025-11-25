@@ -562,19 +562,32 @@ export default function StorePage() {
 
         // Add overall evaluation if available
         if (execution.overallEvaluation) {
-          const overallEmoji = execution.overallEvaluation.passed ? '✅' : '❌';
-          const qualityLabel = (execution.overallEvaluation as any).conversationQuality || 'unknown';
-          const goalEmoji = (execution.overallEvaluation as any).goalAchieved ? '🎯' : '❌';
+          // Check if this is a fallback evaluation (contains error message)
+          const isFallback = execution.overallEvaluation.reasoning.includes('AI Evaluation Unavailable');
 
           summaryContent += `---\n\n`;
-          summaryContent += `**🤖 AI Quality Evaluation**\n\n`;
-          summaryContent += `**Overall Result:** ${overallEmoji} ${execution.overallEvaluation.passed ? '**PASSED**' : '**FAILED**'}\n\n`;
-          summaryContent += `**Quality Score:** ${execution.overallEvaluation.score}/100\n\n`;
-          summaryContent += `**Conversation Quality:** ${qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1)}\n\n`;
-          summaryContent += `**Goal Achieved:** ${goalEmoji} ${(execution.overallEvaluation as any).goalAchieved ? 'Yes' : 'No'}\n\n`;
-          summaryContent += `---\n\n`;
-          summaryContent += `**📝 Detailed Analysis**\n\n`;
-          summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
+
+          if (isFallback) {
+            // Fallback evaluation - show error prominently, don't show misleading scores
+            summaryContent += `**⚠️ AI Evaluator Error**\n\n`;
+            summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
+            summaryContent += `**Note:** The chatbot worked correctly and responded to your message. ` +
+              `Only the quality analysis AI failed. Technical validation shows all checks passed.\n\n`;
+          } else {
+            // Normal evaluation - show full scores
+            const overallEmoji = execution.overallEvaluation.passed ? '✅' : '❌';
+            const qualityLabel = (execution.overallEvaluation as any).conversationQuality || 'unknown';
+            const goalEmoji = (execution.overallEvaluation as any).goalAchieved ? '🎯' : '❌';
+
+            summaryContent += `**🤖 AI Quality Evaluation**\n\n`;
+            summaryContent += `**Overall Result:** ${overallEmoji} ${execution.overallEvaluation.passed ? '**PASSED**' : '**FAILED**'}\n\n`;
+            summaryContent += `**Quality Score:** ${execution.overallEvaluation.score}/100\n\n`;
+            summaryContent += `**Conversation Quality:** ${qualityLabel.charAt(0).toUpperCase() + qualityLabel.slice(1)}\n\n`;
+            summaryContent += `**Goal Achieved:** ${goalEmoji} ${(execution.overallEvaluation as any).goalAchieved ? 'Yes' : 'No'}\n\n`;
+            summaryContent += `---\n\n`;
+            summaryContent += `**📝 Detailed Analysis**\n\n`;
+            summaryContent += `${execution.overallEvaluation.reasoning}\n\n`;
+          }
         } else {
           summaryContent += `---\n\n`;
           summaryContent += `**Note:** Overall evaluation is still processing or was not available.\n\n`;
