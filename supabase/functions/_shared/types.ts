@@ -100,6 +100,7 @@ export interface FunctionContext {
   authToken: string;
   store?: StoreConfig;
   requestId?: string; // For correlation across edge functions
+  lastUserMessage?: string; // For parsing form data from messages
 }
 
 /**

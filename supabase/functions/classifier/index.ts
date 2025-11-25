@@ -40,6 +40,7 @@ const ClassificationSchema = {
         name: { type: "string" },
         email: { type: "string" },
         phone: { type: "string" },
+        message: { type: "string" },
         service_name: { type: "string" },
         date: { type: "string" },
         time: { type: "string" },
@@ -144,11 +145,14 @@ PARAMETER EXTRACTION RULES:
 - query: User's search term or description (for get_services, get_products) - can be vague like "sake" or "beginner pottery"
 - category: Specific category name if mentioned explicitly (for get_products)
 - tab_name: Custom tab name if user asks about FAQ, Policies, etc. (for get_misc_data)
-- name, email, phone: Contact details (for submit_lead)
+- name, email, phone, message: Contact details (for submit_lead)
 - service_name: Service name for booking (for check_availability, create_booking)
 - date: Date in YYYY-MM-DD format (for check_availability, create_booking) - parse relative dates like "tomorrow" or "next Monday"
 - time: Time in HH:MM format (for check_availability, create_booking)
 - customer_name, customer_email, customer_phone: Customer details (for create_booking)
+
+FORM DATA EXTRACTION:
+When the message contains key="value" patterns (e.g., 'submit_lead name="John" email="john@example.com"'), extract ALL key-value pairs into extracted_params. This includes any dynamic field names.
 
 CONFIDENCE SCORING:
 - 0-70 (LOW): Ambiguous intent, missing information, or unclear what user wants → needs_clarification = true
