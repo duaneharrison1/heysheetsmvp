@@ -111,6 +111,9 @@ export interface FunctionResult {
   error?: string;
   message?: string;
   needs_clarification?: boolean;
+  // Flag indicating we're waiting for user input (e.g., form submission)
+  // This is NOT an error - just means we need more info from the user
+  awaiting_input?: boolean;
   // Optional UI component payload that frontend can render
   components?: Array<Record<string, any>>;
   // Version of the components payload schema

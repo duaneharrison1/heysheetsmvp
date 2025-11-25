@@ -397,7 +397,8 @@ async function submitLead(
     }];
 
     return {
-      success: false,
+      success: true,  // NOT an error - we're just collecting input
+      awaiting_input: true,  // Flag to indicate we need user input
       data: {
         missing_fields: missingFields
       },
@@ -550,6 +551,19 @@ async function getMiscData(
 // ============================================================================
 
 /**
+/**
+ * Get placeholder text for a field based on its name
+ */
+function getPlaceholder(fieldName: string): string {
+  const name = fieldName.toLowerCase();
+  if (name.includes('name')) return 'Your full name';
+  if (name.includes('email')) return 'you@example.com';
+  if (name.includes('phone')) return '+1 555 555 5555';
+  if (name.includes('message') || name.includes('note')) return 'How can we help you?';
+  if (name.includes('interest')) return 'What are you interested in?';
+  return `Enter ${fieldName.toLowerCase()}`;
+}
+
  * Find actual tab name from detected schema using fuzzy matching
  */
 function findActualTabName(
