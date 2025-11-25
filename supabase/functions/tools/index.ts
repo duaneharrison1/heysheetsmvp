@@ -551,7 +551,6 @@ async function getMiscData(
 // ============================================================================
 
 /**
-/**
  * Get placeholder text for a field based on its name
  */
 function getPlaceholder(fieldName: string): string {
@@ -564,6 +563,7 @@ function getPlaceholder(fieldName: string): string {
   return `Enter ${fieldName.toLowerCase()}`;
 }
 
+/**
  * Find actual tab name from detected schema using fuzzy matching
  */
 function findActualTabName(
