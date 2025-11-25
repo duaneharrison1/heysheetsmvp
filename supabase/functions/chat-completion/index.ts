@@ -194,6 +194,9 @@ serve(async (req) => {
       log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
       const functionStart = performance.now();
 
+      // Get the last user message for form data parsing
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+
       functionResult = await executeFunction(
         classification.function_to_call,
         classification.extracted_params,
@@ -202,7 +205,8 @@ serve(async (req) => {
           userId: 'anonymous', // Public access, no user ID
           authToken: serviceRoleKey,  // Use SERVICE_ROLE_KEY for internal function calls
           store: storeConfig,
-          requestId  // Pass correlation ID for tracing
+          requestId,  // Pass correlation ID for tracing
+          lastUserMessage  // Pass last message for form data parsing
         }
       );
 

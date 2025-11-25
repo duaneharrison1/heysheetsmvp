@@ -602,7 +602,22 @@ export default function StorePage() {
     }
   };
 
-  const handleChatAction = (action: string) => {
+  const handleChatAction = (action: string, data?: any) => {
+    // Handle form submissions with data
+    if (action === 'submit_lead' && data && typeof data === 'object') {
+      // Format form data into a message that the classifier can parse
+      // Format: "submit_lead name="John" email="john@example.com" ..."
+      const formattedParts = Object.entries(data)
+        .filter(([_, value]) => value && String(value).trim())
+        .map(([key, value]) => `${key}="${String(value).replace(/"/g, '\\"')}"`)
+        .join(' ');
+
+      const message = `submit_lead ${formattedParts}`;
+      console.log('[StorePage] Sending lead form data:', message);
+      sendMessage(message);
+      return;
+    }
+
     sendMessage(action);
   };
 
