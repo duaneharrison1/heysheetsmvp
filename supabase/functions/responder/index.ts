@@ -33,7 +33,14 @@ ${store?.description ? `Description: ${store.description}` : ''}
   // Build function result context
   let functionContext = '';
   if (functionResult) {
-    if (functionResult.success) {
+    if (functionResult.success && functionResult.awaiting_input) {
+      // Handle form display - user needs to provide input (NOT an error!)
+      functionContext = `AWAITING USER INPUT:
+A form has been displayed to collect information from the user.
+${functionResult.message || 'Please fill in the required details.'}
+
+IMPORTANT: Naturally ask the user to fill in the form that has been displayed. Do NOT apologize or mention any error - this is a normal part of the process. Be encouraging and helpful.`;
+    } else if (functionResult.success) {
       // Handle both wrapped {success, data} and direct data formats
       const resultData = functionResult.data || functionResult;
       functionContext = `FUNCTION RESULT (Use this data in your response):
