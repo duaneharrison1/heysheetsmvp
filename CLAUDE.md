@@ -7,30 +7,58 @@ HeySheets has an MCP server that allows Claude Code to interact with the chatbot
 ### Endpoint
 
 ```
-POST https://[supabase-project].supabase.co/functions/v1/mcp
+POST https://iyzpedfkgzkxyciephgi.supabase.co/functions/v1/mcp
 ```
 
 ### Authentication
 
-Include API key in header:
+Include both headers:
 ```
-x-api-key: [MCP_SECRET]
+Authorization: Bearer <SUPABASE_ANON_KEY>
+x-api-key: <MCP_SECRET>
 ```
 
-### Available Tools
+---
 
-#### 1. call_chat
+## JSON-RPC 2.0 Protocol (MCP Standard)
+
+### Initialize
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "initialize",
+  "id": 1
+}
+```
+
+### List Tools
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/list",
+  "id": 1
+}
+```
+
+### Call Tool: call_chat
 
 Send a message to the chatbot and get response with debug data.
 
 ```json
 {
-  "tool": "call_chat",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "message": "What pottery classes do you have?",
-    "storeId": "store-abc123",
-    "model": "gpt-4o-mini"
-  }
+    "name": "call_chat",
+    "arguments": {
+      "message": "What pottery classes do you have?",
+      "storeId": "store-bd4d9759",
+      "model": "gpt-4o-mini"
+    }
+  },
+  "id": 1
 }
 ```
 
@@ -40,32 +68,37 @@ Response includes:
 - `confidence` - Intent confidence (0-100)
 - `debug` - Full debug object with timing, functions called, tokens, cost
 
-#### 2. run_test
+### Call Tool: run_test
 
 Execute a test scenario with multiple steps.
 
 ```json
 {
-  "tool": "run_test",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "scenario": {
-      "id": "booking-test",
-      "name": "Basic Booking Flow",
-      "steps": [
-        {
-          "id": "step-1",
-          "userMessage": "What classes do you have?",
-          "expected": { "intent": "SERVICE_INQUIRY" }
-        },
-        {
-          "id": "step-2",
-          "userMessage": "Book Hand Building for Tuesday",
-          "expected": { "intent": "CREATE_BOOKING" }
-        }
-      ]
-    },
-    "storeId": "store-abc123"
-  }
+    "name": "run_test",
+    "arguments": {
+      "scenario": {
+        "id": "booking-test",
+        "name": "Basic Booking Flow",
+        "steps": [
+          {
+            "id": "step-1",
+            "userMessage": "What classes do you have?",
+            "expected": { "intent": "SERVICE_INQUIRY" }
+          },
+          {
+            "id": "step-2",
+            "userMessage": "Book Hand Building for Tuesday",
+            "expected": { "intent": "CREATE_BOOKING" }
+          }
+        ]
+      },
+      "storeId": "store-bd4d9759"
+    }
+  },
+  "id": 1
 }
 ```
 
@@ -74,9 +107,22 @@ Response includes:
 - `results` - Per-step results with debug data
 - `totalDuration` - Total test time in ms
 
-#### 3. list_tools
+---
 
-Get list of available MCP tools.
+## Legacy Format (Backward Compatible)
+
+The server also accepts the simpler legacy format:
+
+```json
+{
+  "tool": "call_chat",
+  "params": {
+    "message": "What pottery classes do you have?",
+    "storeId": "store-bd4d9759",
+    "model": "gpt-4o-mini"
+  }
+}
+```
 
 ```json
 {
@@ -104,6 +150,7 @@ Get list of available MCP tools.
 ## Test Stores
 
 For testing, use these store IDs:
+- `store-bd4d9759` - Default test store
 - Check `src/pages/StorePage.tsx` for available stores
 - Or query the `stores` table in Supabase
 
@@ -115,11 +162,16 @@ For testing, use these store IDs:
 
 ```json
 {
-  "tool": "call_chat",
+  "jsonrpc": "2.0",
+  "method": "tools/call",
   "params": {
-    "message": "hi",
-    "storeId": "[store-id]"
-  }
+    "name": "call_chat",
+    "arguments": {
+      "message": "hi",
+      "storeId": "store-bd4d9759"
+    }
+  },
+  "id": 1
 }
 ```
 
@@ -142,3 +194,9 @@ The MCP server uses these (already configured in Supabase):
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_ANON_KEY` - Supabase anonymous key
 - `MCP_SECRET` - API key for MCP authentication
+
+---
+
+## Full Documentation
+
+See `docs/MCP_SERVER_GUIDE.md` for complete API reference and troubleshooting.
