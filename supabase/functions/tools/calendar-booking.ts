@@ -7,6 +7,21 @@ import { createEvent, listEvents, countBookings } from '../_shared/google-calend
 import { FunctionContext } from '../_shared/types.ts';
 
 /**
+ * Get HKT (UTC+8) day boundaries for a given date string
+ * Returns start and end of day in HKT timezone as ISO strings
+ */
+function getHKTDayBoundaries(dateStr: string): { dayStart: string; dayEnd: string } {
+  // Parse date as HKT midnight: YYYY-MM-DDT00:00:00+08:00
+  const dayStartHKT = new Date(`${dateStr}T00:00:00+08:00`);
+  const dayEndHKT = new Date(`${dateStr}T23:59:59+08:00`);
+
+  return {
+    dayStart: dayStartHKT.toISOString(),
+    dayEnd: dayEndHKT.toISOString(),
+  };
+}
+
+/**
  * Load sheet tab data (reuse from existing tools)
  */
 async function loadSheetTab(
@@ -182,25 +197,30 @@ export async function checkAvailability(
     const dateTimeStr = `${date}T${time}:00+08:00`;
     const requestedTime = new Date(dateTimeStr);
 
-    // Get events on that day
-    const dayStart = new Date(requestedTime);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+    // Get events on that day (use HKT timezone for day boundaries)
+    const { dayStart, dayEnd } = getHKTDayBoundaries(date);
 
     const events = await listEvents(
       calendarId,
-      dayStart.toISOString(),
-      dayEnd.toISOString(),
+      dayStart,
+      dayEnd,
       true // singleEvents - expand recurring
     );
 
     console.log('[check_availability] Found events:', events.length);
+    console.log('[check_availability] Day boundaries (HKT):', { dayStart, dayEnd });
 
     // Check if requested time falls within any availability window
+    // Only match events with specific times (dateTime), not all-day events (date)
     const matchingEvent = events.find((event: any) => {
-      const eventStart = new Date(event.start.dateTime || event.start.date);
-      const eventEnd = new Date(event.end.dateTime || event.end.date);
+      // Skip all-day events - they don't have specific time slots
+      if (!event.start.dateTime) {
+        console.log('[check_availability] Skipping all-day event:', event.summary);
+        return false;
+      }
+
+      const eventStart = new Date(event.start.dateTime);
+      const eventEnd = new Date(event.end.dateTime);
 
       // Check if requested time is within this event's time range
       return requestedTime >= eventStart && requestedTime < eventEnd;
@@ -402,28 +422,45 @@ export async function createBooking(
       console.log('[create_booking] Using provided class start time:', startTime.toISOString());
     } else {
       // Look up the availability event to snap to its start time
-      const dayStart = new Date(requestedTime);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
+      // Use HKT timezone for day boundaries
+      const { dayStart, dayEnd } = getHKTDayBoundaries(date);
 
       const events = await listEvents(
         calendarId,
-        dayStart.toISOString(),
-        dayEnd.toISOString(),
+        dayStart,
+        dayEnd,
         true // singleEvents - expand recurring
       );
 
+      console.log('[create_booking] Found', events.length, 'events on', date);
+
       // Find event that contains the requested time
+      // Only match events with specific times (dateTime), not all-day events
       const matchingEvent = events.find((event: any) => {
-        const eventStart = new Date(event.start.dateTime || event.start.date);
-        const eventEnd = new Date(event.end.dateTime || event.end.date);
-        return requestedTime >= eventStart && requestedTime < eventEnd;
+        // Skip all-day events - they don't have specific time slots
+        if (!event.start.dateTime) {
+          console.log('[create_booking] Skipping all-day event:', event.summary);
+          return false;
+        }
+
+        const eventStart = new Date(event.start.dateTime);
+        const eventEnd = new Date(event.end.dateTime);
+        const isMatch = requestedTime >= eventStart && requestedTime < eventEnd;
+
+        console.log('[create_booking] Checking event:', {
+          summary: event.summary,
+          eventStart: eventStart.toISOString(),
+          eventEnd: eventEnd.toISOString(),
+          requestedTime: requestedTime.toISOString(),
+          isMatch
+        });
+
+        return isMatch;
       });
 
       if (matchingEvent) {
         // Snap to the class start time
-        startTime = new Date(matchingEvent.start.dateTime || matchingEvent.start.date);
+        startTime = new Date(matchingEvent.start.dateTime);
         console.log('[create_booking] Snapped to class start time:', startTime.toISOString());
       } else {
         // No matching event found - use requested time (fallback for non-class bookings)
@@ -476,7 +513,12 @@ Thank you for booking with ${store.name}!
 If you need to reschedule or cancel, please contact us.
     `.trim();
 
-    console.log('[create_booking] Creating calendar event...');
+    console.log('[create_booking] Creating calendar event on calendar:', store.invite_calendar_id);
+    console.log('[create_booking] Event times:', {
+      start: startTime.toISOString(),
+      end: endTime.toISOString(),
+      duration: duration + ' min'
+    });
 
     const event = await createEvent(
       store.invite_calendar_id,
@@ -508,7 +550,16 @@ If you need to reschedule or cancel, please contact us.
       'none' // Don't send email updates (service account cannot send invites)
     );
 
-    console.log('[create_booking] ✅ Booking created successfully:', bookingId);
+    // Log the created event details for debugging
+    console.log('[create_booking] ✅ Booking created successfully:', {
+      bookingId,
+      calendarEventId: event?.id,
+      calendarId: store.invite_calendar_id,
+      eventLink: event?.htmlLink,
+      summary: event?.summary,
+      start: event?.start?.dateTime,
+      end: event?.end?.dateTime
+    });
 
     return {
       success: true,
