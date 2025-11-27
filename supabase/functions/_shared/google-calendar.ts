@@ -271,6 +271,10 @@ export async function createEvent(
   event: CalendarEvent,
   sendUpdates: string = 'all'
 ): Promise<any> {
+  console.log('📅 [createEvent] Creating event on calendar:', calendarId.substring(0, 30) + '...');
+  console.log('📅 [createEvent] Event summary:', event.summary);
+  console.log('📅 [createEvent] Event times:', { start: event.start.dateTime, end: event.end.dateTime });
+
   const token = await getAccessToken();
 
   const params = new URLSearchParams({ sendUpdates });
@@ -289,8 +293,16 @@ export async function createEvent(
 
   const data = await response.json();
   if (!response.ok) {
+    console.error('❌ [createEvent] Failed:', JSON.stringify(data));
     throw new Error(`Failed to create event: ${JSON.stringify(data)}`);
   }
+
+  console.log('✅ [createEvent] Event created successfully:', {
+    id: data.id,
+    htmlLink: data.htmlLink,
+    status: data.status,
+    created: data.created
+  });
 
   return data;
 }

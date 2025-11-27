@@ -359,12 +359,18 @@ export async function createBooking(
       .single();
 
     if (!store || !store.invite_calendar_id) {
-      console.error('[create_booking] Calendar not set up');
+      console.error('[create_booking] Calendar not set up. Store:', store?.name, 'invite_calendar_id:', store?.invite_calendar_id);
       return {
         success: false,
         error: 'Calendar booking not set up',
       };
     }
+
+    console.log('[create_booking] Store config:', {
+      storeName: store.name,
+      inviteCalendarId: store.invite_calendar_id,
+      hasCalendarMappings: !!store.calendar_mappings
+    });
 
     // Parse mappings
     const mappings = store.calendar_mappings
