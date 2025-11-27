@@ -248,9 +248,27 @@ export async function checkAvailability(
 
     console.log('[check_availability] Found matching availability window:', matchingEvent.summary);
 
-    // Extract class start time from the matching event for time snapping
-    const classStartTime = new Date(matchingEvent.start.dateTime || matchingEvent.start.date);
-    const classEndTime = new Date(matchingEvent.end.dateTime || matchingEvent.end.date);
+    // Extract event times
+    const eventStart = new Date(matchingEvent.start.dateTime);
+    const eventEnd = new Date(matchingEvent.end.dateTime);
+    const eventDurationHours = (eventEnd.getTime() - eventStart.getTime()) / (1000 * 60 * 60);
+
+    // Only provide classStartTime for short events (actual class slots)
+    // Long events (> 4 hours) are availability windows - use requested time instead
+    let classStartTime: Date;
+    let classEndTime: Date;
+
+    if (eventDurationHours <= 4) {
+      // Short event = class slot, snap to its start time
+      classStartTime = eventStart;
+      classEndTime = eventEnd;
+      console.log('[check_availability] Class slot detected (', eventDurationHours, 'h), will snap to:', classStartTime.toISOString());
+    } else {
+      // Long event = availability window, use requested time
+      classStartTime = requestedTime;
+      classEndTime = new Date(requestedTime.getTime() + (parseInt(service.duration) || 60) * 60000);
+      console.log('[check_availability] Availability window detected (', eventDurationHours, 'h), using requested time:', classStartTime.toISOString());
+    }
     console.log('[check_availability] Class start time:', classStartTime.toISOString());
 
     // Get capacity from service
@@ -459,9 +477,20 @@ export async function createBooking(
       });
 
       if (matchingEvent) {
-        // Snap to the class start time
-        startTime = new Date(matchingEvent.start.dateTime);
-        console.log('[create_booking] Snapped to class start time:', startTime.toISOString());
+        const eventStart = new Date(matchingEvent.start.dateTime);
+        const eventEnd = new Date(matchingEvent.end.dateTime);
+        const eventDurationHours = (eventEnd.getTime() - eventStart.getTime()) / (1000 * 60 * 60);
+
+        // Only snap to class start time for short events (actual class slots)
+        // Long events (> 4 hours) are availability windows, not fixed class times
+        if (eventDurationHours <= 4) {
+          startTime = eventStart;
+          console.log('[create_booking] Snapped to class start time:', startTime.toISOString(), `(${eventDurationHours}h event)`);
+        } else {
+          // Long availability window - use the requested time
+          startTime = requestedTime;
+          console.log('[create_booking] Availability window detected (', eventDurationHours, 'hours), using requested time:', startTime.toISOString());
+        }
       } else {
         // No matching event found - use requested time (fallback for non-class bookings)
         startTime = requestedTime;
