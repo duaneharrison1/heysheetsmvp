@@ -603,10 +603,40 @@ export async function getBookingSlots(
       }
     }
 
+    // Check if prefill date/time is available (for AI context)
+    const prefillDateAvailable = prefill_date
+      ? datesWithSlots.includes(prefill_date)
+      : null;
+
+    const prefillTimeAvailable = prefill_date && prefill_time
+      ? slots.some(s => s.date === prefill_date && s.time === prefill_time)
+      : null;
+
+    // Build human-readable note for the responder
+    let availabilityNote: string | null = null;
+    if (prefill_date && !prefillDateAvailable) {
+      availabilityNote = `IMPORTANT: The requested date ${prefill_date} is NOT available. Available dates are: ${datesWithSlots.join(', ')}. Please inform the customer that their requested date is unavailable and suggest these alternatives.`;
+    } else if (prefillDateAvailable && prefill_time && !prefillTimeAvailable) {
+      const timesOnDate = slots.filter(s => s.date === prefill_date).map(s => s.time);
+      availabilityNote = `IMPORTANT: The requested time ${prefill_time} on ${prefill_date} is NOT available. Available times on that date: ${timesOnDate.join(', ')}. Please inform the customer.`;
+    }
+
+    console.log('[get_booking_slots] Availability context:', {
+      prefillDateAvailable,
+      prefillTimeAvailable,
+      availabilityNote
+    });
+
     // Return with component
     return {
       success: true,
       message,
+      // Explicit availability status for AI/responder
+      requestedDateAvailable: prefillDateAvailable,
+      requestedTimeAvailable: prefillTimeAvailable,
+      availableDatesCount: datesWithSlots.length,
+      availableDates: datesWithSlots,
+      availabilityNote,
       data: {
         service: {
           id: serviceId,
