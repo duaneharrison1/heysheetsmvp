@@ -7,6 +7,25 @@ import { createEvent, listEvents, countBookings } from '../_shared/google-calend
 import { FunctionContext } from '../_shared/types.ts';
 
 /**
+ * Extract date (YYYY-MM-DD) from ISO datetime string
+ * Preserves the original timezone from the calendar
+ * Example: "2025-11-28T09:00:00+08:00" → "2025-11-28"
+ */
+function extractDateFromISO(isoString: string): string {
+  return isoString.split('T')[0];
+}
+
+/**
+ * Extract time (HH:MM) from ISO datetime string
+ * Preserves the original timezone from the calendar
+ * Example: "2025-11-28T09:00:00+08:00" → "09:00"
+ */
+function extractTimeFromISO(isoString: string): string {
+  const timePart = isoString.split('T')[1];  // "09:00:00+08:00" or "09:00:00Z"
+  return timePart.slice(0, 5);  // "09:00"
+}
+
+/**
  * Load sheet tab data (reuse from existing tools)
  */
 async function loadSheetTab(
@@ -448,15 +467,14 @@ export async function getBookingSlots(
       // Skip all-day events
       if (!event.start.dateTime || !event.end.dateTime) continue;
 
-      const eventStart = new Date(event.start.dateTime);
+      // Extract date/time directly from ISO string - preserves calendar timezone
+      const dateStr = extractDateFromISO(event.start.dateTime);
+      const timeStr = extractTimeFromISO(event.start.dateTime);
+      const endTimeStr = extractTimeFromISO(event.end.dateTime);
+
+      // Skip if event is in the past (compare using the event's actual datetime)
       const eventEnd = new Date(event.end.dateTime);
-
-      // Skip if event is in the past
       if (eventEnd < new Date()) continue;
-
-      const dateStr = eventStart.toISOString().split('T')[0];
-      const timeStr = eventStart.toTimeString().slice(0, 5); // "HH:MM"
-      const endTimeStr = eventEnd.toTimeString().slice(0, 5);
 
       // Count existing bookings for this slot
       const dateTimeStr = `${dateStr}T${timeStr}:00+08:00`;
@@ -481,10 +499,15 @@ export async function getBookingSlots(
     console.log('[get_booking_slots] Total slots found:', slots.length);
 
     // Find dates with no availability (for disabling in calendar)
+    // Use local date formatting to avoid timezone issues
     const allDatesInRange: string[] = [];
     const cursor = new Date(startDateObj);
     while (cursor <= endDateObj) {
-      allDatesInRange.push(cursor.toISOString().split('T')[0]);
+      // Format as YYYY-MM-DD using local date parts
+      const year = cursor.getFullYear();
+      const month = String(cursor.getMonth() + 1).padStart(2, '0');
+      const day = String(cursor.getDate()).padStart(2, '0');
+      allDatesInRange.push(`${year}-${month}-${day}`);
       cursor.setDate(cursor.getDate() + 1);
     }
     const datesWithSlots = [...new Set(slots.map(s => s.date))];
