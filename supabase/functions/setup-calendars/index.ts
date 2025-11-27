@@ -36,10 +36,15 @@ serve(async (req) => {
     // Check if already setup
     if (store.invite_calendar_id) {
       const calendarAddUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(store.invite_calendar_id)}`;
+
+      // Try to add calendar to owner's list (for existing setups where it may have been removed)
+      console.log(`Calendar already set up. Re-adding to ${ownerEmail}'s calendar list...`);
+      await addCalendarToUserList(store.invite_calendar_id, ownerEmail);
+
       return new Response(
         JSON.stringify({
           success: true,
-          message: 'Calendar booking already set up',
+          message: 'Calendar booking already set up. Calendar re-added to your list.',
           inviteCalendarId: store.invite_calendar_id,
           calendarAddUrl,
         }),
