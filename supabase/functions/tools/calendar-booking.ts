@@ -418,8 +418,8 @@ export async function createBooking(
       console.log('[create_booking] No availability event found for:', date, time);
       return {
         success: false,
-        error: 'No availability',
-        message: `${service.serviceName} is not available on ${date} at ${time}. There's no scheduled availability for that time. Would you like to check when classes are available?`,
+        error: 'no_class_scheduled',
+        message: `Sorry, ${service.serviceName} doesn't have any classes scheduled on ${date} at ${time}. This date/time isn't on the calendar yet. Would you like to try a different date?`,
       };
     }
 
@@ -446,8 +446,8 @@ export async function createBooking(
       console.log('[create_booking] Fully booked');
       return {
         success: false,
-        error: 'Fully booked',
-        message: `Sorry, ${service.serviceName} is fully booked on ${date} at ${time}.`,
+        error: 'fully_booked',
+        message: `Sorry, ${service.serviceName} is fully booked on ${date} at ${time}. All ${capacity} spots are taken. Would you like to try another time?`,
       };
     }
 
