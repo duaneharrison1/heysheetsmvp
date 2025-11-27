@@ -379,6 +379,55 @@ export async function createBooking(
       };
     }
 
+    // ============================================
+    // VALIDATE: Check if availability event exists
+    // ============================================
+    const dayStart = new Date(`${date}T00:00:00+08:00`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    console.log('[create_booking] Checking availability events for:', date);
+
+    const availabilityEvents = await listEvents(
+      calendarId,  // The availability calendar from calendar_mappings
+      dayStart.toISOString(),
+      dayEnd.toISOString(),
+      true  // singleEvents - expand recurring
+    );
+
+    console.log('[create_booking] Found availability events:', availabilityEvents.length);
+
+    // Build the requested datetime
+    const requestedTime = new Date(`${date}T${time}:00+08:00`);
+
+    // Find an availability event that contains the requested time
+    const matchingEvent = availabilityEvents.find((event: any) => {
+      // Skip all-day events (no dateTime)
+      if (!event.start.dateTime || !event.end.dateTime) {
+        return false;
+      }
+
+      const eventStart = new Date(event.start.dateTime);
+      const eventEnd = new Date(event.end.dateTime);
+
+      // Check if requested time falls within this event
+      return requestedTime >= eventStart && requestedTime < eventEnd;
+    });
+
+    if (!matchingEvent) {
+      console.log('[create_booking] No availability event found for:', date, time);
+      return {
+        success: false,
+        error: 'No availability',
+        message: `${service.serviceName} is not available on ${date} at ${time}. There's no scheduled availability for that time. Would you like to check when classes are available?`,
+      };
+    }
+
+    console.log('[create_booking] Found matching availability event:', matchingEvent.summary);
+    // ============================================
+    // END: Availability validation
+    // ============================================
+
     // Build dateTime
     const dateTimeStr = `${date}T${time}:00+08:00`;
     const startTime = new Date(dateTimeStr);
