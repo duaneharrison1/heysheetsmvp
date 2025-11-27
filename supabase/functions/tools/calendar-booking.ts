@@ -150,9 +150,22 @@ export async function checkAvailability(
     console.log('[check_availability] Found service:', serviceId);
 
     // Find which calendar this service is linked to
-    const calendarId = Object.keys(mappings).find(
-      calId => mappings[calId] === serviceId
-    );
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      // Handle new format: {name: "...", serviceIds: [...]}
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      // Handle legacy array format: ["S001", "S002"]
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      // Handle legacy string format: "S001"
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
 
     if (!calendarId) {
       console.log('[check_availability] Service not linked to any calendar');
@@ -215,6 +228,11 @@ export async function checkAvailability(
 
     console.log('[check_availability] Found matching availability window:', matchingEvent.summary);
 
+    // Extract class start time from the matching event for time snapping
+    const classStartTime = new Date(matchingEvent.start.dateTime || matchingEvent.start.date);
+    const classEndTime = new Date(matchingEvent.end.dateTime || matchingEvent.end.date);
+    console.log('[check_availability] Class start time:', classStartTime.toISOString());
+
     // Get capacity from service
     const capacity = parseInt(service.capacity) || 20;
 
@@ -239,6 +257,9 @@ export async function checkAvailability(
       available_spots: availableSpots,
       price: service.price,
       duration: service.duration,
+      // Include class start/end times for time snapping in createBooking
+      classStartTime: classStartTime.toISOString(),
+      classEndTime: classEndTime.toISOString(),
       message: availableSpots > 0
         ? `Yes! ${service.serviceName} is available on ${date} at ${time}. ${availableSpots} spot${availableSpots > 1 ? 's' : ''} remaining. Price: $${service.price}`
         : `Sorry, ${service.serviceName} is fully booked on ${date} at ${time}. Would you like to try another time?`,
@@ -265,12 +286,13 @@ export async function createBooking(
     customer_name: string;
     customer_email: string;
     customer_phone?: string;
+    class_start_time?: string; // Optional: pre-computed class start time from availability check
   },
   context: FunctionContext
 ): Promise<any> {
   try {
     const { storeId, authToken } = context;
-    const { service_name, date, time, customer_name, customer_email, customer_phone } = params;
+    const { service_name, date, time, customer_name, customer_email, customer_phone, class_start_time } = params;
 
     console.log('[create_booking] Called with:', { service_name, date, time, customer_name, customer_email });
 
@@ -340,10 +362,23 @@ export async function createBooking(
     const serviceId = service.serviceID || service.serviceName;
     console.log('[create_booking] Found service:', serviceId);
 
-    // Find calendar
-    const calendarId = Object.keys(mappings).find(
-      calId => mappings[calId] === serviceId
-    );
+    // Find calendar (handle multiple data formats)
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      // Handle new format: {name: "...", serviceIds: [...]}
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      // Handle legacy array format: ["S001", "S002"]
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      // Handle legacy string format: "S001"
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
 
     if (!calendarId) {
       console.error('[create_booking] Service not linked to calendar');
@@ -353,11 +388,56 @@ export async function createBooking(
       };
     }
 
-    // Build dateTime
-    const dateTimeStr = `${date}T${time}:00+08:00`;
-    const startTime = new Date(dateTimeStr);
+    // Build requested dateTime
+    const requestedDateTimeStr = `${date}T${time}:00+08:00`;
+    const requestedTime = new Date(requestedDateTimeStr);
     const duration = parseInt(service.duration) || 60;
+
+    // Time snapping: Find the actual class start time from availability calendar
+    let startTime: Date;
+
+    if (class_start_time) {
+      // Use pre-computed class start time from availability check
+      startTime = new Date(class_start_time);
+      console.log('[create_booking] Using provided class start time:', startTime.toISOString());
+    } else {
+      // Look up the availability event to snap to its start time
+      const dayStart = new Date(requestedTime);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      const events = await listEvents(
+        calendarId,
+        dayStart.toISOString(),
+        dayEnd.toISOString(),
+        true // singleEvents - expand recurring
+      );
+
+      // Find event that contains the requested time
+      const matchingEvent = events.find((event: any) => {
+        const eventStart = new Date(event.start.dateTime || event.start.date);
+        const eventEnd = new Date(event.end.dateTime || event.end.date);
+        return requestedTime >= eventStart && requestedTime < eventEnd;
+      });
+
+      if (matchingEvent) {
+        // Snap to the class start time
+        startTime = new Date(matchingEvent.start.dateTime || matchingEvent.start.date);
+        console.log('[create_booking] Snapped to class start time:', startTime.toISOString());
+      } else {
+        // No matching event found - use requested time (fallback for non-class bookings)
+        startTime = requestedTime;
+        console.log('[create_booking] No matching event, using requested time:', startTime.toISOString());
+      }
+    }
+
+    // Calculate end time using service duration from Sheet
     const endTime = new Date(startTime.getTime() + duration * 60000);
+    console.log('[create_booking] Booking times - Start:', startTime.toISOString(), 'End:', endTime.toISOString(), 'Duration:', duration, 'min');
+
+    // Use snapped start time for capacity check
+    const dateTimeStr = startTime.toISOString();
 
     // Check capacity
     const capacity = parseInt(service.capacity) || 20;
