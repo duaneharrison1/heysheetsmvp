@@ -150,9 +150,22 @@ export async function checkAvailability(
     console.log('[check_availability] Found service:', serviceId);
 
     // Find which calendar this service is linked to
-    const calendarId = Object.keys(mappings).find(
-      calId => mappings[calId] === serviceId
-    );
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      // New format: {name: "...", serviceIds: [...]}
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      // Legacy array format: ["S001", "S002"]
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      // Legacy string format: "S001"
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
 
     if (!calendarId) {
       console.log('[check_availability] Service not linked to any calendar');
@@ -341,9 +354,22 @@ export async function createBooking(
     console.log('[create_booking] Found service:', serviceId);
 
     // Find calendar
-    const calendarId = Object.keys(mappings).find(
-      calId => mappings[calId] === serviceId
-    );
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      // New format: {name: "...", serviceIds: [...]}
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      // Legacy array format: ["S001", "S002"]
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      // Legacy string format: "S001"
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
 
     if (!calendarId) {
       console.error('[create_booking] Service not linked to calendar');
