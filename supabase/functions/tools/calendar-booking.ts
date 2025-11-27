@@ -569,8 +569,9 @@ If you need to reschedule or cancel, please contact us.
           dateTime: endTime.toISOString(),
           timeZone: 'Asia/Hong_Kong',
         },
-        // Note: Service accounts cannot add attendees without Domain-Wide Delegation
-        // Customer info is stored in description and extendedProperties instead
+        // Add customer as attendee - this makes the event appear in their calendar
+        // and sends them an email invitation
+        attendees: [{ email: customer_email }],
         extendedProperties: {
           private: {
             booking_id: bookingId,
@@ -582,7 +583,7 @@ If you need to reschedule or cancel, please contact us.
           },
         },
       },
-      'none' // Don't send email updates (service account cannot send invites)
+      'all' // Send email invites to attendees
     );
 
     // Log the created event details for debugging
