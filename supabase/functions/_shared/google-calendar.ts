@@ -53,21 +53,29 @@ interface CalendarEvent {
 
 /**
  * Generate JWT token for Google API authentication
+ *
+ * @param subject - Optional user email to impersonate (requires domain-wide delegation)
+ *                  When set, the service account will act on behalf of this user
  */
-async function generateJWT(): Promise<string> {
+async function generateJWT(subject?: string): Promise<string> {
   const header = {
     alg: 'RS256',
     typ: 'JWT',
   };
 
   const now = Math.floor(Date.now() / 1000);
-  const claim = {
+  const claim: Record<string, any> = {
     iss: SERVICE_EMAIL,
     scope: 'https://www.googleapis.com/auth/calendar',
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
     iat: now,
   };
+
+  // Domain-wide delegation: impersonate the specified user
+  if (subject) {
+    claim.sub = subject;
+  }
 
   // Base64 encode without padding
   const base64url = (str: string) => {
@@ -113,9 +121,11 @@ async function generateJWT(): Promise<string> {
 
 /**
  * Get access token from Google OAuth
+ *
+ * @param subject - Optional user email to impersonate (requires domain-wide delegation)
  */
-async function getAccessToken(): Promise<string> {
-  const jwt = await generateJWT();
+async function getAccessToken(subject?: string): Promise<string> {
+  const jwt = await generateJWT(subject);
 
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -194,6 +204,61 @@ export async function shareCalendar(
   }
 
   console.log(`✅ Calendar shared with ${userEmail} (role: ${role}). Email notification sent.`);
+}
+
+/**
+ * Add a calendar to a user's calendarList using domain-wide delegation
+ *
+ * This requires the service account to have domain-wide delegation enabled
+ * in Google Workspace Admin Console with the calendar scope.
+ *
+ * @param calendarId - The calendar ID to add
+ * @param userEmail - The user's email (must be in the same Google Workspace domain)
+ */
+export async function addCalendarToUserList(
+  calendarId: string,
+  userEmail: string
+): Promise<void> {
+  // Get token impersonating the user via domain-wide delegation
+  const token = await getAccessToken(userEmail);
+
+  console.log(`[addCalendarToUserList] Adding calendar to ${userEmail}'s list...`);
+
+  const response = await fetch(
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id: calendarId,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    // 409 = calendar already in list, that's fine
+    if (data.error?.code === 409) {
+      console.log(`✅ Calendar already in ${userEmail}'s calendar list`);
+      return;
+    }
+
+    // 403 = domain-wide delegation not set up or wrong domain
+    if (data.error?.code === 403) {
+      console.warn(`⚠️ Domain-wide delegation not available for ${userEmail}. User will need to add calendar manually.`);
+      console.warn('To enable: Google Workspace Admin → Security → API Controls → Domain-wide delegation');
+      // Don't throw - this is a soft failure, user can still add manually
+      return;
+    }
+
+    throw new Error(`Failed to add calendar to user's list: ${JSON.stringify(data)}`);
+  }
+
+  console.log(`✅ Calendar added to ${userEmail}'s calendar list`);
 }
 
 /**

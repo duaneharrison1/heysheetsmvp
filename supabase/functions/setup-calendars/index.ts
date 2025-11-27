@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { createCalendar, shareCalendar } from '../_shared/google-calendar.ts';
+import { createCalendar, shareCalendar, addCalendarToUserList } from '../_shared/google-calendar.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -62,6 +62,12 @@ serve(async (req) => {
     await shareCalendar(inviteCalendarId, ownerEmail, 'writer');
 
     console.log('✅ Shared with owner');
+
+    // Auto-add calendar to owner's calendar list using domain-wide delegation
+    // This requires the service account to have domain-wide delegation enabled
+    // If it fails (e.g., non-Workspace account), the owner can still add manually
+    console.log(`Adding calendar to ${ownerEmail}'s calendar list...`);
+    await addCalendarToUserList(inviteCalendarId, ownerEmail);
 
     // Save to database (following existing pattern: stringify JSONB)
     const { error: updateError } = await supabase
