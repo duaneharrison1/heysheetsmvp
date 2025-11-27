@@ -35,11 +35,13 @@ serve(async (req) => {
 
     // Check if already setup
     if (store.invite_calendar_id) {
+      const calendarAddUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(store.invite_calendar_id)}`;
       return new Response(
         JSON.stringify({
           success: true,
           message: 'Calendar booking already set up',
           inviteCalendarId: store.invite_calendar_id,
+          calendarAddUrl,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -75,11 +77,15 @@ serve(async (req) => {
 
     console.log('✅ Saved to database');
 
+    // Generate Google Calendar add URL as fallback if email notification isn't received
+    const calendarAddUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(inviteCalendarId)}`;
+
     return new Response(
       JSON.stringify({
         success: true,
         inviteCalendarId,
-        message: 'Calendar booking enabled! You can now link your service calendars.',
+        calendarAddUrl,
+        message: 'Calendar booking enabled! Check your email for the calendar invite, or use the add URL below.',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
