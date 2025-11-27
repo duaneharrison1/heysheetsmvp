@@ -48,6 +48,18 @@ export const CreateBookingSchema = z.object({
   customer_phone: z.string().optional()
 });
 
+export const GetBookingSlotsSchema = z.object({
+  service_name: z.string(),
+  start_date: z.string().optional(), // YYYY-MM-DD
+  end_date: z.string().optional(),   // YYYY-MM-DD
+  // Prefill data from user message
+  prefill_date: z.string().optional(),
+  prefill_time: z.string().optional(),
+  prefill_name: z.string().optional(),
+  prefill_email: z.string().optional(),
+  prefill_phone: z.string().optional()
+});
+
 // ============================================================================
 // VALIDATION HELPERS
 // ============================================================================

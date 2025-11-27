@@ -27,7 +27,7 @@ const ClassificationSchema = {
     },
     function_to_call: {
       type: "string",
-      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "null"],
+      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "get_booking_slots", "null"],
       description: "Function to execute based on intent"
     },
     extracted_params: {
@@ -46,7 +46,13 @@ const ClassificationSchema = {
         time: { type: "string" },
         customer_name: { type: "string" },
         customer_email: { type: "string" },
-        customer_phone: { type: "string" }
+        customer_phone: { type: "string" },
+        // Prefill parameters for get_booking_slots
+        prefill_date: { type: "string" },
+        prefill_time: { type: "string" },
+        prefill_name: { type: "string" },
+        prefill_email: { type: "string" },
+        prefill_phone: { type: "string" }
       },
       description: "Parameters extracted from user message for function calling"
     },
@@ -139,6 +145,12 @@ FUNCTIONS:
 - get_misc_data: Access custom tabs like FAQ, Policies, etc. (if user asks about topics not in standard tabs)
 - check_availability: Check if a service is available at a specific date/time (requires service_name, date, time)
 - create_booking: Create an actual booking with calendar invite (requires service_name, date, time, customer_name, customer_email)
+- get_booking_slots: Show visual booking calendar with available times. Use when:
+  * User wants to book but hasn't specified complete date/time
+  * User says "book", "schedule", "reserve" without all details
+  * Always prefer this over asking text questions about availability
+  Parameters: service_name (required), prefill_date, prefill_time, prefill_name, prefill_email
+  Extract any details user mentioned and pass as prefill_* params
 
 PARAMETER EXTRACTION RULES:
 - info_type: 'hours' | 'services' | 'products' | 'all' (for get_store_info)
@@ -169,11 +181,15 @@ CRITICAL RULES:
 7. Never hallucinate information - only extract what user actually said
 
 BOOKING FLOW:
-- If user expresses interest in booking but lacks details → get_services (show available options)
-- If user asks "is X available on Y at Z?" → check_availability (need: service_name, date, time)
-- If user provides ALL booking details (service, date, time, name, email) → create_booking
+- If user wants to book a service → ALWAYS use get_booking_slots (shows visual calendar picker)
+  * "Book pottery" → get_booking_slots(service_name="pottery")
+  * "Book pottery Tuesday" → get_booking_slots(service_name="pottery", prefill_date="2025-12-02")
+  * "Book pottery Tuesday 2pm" → get_booking_slots(service_name="pottery", prefill_date="2025-12-02", prefill_time="14:00")
+  * "I'm Max, max@email.com, book pottery" → get_booking_slots with prefill_name and prefill_email
+- If user asks "is X available on Y at Z?" → check_availability (just checking, not booking)
+- If user provides ALL booking details in exact format "Book X on YYYY-MM-DD at HH:MM. Name: Y, Email: Z" → create_booking (this is from calendar UI)
 - NEVER call create_booking without customer_name AND customer_email
-- If user says "I want to book X tomorrow at 2pm" but hasn't provided contact info → check_availability first, then ask for contact details
+- PREFER get_booking_slots over check_availability when user expresses intent to book
 
 REQUIRED OUTPUT FORMAT (exact field names):
 {
@@ -181,7 +197,7 @@ REQUIRED OUTPUT FORMAT (exact field names):
   "confidence": 0-100,
   "needs_clarification": true | false,
   "clarification_question": "string or null",
-  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | null,
+  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | "get_booking_slots" | null,
   "extracted_params": { /* object with extracted parameters */ },
   "reasoning": "string"
 }
