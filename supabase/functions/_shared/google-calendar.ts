@@ -168,11 +168,8 @@ export async function shareCalendar(
 ): Promise<void> {
   const token = await getAccessToken();
 
-  // Include sendNotifications=true so user gets an email to add the calendar
-  const params = new URLSearchParams({ sendNotifications: 'true' });
-
   const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/acl?${params}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/acl`,
     {
       method: 'POST',
       headers: {
@@ -190,16 +187,6 @@ export async function shareCalendar(
     const error = await response.json();
     throw new Error(`Failed to share calendar: ${JSON.stringify(error)}`);
   }
-
-  console.log(`✅ Calendar shared with ${userEmail} (notification sent)`);
-}
-
-/**
- * Generate a link for users to add the calendar to their Google Calendar
- */
-export function getCalendarAddLink(calendarId: string): string {
-  // This URL allows users to add a calendar by ID
-  return `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(calendarId)}`;
 }
 
 /**
