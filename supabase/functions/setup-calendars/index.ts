@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { createCalendar, shareCalendar, addCalendarToUserList } from '../_shared/google-calendar.ts';
+import { createCalendar, shareCalendar } from '../_shared/google-calendar.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -35,18 +35,11 @@ serve(async (req) => {
 
     // Check if already setup
     if (store.invite_calendar_id) {
-      const calendarAddUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(store.invite_calendar_id)}`;
-
-      // Try to add calendar to owner's list (for existing setups where it may have been removed)
-      console.log(`Calendar already set up. Re-adding to ${ownerEmail}'s calendar list...`);
-      await addCalendarToUserList(store.invite_calendar_id, ownerEmail);
-
       return new Response(
         JSON.stringify({
           success: true,
-          message: 'Calendar booking already set up. Calendar re-added to your list.',
+          message: 'Calendar booking already set up',
           inviteCalendarId: store.invite_calendar_id,
-          calendarAddUrl,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -68,12 +61,6 @@ serve(async (req) => {
 
     console.log('✅ Shared with owner');
 
-    // Auto-add calendar to owner's calendar list using domain-wide delegation
-    // This requires the service account to have domain-wide delegation enabled
-    // If it fails (e.g., non-Workspace account), the owner can still add manually
-    console.log(`Adding calendar to ${ownerEmail}'s calendar list...`);
-    await addCalendarToUserList(inviteCalendarId, ownerEmail);
-
     // Save to database (following existing pattern: stringify JSONB)
     const { error: updateError } = await supabase
       .from('stores')
@@ -88,15 +75,11 @@ serve(async (req) => {
 
     console.log('✅ Saved to database');
 
-    // Generate Google Calendar add URL as fallback if email notification isn't received
-    const calendarAddUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(inviteCalendarId)}`;
-
     return new Response(
       JSON.stringify({
         success: true,
         inviteCalendarId,
-        calendarAddUrl,
-        message: 'Calendar booking enabled! Check your email for the calendar invite, or use the add URL below.',
+        message: 'Calendar booking enabled! You can now link your service calendars.',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
