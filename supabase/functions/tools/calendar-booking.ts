@@ -73,6 +73,49 @@ function findActualTabName(target: string, schema: any): string | null {
 }
 
 /**
+ * Generate time slots within an availability window
+ * @param startTime - Start time in HH:MM format (e.g., "09:00")
+ * @param endTime - End time in HH:MM format (e.g., "18:45")
+ * @param durationMinutes - Slot duration in minutes (e.g., 120)
+ * @returns Array of time strings (e.g., ["09:00", "11:00", "13:00", "15:00"])
+ */
+function generateTimeSlots(
+  startTime: string,
+  endTime: string,
+  durationMinutes: number
+): string[] {
+  const slots: string[] = [];
+
+  // Parse times to minutes since midnight
+  const [startH, startM] = startTime.split(':').map(Number);
+  const [endH, endM] = endTime.split(':').map(Number);
+
+  let currentMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  // Generate slots until we can't fit another full duration
+  while (currentMinutes + durationMinutes <= endMinutes) {
+    const hours = Math.floor(currentMinutes / 60);
+    const mins = currentMinutes % 60;
+    slots.push(`${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`);
+    currentMinutes += durationMinutes;
+  }
+
+  return slots;
+}
+
+/**
+ * Calculate end time given start time and duration
+ */
+function calculateEndTime(startTime: string, durationMinutes: number): string {
+  const [h, m] = startTime.split(':').map(Number);
+  const endMinutes = h * 60 + m + durationMinutes;
+  const endH = Math.floor(endMinutes / 60);
+  const endM = endMinutes % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+}
+
+/**
  * Check availability for a service
  */
 export async function checkAvailability(
@@ -452,8 +495,11 @@ export async function getBookingSlots(
 
     console.log('[get_booking_slots] Found availability events:', availabilityEvents.length);
 
-    // Get capacity from service
-    const capacity = parseInt(service.capacity) || 20;
+    // Get capacity and duration from service
+    const capacity = parseInt(service.capacity) || 8;
+    const duration = parseInt(service.duration) || 120; // Default 2 hours
+
+    console.log('[get_booking_slots] Service info:', { capacity, duration });
 
     // Build slots with availability
     const slots: Array<{
@@ -469,32 +515,52 @@ export async function getBookingSlots(
 
       // Extract date/time directly from ISO string - preserves calendar timezone
       const dateStr = extractDateFromISO(event.start.dateTime);
-      const timeStr = extractTimeFromISO(event.start.dateTime);
-      const endTimeStr = extractTimeFromISO(event.end.dateTime);
+      const availStart = extractTimeFromISO(event.start.dateTime);
+      const availEnd = extractTimeFromISO(event.end.dateTime);
 
       // Skip if event is in the past (compare using the event's actual datetime)
       const eventEnd = new Date(event.end.dateTime);
       if (eventEnd < new Date()) continue;
 
-      // Count existing bookings for this slot
-      const dateTimeStr = `${dateStr}T${timeStr}:00+08:00`;
-      const bookedCount = await countBookings(
-        store.invite_calendar_id,
-        serviceId,
-        dateTimeStr
-      );
+      console.log(`[get_booking_slots] Availability: ${dateStr} ${availStart}-${availEnd}`);
 
-      const spotsLeft = capacity - bookedCount;
+      // Generate time slots within this availability window
+      const timeSlots = generateTimeSlots(availStart, availEnd, duration);
 
-      console.log(`[get_booking_slots] Slot ${dateStr} ${timeStr}: ${spotsLeft} spots left`);
+      console.log(`[get_booking_slots] Generated ${timeSlots.length} slots:`, timeSlots);
 
-      slots.push({
-        date: dateStr,
-        time: timeStr,
-        endTime: endTimeStr,
-        spotsLeft: Math.max(0, spotsLeft)
-      });
+      // For each generated time slot, check bookings and add to slots
+      for (const time of timeSlots) {
+        // Count existing bookings for this slot
+        const dateTimeStr = `${dateStr}T${time}:00+08:00`;
+        const bookedCount = await countBookings(
+          store.invite_calendar_id,
+          serviceId,
+          dateTimeStr
+        );
+
+        const spotsLeft = capacity - bookedCount;
+
+        console.log(`[get_booking_slots] Slot ${dateStr} ${time}: ${spotsLeft} spots left (${bookedCount} booked)`);
+
+        // Only add slots with available spots
+        if (spotsLeft > 0) {
+          slots.push({
+            date: dateStr,
+            time: time,
+            endTime: calculateEndTime(time, duration),
+            spotsLeft: spotsLeft
+          });
+        }
+      }
     }
+
+    // Sort by date, then time
+    slots.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.time.localeCompare(b.time);
+    });
 
     console.log('[get_booking_slots] Total slots found:', slots.length);
 

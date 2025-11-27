@@ -1,7 +1,8 @@
+"use client"
+
 import * as React from "react"
-import { useState, useMemo } from "react"
-import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,17 +31,7 @@ interface BookingCalendarProps {
     email?: string
     phone?: string
   }
-  onActionClick?: (action: string, data?: any) => void
-}
-
-/**
- * Format date to YYYY-MM-DD without timezone conversion
- */
-function formatDateToYMD(d: Date): string {
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  onActionClick?: (action: string, data?: Record<string, unknown>) => void
 }
 
 export function BookingCalendar({
@@ -51,36 +42,44 @@ export function BookingCalendar({
   onActionClick
 }: BookingCalendarProps) {
   // State
-  const [date, setDate] = useState<Date | undefined>(
-    prefill?.date ? new Date(prefill.date + 'T12:00:00') : undefined
+  const [date, setDate] = React.useState<Date | undefined>(
+    prefill?.date ? new Date(prefill.date + "T00:00:00") : undefined
   )
-  const [selectedTime, setSelectedTime] = useState<string | null>(
+  const [selectedTime, setSelectedTime] = React.useState<string | null>(
     prefill?.time || null
   )
-  const [step, setStep] = useState<'datetime' | 'details'>('datetime')
-  const [customerDetails, setCustomerDetails] = useState({
-    name: prefill?.name || '',
-    email: prefill?.email || '',
-    phone: prefill?.phone || ''
+  const [step, setStep] = React.useState<"datetime" | "details">("datetime")
+  const [customerDetails, setCustomerDetails] = React.useState({
+    name: prefill?.name || "",
+    email: prefill?.email || "",
+    phone: prefill?.phone || ""
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Computed - use local date formatting to avoid timezone issues
+  // Format date as YYYY-MM-DD (local, no timezone conversion)
+  function formatDateToYMD(d: Date): string {
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, "0")
+    const day = String(d.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
+  // Computed
   const selectedDateStr = date ? formatDateToYMD(date) : null
 
   // Get time slots for selected date
-  const timeSlotsForDate = useMemo(() => {
+  const timeSlotsForDate = React.useMemo(() => {
     if (!selectedDateStr) return []
     return slots
-      .filter(slot => slot.date === selectedDateStr)
+      .filter(slot => slot.date === selectedDateStr && slot.spotsLeft > 0)
       .map(slot => ({
         time: slot.time,
+        endTime: slot.endTime,
         spotsLeft: slot.spotsLeft
       }))
   }, [slots, selectedDateStr])
 
   // Dates that have available slots
-  const availableDates = useMemo(() => {
+  const availableDates = React.useMemo(() => {
     const dates = new Set<string>()
     slots.forEach(slot => {
       if (slot.spotsLeft > 0) dates.add(slot.date)
@@ -88,28 +87,17 @@ export function BookingCalendar({
     return Array.from(dates)
   }, [slots])
 
-  // Check if date has slots
+  // Check if date has available slots
   const isDateAvailable = (checkDate: Date) => {
     const dateStr = formatDateToYMD(checkDate)
     return availableDates.includes(dateStr)
-  }
-
-  // Check if date is in the past
-  const isDateInPast = (checkDate: Date) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const check = new Date(checkDate)
-    check.setHours(0, 0, 0, 0)
-    return check < today
   }
 
   // Handlers
   const handleConfirm = () => {
     if (!date || !selectedTime || !customerDetails.name || !customerDetails.email) return
 
-    setIsSubmitting(true)
-
-    onActionClick?.('confirm_booking', {
+    onActionClick?.("confirm_booking", {
       service_name: service.name,
       service_id: service.id,
       date: selectedDateStr,
@@ -120,17 +108,17 @@ export function BookingCalendar({
     })
   }
 
-  // Step 1: Date & Time Selection (Calendar-20 layout)
-  if (step === 'datetime') {
+  // Step 1: Date & Time Selection (calendar-20 layout)
+  if (step === "datetime") {
     return (
-      <Card className="w-full max-w-xl overflow-hidden">
+      <Card className="gap-0 p-0 overflow-hidden">
         <CardContent className="relative p-0 md:pr-48">
           {/* Calendar - Left Side */}
-          <div className="p-4 md:p-6">
+          <div className="p-6">
             <div className="text-sm font-medium mb-1">{service.name}</div>
             {(service.duration || service.price) && (
               <div className="text-xs text-muted-foreground mb-4">
-                {service.duration}{service.duration && service.price && ' • '}
+                {service.duration}{service.duration && service.price && " • "}
                 {service.price && `HK$${service.price}`}
               </div>
             )}
@@ -143,29 +131,28 @@ export function BookingCalendar({
               }}
               defaultMonth={date || new Date()}
               disabled={(checkDate) => {
-                return isDateInPast(checkDate) || !isDateAvailable(checkDate)
+                // Disable past dates
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                if (checkDate < today) return true
+                // Disable dates with no availability
+                return !isDateAvailable(checkDate)
               }}
               showOutsideDays={false}
               className="bg-transparent p-0"
-              modifiers={{
-                available: (d) => isDateAvailable(d) && !isDateInPast(d),
-              }}
-              modifiersClassNames={{
-                available: "bg-green-50 hover:bg-green-100 text-green-900 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30",
-              }}
             />
           </div>
 
-          {/* Time Slots - Right Side (absolute on desktop) */}
-          <div className="no-scrollbar inset-y-0 right-0 flex max-h-64 w-full scroll-pb-4 flex-col gap-2 overflow-y-auto border-t p-4 md:absolute md:max-h-none md:w-48 md:border-t-0 md:border-l md:p-6">
+          {/* Time Slots - Right Side (absolute on desktop, stacked on mobile) */}
+          <div className="no-scrollbar inset-y-0 right-0 flex max-h-72 w-full scroll-pb-6 flex-col gap-4 overflow-y-auto border-t p-6 md:absolute md:max-h-none md:w-48 md:border-t-0 md:border-l">
             {selectedDateStr ? (
               timeSlotsForDate.length > 0 ? (
                 <div className="grid gap-2">
                   <div className="text-xs text-muted-foreground mb-1">
-                    {date?.toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric'
+                    {date?.toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric"
                     })}
                   </div>
                   {timeSlotsForDate.map(({ time, spotsLeft }) => (
@@ -173,15 +160,11 @@ export function BookingCalendar({
                       key={time}
                       variant={selectedTime === time ? "default" : "outline"}
                       onClick={() => setSelectedTime(time)}
-                      className="w-full justify-between shadow-none"
-                      disabled={spotsLeft <= 0}
+                      className="w-full shadow-none justify-between"
                     >
                       <span>{time}</span>
-                      {spotsLeft <= 3 && spotsLeft > 0 && (
+                      {spotsLeft <= 3 && (
                         <span className="text-xs opacity-70">{spotsLeft} left</span>
-                      )}
-                      {spotsLeft <= 0 && (
-                        <span className="text-xs opacity-70">Full</span>
                       )}
                     </Button>
                   ))}
@@ -199,16 +182,16 @@ export function BookingCalendar({
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-4 border-t px-4 py-4 md:flex-row md:px-6 md:py-5">
+        <CardFooter className="flex flex-col gap-4 border-t px-6 py-5 md:flex-row">
           <div className="text-sm flex-1">
             {date && selectedTime ? (
               <>
                 <span className="font-medium">{service.name}</span> on{" "}
                 <span className="font-medium">
-                  {date.toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    month: 'long',
-                    day: 'numeric'
+                  {date.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric"
                   })}
                 </span>{" "}
                 at <span className="font-medium">{selectedTime}</span>
@@ -218,9 +201,10 @@ export function BookingCalendar({
             )}
           </div>
           <Button
-            onClick={() => setStep('details')}
+            onClick={() => setStep("details")}
             disabled={!date || !selectedTime}
-            className="w-full md:w-auto"
+            className="w-full md:ml-auto md:w-auto"
+            variant="outline"
           >
             Continue
           </Button>
@@ -234,13 +218,13 @@ export function BookingCalendar({
     <Card className="w-full max-w-md">
       {/* Collapsed Date/Time Summary */}
       <div
-        className="flex items-center justify-between px-4 py-3 border-b cursor-pointer hover:bg-muted/50 transition-colors"
-        onClick={() => setStep('datetime')}
+        className="flex items-center justify-between px-4 py-3 border-b cursor-pointer hover:bg-muted/50"
+        onClick={() => setStep("datetime")}
       >
         <div className="flex items-center gap-2">
           <Check className="h-4 w-4 text-green-600" />
           <span className="text-sm">
-            {date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {selectedTime}
+            {date?.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {selectedTime}
           </span>
         </div>
         <Button variant="ghost" size="sm">Change</Button>
@@ -258,7 +242,6 @@ export function BookingCalendar({
               value={customerDetails.name}
               onChange={(e) => setCustomerDetails(prev => ({ ...prev, name: e.target.value }))}
               placeholder="Your name"
-              className="mt-1"
             />
           </div>
 
@@ -270,7 +253,6 @@ export function BookingCalendar({
               value={customerDetails.email}
               onChange={(e) => setCustomerDetails(prev => ({ ...prev, email: e.target.value }))}
               placeholder="your@email.com"
-              className="mt-1"
             />
           </div>
 
@@ -282,7 +264,6 @@ export function BookingCalendar({
               value={customerDetails.phone}
               onChange={(e) => setCustomerDetails(prev => ({ ...prev, phone: e.target.value }))}
               placeholder="+852 XXXX XXXX"
-              className="mt-1"
             />
           </div>
         </div>
@@ -291,10 +272,10 @@ export function BookingCalendar({
       <CardFooter className="border-t px-4 py-4">
         <Button
           onClick={handleConfirm}
-          disabled={!customerDetails.name || !customerDetails.email || isSubmitting}
+          disabled={!customerDetails.name || !customerDetails.email}
           className="w-full"
         >
-          {isSubmitting ? 'Booking...' : 'Confirm Booking'}
+          Confirm Booking
         </Button>
       </CardFooter>
     </Card>
