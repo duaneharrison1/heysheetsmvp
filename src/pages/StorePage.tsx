@@ -321,6 +321,13 @@ export default function StorePage() {
               if (leadFormComp && leadFormComp.props) {
                 return { type: 'lead_form', data: leadFormComp.props };
               }
+
+              const bookingCalendarComp = fr.components.find((c: any) =>
+                c.type === 'BookingCalendar' || c.type === 'booking_calendar'
+              );
+              if (bookingCalendarComp && bookingCalendarComp.props) {
+                return { type: 'booking_calendar', data: bookingCalendarComp.props };
+              }
             }
             // Fallback: if functionResult.data.hours exists
             if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {
@@ -614,6 +621,22 @@ export default function StorePage() {
 
       const message = `submit_lead ${formattedParts}`;
       console.log('[StorePage] Sending lead form data:', message);
+      sendMessage(message);
+      return;
+    }
+
+    // Handle booking calendar confirmation
+    if (action === 'confirm_booking' && data && typeof data === 'object') {
+      const { service_name, date, time, customer_name, customer_email, customer_phone } = data;
+
+      // Format as natural language message for classifier to call create_booking
+      let message = `Book ${service_name} on ${date} at ${time}. `;
+      message += `Name: ${customer_name}, Email: ${customer_email}`;
+      if (customer_phone) {
+        message += `, Phone: ${customer_phone}`;
+      }
+
+      console.log('[StorePage] Sending booking confirmation:', message);
       sendMessage(message);
       return;
     }

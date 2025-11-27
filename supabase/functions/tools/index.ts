@@ -10,7 +10,7 @@ import {
   CreateBookingSchema
 } from './validators.ts';
 import { semanticMatch } from './semantic-matcher.ts';
-import { checkAvailability, createBooking } from './calendar-booking.ts';
+import { checkAvailability, createBooking, getBookingSlots } from './calendar-booking.ts';
 
 // ============================================================================
 // FUNCTION EXECUTOR
@@ -39,6 +39,8 @@ export async function executeFunction(
         return await checkAvailability(params, context);
       case 'create_booking':
         return await createBooking(params, context);
+      case 'get_booking_slots':
+        return await getBookingSlots(params, context);
       default:
         return {
           success: false,
