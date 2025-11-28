@@ -114,82 +114,86 @@ export function BookingCalendar({
     })
   }
 
-  // Step 1: Date & Time Selection (calendar-20 layout)
+  // Step 1: Date & Time Selection (flexbox layout - no absolute positioning)
   if (step === "datetime") {
     return (
-      <Card className="w-full max-w-lg gap-0 p-0 overflow-hidden">
-        <CardContent className="relative p-0 md:pr-48">
-          {/* Calendar - Left Side */}
-          <div className="p-4 md:p-6">
-            <div className="text-sm font-medium mb-1">{service.name}</div>
-            {(service.duration || service.price) && (
-              <div className="text-xs text-muted-foreground mb-4">
-                {service.duration}{service.duration && service.price && " • "}
-                {service.price && `HK$${service.price}`}
-              </div>
-            )}
-            <Calendar
-              mode="single"
-              selected={date}
-              onSelect={(newDate) => {
-                setDate(newDate)
-                setSelectedTime(null) // Reset time when date changes
-              }}
-              defaultMonth={slots.length > 0 ? new Date(slots[0].date + "T00:00:00") : new Date()}
-              disabled={(checkDate) => {
-                // Disable past dates
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                if (checkDate < today) return true
-                // Disable dates with no availability
-                return !isDateAvailable(checkDate)
-              }}
-              showOutsideDays={false}
-              className="bg-transparent p-0"
-            />
-          </div>
+      <Card className="w-full max-w-xl gap-0 p-0 overflow-hidden">
+        <CardContent className="p-0">
+          {/* Flex container: column on mobile, row on desktop */}
+          <div className="flex flex-col md:flex-row">
 
-          {/* Time Slots - Right Side (absolute on desktop, stacked on mobile) */}
-          <div className="no-scrollbar inset-y-0 right-0 flex max-h-72 w-full scroll-pb-6 flex-col gap-4 overflow-y-auto border-t p-4 md:absolute md:max-h-none md:w-48 md:border-t-0 md:border-l md:p-6">
-            {selectedDateStr ? (
-              timeSlotsForDate.length > 0 ? (
-                <div className="grid gap-2">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    {date?.toLocaleDateString("en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric"
-                    })}
+            {/* Left: Calendar section */}
+            <div className="flex-1 p-4 md:p-6 min-w-0">
+              <div className="text-sm font-medium mb-1">{service.name}</div>
+              {(service.duration || service.price) && (
+                <div className="text-xs text-muted-foreground mb-4">
+                  {service.duration}{service.duration && service.price && " • "}
+                  {service.price && `HK$${service.price}`}
+                </div>
+              )}
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(newDate) => {
+                  setDate(newDate)
+                  setSelectedTime(null)
+                }}
+                defaultMonth={slots.length > 0 ? new Date(slots[0].date + "T00:00:00") : new Date()}
+                disabled={(checkDate) => {
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  if (checkDate < today) return true
+                  return !isDateAvailable(checkDate)
+                }}
+                showOutsideDays={false}
+                className="bg-transparent p-0"
+              />
+            </div>
+
+            {/* Right: Time slots section */}
+            <div className="w-full md:w-48 border-t md:border-t-0 md:border-l p-4 md:p-6 max-h-72 md:max-h-[400px] overflow-y-auto">
+              {selectedDateStr ? (
+                timeSlotsForDate.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground mb-2">
+                      {date?.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric"
+                      })}
+                    </div>
+                    {timeSlotsForDate.map(({ time, spotsLeft }) => (
+                      <Button
+                        key={time}
+                        variant={selectedTime === time ? "default" : "outline"}
+                        onClick={() => setSelectedTime(time)}
+                        className="w-full justify-between"
+                        size="sm"
+                      >
+                        <span>{time}</span>
+                        {spotsLeft <= 3 && (
+                          <span className="text-xs opacity-70">{spotsLeft} left</span>
+                        )}
+                      </Button>
+                    ))}
                   </div>
-                  {timeSlotsForDate.map(({ time, spotsLeft }) => (
-                    <Button
-                      key={time}
-                      variant={selectedTime === time ? "default" : "outline"}
-                      onClick={() => setSelectedTime(time)}
-                      className="w-full shadow-none justify-between"
-                    >
-                      <span>{time}</span>
-                      {spotsLeft <= 3 && (
-                        <span className="text-xs opacity-70">{spotsLeft} left</span>
-                      )}
-                    </Button>
-                  ))}
-                </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground text-center py-8">
+                    No times available on this date
+                  </div>
+                )
               ) : (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  No times available
+                <div className="text-sm text-muted-foreground text-center py-8">
+                  Select a date
                 </div>
-              )
-            ) : (
-              <div className="text-sm text-muted-foreground text-center py-4">
-                Select a date
-              </div>
-            )}
+              )}
+            </div>
+
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-4 border-t px-4 py-4 md:flex-row md:px-6 md:py-5">
-          <div className="text-sm flex-1">
+        <CardFooter className="flex flex-col gap-3 border-t px-4 py-4 md:flex-row md:px-6">
+          <div className="flex-1 text-sm">
             {date && selectedTime ? (
               <>
                 <span className="font-medium">{service.name}</span> on{" "}
@@ -203,14 +207,13 @@ export function BookingCalendar({
                 at <span className="font-medium">{selectedTime}</span>
               </>
             ) : (
-              "Select a date and time for your booking"
+              <span className="text-muted-foreground">Select a date and time for your booking</span>
             )}
           </div>
           <Button
             onClick={() => setStep("details")}
             disabled={!date || !selectedTime}
-            className="w-full md:ml-auto md:w-auto"
-            variant="outline"
+            className="w-full md:w-auto"
           >
             Continue
           </Button>
