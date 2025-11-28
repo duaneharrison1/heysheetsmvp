@@ -122,8 +122,8 @@ export function BookingCalendar({
           {/* Flex container: column on mobile, row on desktop */}
           <div className="flex flex-col md:flex-row">
 
-            {/* Left: Calendar section */}
-            <div className="flex-1 p-4 md:p-6 min-w-0">
+            {/* Left: Calendar section - shrink-0 prevents shrinking below natural width */}
+            <div className="shrink-0 p-4 md:p-6">
               <div className="text-sm font-medium mb-1">{service.name}</div>
               {(service.duration || service.price) && (
                 <div className="text-xs text-muted-foreground mb-4">
@@ -150,8 +150,8 @@ export function BookingCalendar({
               />
             </div>
 
-            {/* Right: Time slots section */}
-            <div className="w-full md:w-48 border-t md:border-t-0 md:border-l p-4 md:p-6 max-h-72 md:max-h-[400px] overflow-y-auto">
+            {/* Right: Time slots section - fixed width on desktop, full width on mobile */}
+            <div className="w-full md:w-48 md:shrink-0 border-t md:border-t-0 md:border-l p-4 md:p-6 max-h-72 md:max-h-[400px] overflow-y-auto">
               {selectedDateStr ? (
                 timeSlotsForDate.length > 0 ? (
                   <div className="space-y-2">
