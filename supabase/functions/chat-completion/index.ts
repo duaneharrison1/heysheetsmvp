@@ -216,6 +216,97 @@ serve(async (req) => {
       });
     }
 
+    // Check if function wants to bypass LLM responder (deterministic response)
+    // This is the demo-dh "OrderAgent" pattern for critical responses
+    if (functionResult?.skipResponder && functionResult?.message) {
+      log(requestId, '🎯 Using deterministic response (skipResponder)');
+      const totalDuration = performance.now() - requestStart;
+
+      // Build response without calling LLM responder
+      const response: ChatCompletionResponse = {
+        text: functionResult.message,
+        intent: classification.intent,
+        confidence: classification.confidence,
+        functionCalled: classification.function_to_call || undefined,
+        functionResult,
+        debug: {
+          intentDuration: classifyDuration,
+          functionDuration,
+          responseDuration: 0, // No responder call
+          totalDuration,
+          intent: {
+            detected: classification.intent,
+            confidence: classification.confidence,
+            duration: classifyDuration,
+            reasoning: classification.reasoning,
+          },
+          functionCalls: [{
+            name: classification.function_to_call || '',
+            arguments: classification.extracted_params || {},
+            result: {
+              success: functionResult.success,
+              data: functionResult.data,
+              error: functionResult.error,
+            },
+            duration: functionDuration,
+          }],
+          tokens: {
+            classification: { input: classifyUsage.input, output: classifyUsage.output },
+            response: { input: 0, output: 0 }, // No responder tokens
+            total: { input: classifyUsage.input, output: classifyUsage.output, cached: 0 },
+          },
+          cost: {
+            classification: (classifyUsage.input / 1_000_000) * pricing.input + (classifyUsage.output / 1_000_000) * pricing.output,
+            response: 0,
+            total: (classifyUsage.input / 1_000_000) * pricing.input + (classifyUsage.output / 1_000_000) * pricing.output,
+          },
+          steps: [
+            {
+              name: 'Intent Classification',
+              function: 'classifier',
+              status: 'success',
+              duration: classifyDuration,
+              result: {
+                intent: classification.intent,
+                confidence: classification.confidence,
+                reasoning: classification.reasoning,
+                params: classification.extracted_params,
+              },
+            },
+            {
+              name: 'Function Execution',
+              function: 'tools',
+              status: functionResult.success ? 'success' : 'error',
+              duration: functionDuration,
+              functionCalled: classification.function_to_call,
+              result: functionResult.success ? functionResult.data : undefined,
+            },
+            {
+              name: 'Response Generation',
+              function: 'skipResponder',
+              status: 'success',
+              duration: 0,
+              result: {
+                length: functionResult.message.length,
+                note: 'Deterministic response - LLM bypassed',
+              },
+            },
+          ],
+        },
+      };
+
+      log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
+
+      return new Response(JSON.stringify(response), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
+          'Server-Timing': `total;dur=${totalDuration}`,
+        }
+      });
+    }
+
     // Step 3: Generate response using LLM
     log(requestId, '💬 Generating response...');
     const responseStart = performance.now();

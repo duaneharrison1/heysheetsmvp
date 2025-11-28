@@ -41,10 +41,16 @@ export function BookingCalendar({
   prefill,
   onActionClick
 }: BookingCalendarProps) {
-  // State
-  const [date, setDate] = React.useState<Date | undefined>(
-    prefill?.date ? new Date(prefill.date + "T00:00:00") : undefined
-  )
+  // State - only pre-select prefilled date if it's actually available
+  const [date, setDate] = React.useState<Date | undefined>(() => {
+    if (prefill?.date) {
+      const isAvailable = slots.some(s => s.date === prefill.date && s.spotsLeft > 0)
+      if (isAvailable) {
+        return new Date(prefill.date + "T00:00:00")
+      }
+    }
+    return undefined
+  })
   const [selectedTime, setSelectedTime] = React.useState<string | null>(
     prefill?.time || null
   )
@@ -111,7 +117,7 @@ export function BookingCalendar({
   // Step 1: Date & Time Selection (calendar-20 layout)
   if (step === "datetime") {
     return (
-      <Card className="gap-0 p-0 overflow-hidden">
+      <Card className="w-full max-w-md gap-0 p-0 overflow-hidden">
         <CardContent className="relative p-0 md:pr-48">
           {/* Calendar - Left Side */}
           <div className="p-6">
