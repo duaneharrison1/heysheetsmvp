@@ -117,10 +117,10 @@ export function BookingCalendar({
   // Step 1: Date & Time Selection (calendar-20 layout)
   if (step === "datetime") {
     return (
-      <Card className="w-full max-w-md gap-0 p-0 overflow-hidden">
+      <Card className="w-full max-w-lg gap-0 p-0 overflow-hidden">
         <CardContent className="relative p-0 md:pr-48">
           {/* Calendar - Left Side */}
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             <div className="text-sm font-medium mb-1">{service.name}</div>
             {(service.duration || service.price) && (
               <div className="text-xs text-muted-foreground mb-4">
@@ -135,7 +135,7 @@ export function BookingCalendar({
                 setDate(newDate)
                 setSelectedTime(null) // Reset time when date changes
               }}
-              defaultMonth={date || new Date()}
+              defaultMonth={slots.length > 0 ? new Date(slots[0].date + "T00:00:00") : new Date()}
               disabled={(checkDate) => {
                 // Disable past dates
                 const today = new Date()
@@ -150,7 +150,7 @@ export function BookingCalendar({
           </div>
 
           {/* Time Slots - Right Side (absolute on desktop, stacked on mobile) */}
-          <div className="no-scrollbar inset-y-0 right-0 flex max-h-72 w-full scroll-pb-6 flex-col gap-4 overflow-y-auto border-t p-6 md:absolute md:max-h-none md:w-48 md:border-t-0 md:border-l">
+          <div className="no-scrollbar inset-y-0 right-0 flex max-h-72 w-full scroll-pb-6 flex-col gap-4 overflow-y-auto border-t p-4 md:absolute md:max-h-none md:w-48 md:border-t-0 md:border-l md:p-6">
             {selectedDateStr ? (
               timeSlotsForDate.length > 0 ? (
                 <div className="grid gap-2">
@@ -188,7 +188,7 @@ export function BookingCalendar({
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-4 border-t px-6 py-5 md:flex-row">
+        <CardFooter className="flex flex-col gap-4 border-t px-4 py-4 md:flex-row md:px-6 md:py-5">
           <div className="text-sm flex-1">
             {date && selectedTime ? (
               <>
