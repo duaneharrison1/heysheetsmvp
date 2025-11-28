@@ -216,6 +216,22 @@ serve(async (req) => {
       });
     }
 
+    // Get pricing based on actual model used (fallback to Grok 4.1 Fast if not found)
+    const modelPricing: Record<string, { input: number; output: number }> = {
+      'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
+      'google/gemini-3-pro-preview': { input: 2.0, output: 12.0 },
+      'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
+      'openai/gpt-5.1': { input: 0.30, output: 1.20 },
+      'openai/gpt-5.1-chat': { input: 0.30, output: 1.20 },
+      'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
+      'deepseek/deepseek-chat-v3.1': { input: 0.27, output: 1.10 },
+      'minimax/minimax-m2': { input: 0.26, output: 1.02 },
+      'qwen/qwen3-235b-a22b-2507': { input: 0.22, output: 0.95 },
+      'x-ai/grok-4.1-fast': { input: 0.20, output: 0.50 },
+      'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
+    };
+    const pricing = model ? (modelPricing[model] ?? modelPricing['x-ai/grok-4.1-fast']) : modelPricing['x-ai/grok-4.1-fast'];
+
     // Check if function wants to bypass LLM responder (deterministic response)
     // This is the demo-dh "OrderAgent" pattern for critical responses
     if (functionResult?.skipResponder && functionResult?.message) {
@@ -325,22 +341,6 @@ serve(async (req) => {
     // Aggregate token usage and calculate cost
     const totalInputTokens = classifyUsage.input + responseUsage.input;
     const totalOutputTokens = classifyUsage.output + responseUsage.output;
-
-    // Get pricing based on actual model used (fallback to Grok 4.1 Fast if not found)
-    const modelPricing: Record<string, { input: number; output: number }> = {
-      'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-      'google/gemini-3-pro-preview': { input: 2.0, output: 12.0 },
-      'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
-      'openai/gpt-5.1': { input: 0.30, output: 1.20 },
-      'openai/gpt-5.1-chat': { input: 0.30, output: 1.20 },
-      'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
-      'deepseek/deepseek-chat-v3.1': { input: 0.27, output: 1.10 },
-      'minimax/minimax-m2': { input: 0.26, output: 1.02 },
-      'qwen/qwen3-235b-a22b-2507': { input: 0.22, output: 0.95 },
-      'x-ai/grok-4.1-fast': { input: 0.20, output: 0.50 },
-      'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
-    };
-    const pricing = model ? (modelPricing[model] ?? modelPricing['x-ai/grok-4.1-fast']) : modelPricing['x-ai/grok-4.1-fast'];
 
     const inputCost = (totalInputTokens / 1_000_000) * pricing.input;
     const outputCost = (totalOutputTokens / 1_000_000) * pricing.output;
