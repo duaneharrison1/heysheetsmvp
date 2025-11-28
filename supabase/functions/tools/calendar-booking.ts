@@ -603,7 +603,7 @@ export async function getBookingSlots(
       }
     }
 
-    // Check if prefill date/time is available (for AI context)
+    // Check if prefill date/time is available
     const prefillDateAvailable = prefill_date
       ? datesWithSlots.includes(prefill_date)
       : null;
@@ -612,41 +612,35 @@ export async function getBookingSlots(
       ? slots.some(s => s.date === prefill_date && s.time === prefill_time)
       : null;
 
-    // Build human-readable note for the responder
-    let availabilityNote: string | null = null;
-    if (prefill_date && !prefillDateAvailable) {
-      availabilityNote = `IMPORTANT: The requested date ${prefill_date} is NOT available. Available dates are: ${datesWithSlots.join(', ')}. Please inform the customer that their requested date is unavailable and suggest these alternatives.`;
-    } else if (prefillDateAvailable && prefill_time && !prefillTimeAvailable) {
-      const timesOnDate = slots.filter(s => s.date === prefill_date).map(s => s.time);
-      availabilityNote = `IMPORTANT: The requested time ${prefill_time} on ${prefill_date} is NOT available. Available times on that date: ${timesOnDate.join(', ')}. Please inform the customer.`;
-    }
-
     console.log('[get_booking_slots] Availability context:', {
       prefillDateAvailable,
       prefillTimeAvailable,
-      availabilityNote
+      prefill_date,
+      prefill_time
     });
 
-    // Return with component
-    return {
+    // Build response data (shared across all cases)
+    const responseData = {
       success: true,
-      message,
-      // Explicit availability status for AI/responder
+      service: {
+        id: serviceId,
+        name: service.serviceName,
+        duration: String(duration),
+        price: service.price
+      },
+      slots,
+      unavailableDates,
+      prefill: {
+        // Only include prefill date if it's actually available
+        date: prefillDateAvailable ? prefill_date : undefined,
+        time: prefillTimeAvailable ? prefill_time : undefined,
+        name: prefill_name,
+        email: prefill_email,
+        phone: prefill_phone
+      },
+      availableDates: datesWithSlots,
       requestedDateAvailable: prefillDateAvailable,
       requestedTimeAvailable: prefillTimeAvailable,
-      availableDatesCount: datesWithSlots.length,
-      availableDates: datesWithSlots,
-      availabilityNote,
-      data: {
-        service: {
-          id: serviceId,
-          name: service.serviceName,
-          duration: service.duration,
-          price: service.price
-        },
-        slotsCount: slots.length,
-        datesAvailable: datesWithSlots.length
-      },
       components: [{
         id: `booking-calendar-${storeId}-${Date.now()}`,
         type: 'BookingCalendar',
@@ -660,8 +654,9 @@ export async function getBookingSlots(
           slots,
           unavailableDates,
           prefill: {
-            date: prefill_date,
-            time: prefill_time,
+            // Only include prefill date if it's actually available
+            date: prefillDateAvailable ? prefill_date : undefined,
+            time: prefillTimeAvailable ? prefill_time : undefined,
             name: prefill_name,
             email: prefill_email,
             phone: prefill_phone
@@ -669,6 +664,42 @@ export async function getBookingSlots(
         }
       }],
       componentsVersion: '1'
+    };
+
+    // CRITICAL: For unavailable dates, build response in JavaScript (not LLM)
+    // This is the demo-dh "OrderAgent" pattern - deterministic responses
+    if (prefill_date && !prefillDateAvailable) {
+      const datesList = datesWithSlots.length <= 3
+        ? datesWithSlots.join(' and ')
+        : `${datesWithSlots.slice(0, 3).join(', ')} and ${datesWithSlots.length - 3} more`;
+
+      console.log('[get_booking_slots] Using skipResponder for unavailable date');
+
+      return {
+        ...responseData,
+        // Pre-built message - bypasses LLM responder
+        message: `I'd love to help you book ${service.serviceName}! Unfortunately, ${prefill_date} isn't available for this class. We have openings on ${datesList}. I've shown the calendar below so you can pick a date and time that works for you!`,
+        skipResponder: true  // Flag for orchestrator to bypass LLM
+      };
+    }
+
+    if (prefillDateAvailable && prefill_time && !prefillTimeAvailable) {
+      const timesOnDate = slots.filter(s => s.date === prefill_date).map(s => s.time);
+      const timesList = timesOnDate.join(', ');
+
+      console.log('[get_booking_slots] Using skipResponder for unavailable time');
+
+      return {
+        ...responseData,
+        message: `Great choice on ${service.serviceName}! The ${prefill_time} slot on ${prefill_date} isn't available, but we have openings at ${timesList}. Pick a time that works for you!`,
+        skipResponder: true
+      };
+    }
+
+    // Normal case: date/time available OR no prefill - let LLM respond
+    return {
+      ...responseData,
+      message: `Here's the booking calendar for ${service.serviceName}. Pick a date and time that works for you!`
     };
 
   } catch (error) {
