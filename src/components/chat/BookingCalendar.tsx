@@ -114,16 +114,16 @@ export function BookingCalendar({
     })
   }
 
-  // Step 1: Date & Time Selection (flexbox layout - no absolute positioning)
+  // Step 1: Date & Time Selection (flex-wrap for automatic responsive stacking)
   if (step === "datetime") {
     return (
-      <Card className="w-full max-w-xl gap-0 p-0 overflow-hidden">
+      <Card className="w-full max-w-2xl">
         <CardContent className="p-0">
-          {/* Flex container: column on mobile, row on desktop */}
-          <div className="flex flex-col md:flex-row">
+          {/* Flexbox with wrap - naturally stacks when not enough room */}
+          <div className="flex flex-wrap">
 
-            {/* Left: Calendar section - shrink-0 prevents shrinking below natural width */}
-            <div className="shrink-0 p-4 md:p-6">
+            {/* Calendar section - minimum width ensures no clipping */}
+            <div className="min-w-[280px] flex-1 p-4 md:p-6">
               <div className="text-sm font-medium mb-1">{service.name}</div>
               {(service.duration || service.price) && (
                 <div className="text-xs text-muted-foreground mb-4">
@@ -150,32 +150,32 @@ export function BookingCalendar({
               />
             </div>
 
-            {/* Right: Time slots section - fixed width on desktop, full width on mobile */}
-            <div className="w-full md:w-48 md:shrink-0 border-t md:border-t-0 md:border-l p-4 md:p-6 max-h-72 md:max-h-[400px] overflow-y-auto">
+            {/* Time slots section - grows to fill, wraps below when needed */}
+            <div className="min-w-[180px] w-full sm:w-auto sm:flex-1 max-w-[250px] border-t sm:border-t-0 sm:border-l p-4 md:p-6">
               {selectedDateStr ? (
                 timeSlotsForDate.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground mb-2">
+                    <div className="text-xs text-muted-foreground mb-2 font-medium">
                       {date?.toLocaleDateString("en-US", {
                         weekday: "short",
                         month: "short",
                         day: "numeric"
                       })}
                     </div>
-                    {timeSlotsForDate.map(({ time, spotsLeft }) => (
-                      <Button
-                        key={time}
-                        variant={selectedTime === time ? "default" : "outline"}
-                        onClick={() => setSelectedTime(time)}
-                        className="w-full justify-between"
-                        size="sm"
-                      >
-                        <span>{time}</span>
-                        {spotsLeft <= 3 && (
+                    <div className="grid gap-2">
+                      {timeSlotsForDate.map(({ time, spotsLeft }) => (
+                        <Button
+                          key={time}
+                          variant={selectedTime === time ? "default" : "outline"}
+                          onClick={() => setSelectedTime(time)}
+                          className="w-full justify-between"
+                          size="sm"
+                        >
+                          <span>{time}</span>
                           <span className="text-xs opacity-70">{spotsLeft} left</span>
-                        )}
-                      </Button>
-                    ))}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground text-center py-8">
@@ -192,28 +192,17 @@ export function BookingCalendar({
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-3 border-t px-4 py-4 md:flex-row md:px-6">
-          <div className="flex-1 text-sm">
-            {date && selectedTime ? (
-              <>
-                <span className="font-medium">{service.name}</span> on{" "}
-                <span className="font-medium">
-                  {date.toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric"
-                  })}
-                </span>{" "}
-                at <span className="font-medium">{selectedTime}</span>
-              </>
-            ) : (
-              <span className="text-muted-foreground">Select a date and time for your booking</span>
-            )}
+        <CardFooter className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:px-6">
+          <div className="flex-1 text-sm text-muted-foreground">
+            {date && selectedTime
+              ? `${service.name} on ${date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${selectedTime}`
+              : "Select a date and time for your booking"
+            }
           </div>
           <Button
             onClick={() => setStep("details")}
             disabled={!date || !selectedTime}
-            className="w-full md:w-auto"
+            className="w-full sm:w-auto"
           >
             Continue
           </Button>
