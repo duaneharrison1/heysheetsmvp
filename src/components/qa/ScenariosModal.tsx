@@ -34,7 +34,8 @@ interface Scenario {
   description?: string;
   category?: string;
   steps?: ScenarioStep[];
-  goal?: string;
+  // Goal can be a string OR an object with description/successSignals
+  goal?: string | { description?: string; successSignals?: string[] };
   turns?: unknown[];
 }
 
@@ -118,7 +119,10 @@ export function ScenariosModal({ open, onOpenChange, onSelectScenario }: Scenari
                     )}
                     {scenario.goal && (
                       <p className="text-xs text-muted-foreground mt-1 truncate">
-                        Goal: {scenario.goal}
+                        {/* Handle goal as string or object with description */}
+                        Goal: {typeof scenario.goal === 'string'
+                          ? scenario.goal
+                          : scenario.goal.description || 'No description'}
                       </p>
                     )}
                   </div>
