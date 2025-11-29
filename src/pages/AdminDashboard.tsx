@@ -4,6 +4,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { H1, Lead } from '@/components/ui/heading';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2, Shield, Store, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -183,7 +184,7 @@ const AdminDashboard = () => {
               <table className="w-full text-sm">
                 <thead className="border-b">
                   <tr>
-                    <th className="text-left py-2 px-0 font-semibold text-xs text-muted-foreground">Email</th>
+                    <th className="text-left py-2 px-0 font-semibold text-xs text-muted-foreground">User</th>
                     <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Role</th>
                     <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Status</th>
                     <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Stores</th>
@@ -195,7 +196,14 @@ const AdminDashboard = () => {
                     const userStores = stores.filter(s => s.user_id === user.id).length;
                     return (
                       <tr key={user.id} className="hover:bg-muted/30 transition">
-                        <td className="py-3 px-0">{user.email}</td>
+                        <td className="py-3 px-0 flex items-center gap-3">
+                          <Avatar className="w-8 h-8">
+                            <AvatarFallback className="avatar-fallback font-medium text-sm bg-primary text-primary-foreground">
+                              {(user.email || '').split('@')[0].substring(0,2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="truncate">{user.email}</div>
+                        </td>
                         <td className="py-3 px-4">
                           <Badge variant={user.role === 'super_admin' ? 'default' : 'outline'}>
                             {user.role === 'super_admin' ? '👑 Super Admin' : 'User'}

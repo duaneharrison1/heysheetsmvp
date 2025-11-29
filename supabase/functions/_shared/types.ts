@@ -143,6 +143,8 @@ export interface ChatCompletionResponse {
   confidence: number;
   functionCalled?: string;
   functionResult?: FunctionResult;
+  // Dynamic suggestions for follow-up prompts
+  suggestions?: string[];
   // Optional debug metadata included in responses (frontend may ignore in production)
   debug?: any;
 }

@@ -7,9 +7,9 @@ const TooltipProvider = ({ children }: { children?: React.ReactNode; delayDurati
 const Tooltip = ({ children }: { children?: React.ReactNode }) => <>{children}</>
 
 const TooltipTrigger = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement> & { asChild?: boolean }>(
-  ({ children, ...props }, forwardedRef) => {
-    if (props && (props as any).asChild && React.isValidElement(children)) {
-      // @ts-ignore
+  ({ children, asChild, ...props }, forwardedRef) => {
+    if (asChild && React.isValidElement(children)) {
+      // clone without forwarding the `asChild` prop to the child DOM element
       return React.cloneElement(children, { ref: forwardedRef, ...props })
     }
     return (

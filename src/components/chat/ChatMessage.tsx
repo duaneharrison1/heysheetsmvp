@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Bot, User } from 'lucide-react';
-import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "lucide-react";
+import { Actions, Action } from "@/components/ui/ai-actions";
+import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from "@/components/ui/ai-task";
+import { Bot, User, Copy, Check, ThumbsUp, ThumbsDown, RefreshCcw } from 'lucide-react';
+import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package, Search, Database, Sparkles } from "lucide-react";
 import ChatBubble from './ChatBubble';
 import ProductCard from './ProductCard';
 import ServiceCard from './ServiceCard';
@@ -14,23 +16,66 @@ import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 import LeadForm from './LeadForm';
 
+interface TaskStep {
+  label: string;
+  isLoading?: boolean;
+  file?: string;
+}
+
 interface Message {
   id: string;
   type: 'bot' | 'user';
   content: string;
   timestamp: Date;
   richContent?: any;
+  tasks?: {
+    title: string;
+    icon?: React.ReactNode;
+    steps: TaskStep[];
+  };
 }
 
 interface ChatMessageProps {
   message: Message;
   storeLogo: string;
   onActionClick?: (action: string, data?: any) => void;
+  onRegenerate?: (messageId: string) => void;
+  onFeedback?: (messageId: string, feedback: 'like' | 'dislike') => void;
 }
 
 // Rich content components are extracted to separate files for reuse and clarity
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, onActionClick }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, onActionClick, onRegenerate, onFeedback }) => {
+  // State for action feedback
+  const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<'like' | 'dislike' | null>(null);
+
+  // Handle copy message content
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy message:', err);
+    }
+  };
+
+  // Handle like/dislike feedback
+  const handleFeedback = (type: 'like' | 'dislike') => {
+    const newFeedback = feedback === type ? null : type;
+    setFeedback(newFeedback);
+    if (newFeedback && onFeedback) {
+      onFeedback(message.id, newFeedback);
+    }
+  };
+
+  // Handle regenerate
+  const handleRegenerate = () => {
+    if (onRegenerate) {
+      onRegenerate(message.id);
+    }
+  };
   const renderRichContent = () => {
     if (!message.richContent) return null;
 
@@ -234,7 +279,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
   };
 
   return (
-    <div className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
       {message.type === 'bot' && (
         <div className="mt-1 flex-shrink-0">
           <Avatar className="w-9 h-9" variant="bot">
@@ -249,7 +294,60 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
         <ChatBubble type={message.type} timestamp={message.timestamp}>
           <div className="text-sm leading-relaxed">{message.content}</div>
         </ChatBubble>
+        
+        {/* AI Task list showing work progress */}
+        {message.type === 'bot' && message.tasks && (
+          <Task className="mt-2">
+            <TaskTrigger 
+              title={message.tasks.title} 
+              icon={message.tasks.icon || <Sparkles className="h-4 w-4" />}
+              count={message.tasks.steps.length}
+            />
+            <TaskContent>
+              {message.tasks.steps.map((step, index) => (
+                <TaskItem key={index} isLoading={step.isLoading}>
+                  {step.label}
+                  {step.file && <TaskItemFile name={step.file} />}
+                </TaskItem>
+              ))}
+            </TaskContent>
+          </Task>
+        )}
+        
         {renderRichContent()}
+        
+        {/* AI Actions for bot messages (always visible). Labels are screen-reader only; no tooltip popovers in chat. */}
+        {message.type === 'bot' && (
+          <Actions className="mt-1.5">
+            <Action
+              onClick={handleCopy}
+              isActive={copied}
+              label={copied ? 'Copied' : 'Copy'}
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </Action>
+            <Action
+              onClick={() => handleFeedback('like')}
+              isActive={feedback === 'like'}
+              label="Like"
+            >
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </Action>
+            <Action
+              onClick={() => handleFeedback('dislike')}
+              isActive={feedback === 'dislike'}
+              label="Dislike"
+            >
+              <ThumbsDown className="h-3.5 w-3.5" />
+            </Action>
+            <Action
+              onClick={handleRegenerate}
+              label="Regenerate"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+            </Action>
+          </Actions>
+        )}
       </div>
 
       {message.type === 'user' && (

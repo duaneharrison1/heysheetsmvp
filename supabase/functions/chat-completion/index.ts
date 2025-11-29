@@ -168,7 +168,7 @@ serve(async (req) => {
     log(requestId, '💬 Generating response...');
     const responseStart = performance.now();
 
-    const { text: responseText, usage: responseUsage } = await generateResponse(
+    const { text: responseText, suggestions, usage: responseUsage } = await generateResponse(
       messages,
       classification,
       functionResult,
@@ -214,6 +214,7 @@ serve(async (req) => {
       confidence: classification.confidence,
       functionCalled: classification.function_to_call || undefined,
       functionResult,
+      suggestions, // Dynamic suggestions from responder
       // 🆕 ADD DEBUG METADATA (frontend will filter in production)
       debug: {
         intentDuration: classifyDuration,

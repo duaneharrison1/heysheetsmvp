@@ -4,10 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { H2, Lead } from "@/components/ui/heading";
+import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
-import { Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, Phone, Mail, MapPin, Calendar } from "lucide-react";
+import { 
+  Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, 
+  Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink, 
+  MessageCircle, ShoppingBag, Sparkles, CheckCircle2
+} from "lucide-react";
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
@@ -21,6 +28,7 @@ interface Message {
     type: string;
     data: any;
   };
+  suggestions?: string[]; // Dynamic suggestions for follow-up prompts
 }
 
 // Store type for typing the supabase response used in this component
@@ -28,6 +36,7 @@ interface Store {
   id: string;
   name: string;
   type?: string;
+  category?: string;
   logo?: string | null;
   sheet_id?: string | null;
   created_at?: string;
@@ -39,8 +48,28 @@ interface Store {
   facebook?: string;
   phone?: string;
   email?: string;
+  opening_hours?: string;
+  services?: string[];
   [key: string]: any;
 }
+
+// Helper to determine if store is currently open based on opening_hours
+const getStoreStatus = (openingHours?: string): { isOpen: boolean; statusText: string } => {
+  if (!openingHours) return { isOpen: false, statusText: 'Hours not available' };
+  
+  // Simple heuristic - in production this would parse actual hours
+  const now = new Date();
+  const hour = now.getHours();
+  const isWeekday = now.getDay() >= 1 && now.getDay() <= 5;
+  
+  // Default assumption: open 9am-6pm on weekdays, 10am-4pm on weekends
+  const isOpen = isWeekday ? (hour >= 9 && hour < 18) : (hour >= 10 && hour < 16);
+  
+  return {
+    isOpen,
+    statusText: isOpen ? 'Open Now' : 'Closed'
+  };
+};
 
 export default function StorePage() {
   const { storeId } = useParams<{ storeId: string }>();
@@ -52,7 +81,16 @@ export default function StorePage() {
   const [store, setStore] = useState<Store | null>(null);
   const [hasSheet, setHasSheet] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initial quick actions shown when chat first loads
+  const initialQuickActions = [
+    'Show me products',
+    'Show me services',
+    'Operating hours',
+    'Store information'
+  ];
 
   // Debug store
   const addRequest = useDebugStore((state) => state.addRequest);
@@ -115,6 +153,8 @@ export default function StorePage() {
         timestamp: new Date()
       };
       setMessages([initialMessage]);
+      // show initial quick actions using the same suggestions component
+      setCurrentSuggestions(initialQuickActions);
     } finally {
       setLoading(false);
     }
@@ -160,6 +200,8 @@ export default function StorePage() {
 
     setInputValue('');
     setIsTyping(true);
+    // clear visible suggestions while waiting for the assistant
+    setCurrentSuggestions([]);
 
     try {
       // Prepare conversation history
@@ -200,6 +242,10 @@ export default function StorePage() {
       const data = await response.json();
       console.log('Chat response data:', data);
       const aiResponse = data.text || "I apologize, I couldn't generate a response.";
+      const suggestions = data.suggestions || [];
+
+      // Update current suggestions for display above input
+      setCurrentSuggestions(suggestions);
 
       // 🆕 UPDATE DEBUG TRACKING
       const totalDuration = requestTimer.end(requestId, 'total');
@@ -229,6 +275,7 @@ export default function StorePage() {
         id: (Date.now() + 1).toString(),
         type: 'bot',
         content: aiResponse,
+        suggestions, // Include suggestions in the message
         // Attach richContent if functionResult returned UI components
         richContent: (() => {
           try {
@@ -303,6 +350,9 @@ export default function StorePage() {
       };
       setMessages(prev => [...prev, fallbackResponse]);
 
+      // Clear suggestions on error
+      setCurrentSuggestions([]);
+
       // Track error message in debug store
       if (import.meta.env.DEV) {
         addDebugMessage({
@@ -321,12 +371,7 @@ export default function StorePage() {
     sendMessage(action);
   };
 
-  const quickActions = [
-    'Show me products',
-    'Show me services',
-    'Operating hours',
-    'Store information'
-  ];
+  // (quick actions now provided via `initialQuickActions` + dynamic suggestions)
 
   if (loading) {
     return (
@@ -373,75 +418,125 @@ export default function StorePage() {
   {/* Main Content: Two Column Layout */}
     <div className="flex-1 flex w-full min-h-0">
         {/* Store Profile Side Panel */}
-    <Card className="w-96 flex-shrink-0 rounded-none bg-transparent border border-border/10 shadow-[var(--shadow-card-sm)]">
-          <CardContent className="p-6 flex-1 overflow-y-auto">
-            {/* Store Avatar and Name */}
-            <div className="flex flex-col items-center text-center mb-6">
-              <Avatar className="w-20 h-20 mb-4" variant="user">
-                <AvatarFallback className="avatar-fallback font-bold text-xl">
+        <div className="w-96 flex-shrink-0 bg-card border-r border-border overflow-y-auto">
+          <div className="p-6 space-y-6">
+            
+            {/* Store Header */}
+            <div className="text-center">
+              <Avatar className="w-20 h-20 mx-auto mb-4 ring-4 ring-background shadow-lg" variant="user">
+                <AvatarFallback className="avatar-fallback font-bold text-xl bg-primary text-primary-foreground">
                   {store.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <CardTitle className="text-xl font-bold mb-1">{store.name}</CardTitle>
-              {store.type && (
-                <span className="text-sm text-muted-foreground capitalize">{store.type}</span>
+              <h1 className="text-xl font-bold text-foreground mb-1">{store.name}</h1>
+              
+              {/* Category & Type Badges */}
+              <div className="flex items-center justify-center gap-2 mt-2">
+                {store.category && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Tag className="w-3 h-3 mr-1" />
+                    {store.category}
+                  </Badge>
+                )}
+                {store.type && (
+                  <Badge variant="outline" className="text-xs capitalize">
+                    <StoreIcon className="w-3 h-3 mr-1" />
+                    {store.type}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Open/Closed Status */}
+              {store.opening_hours && (
+                <div className="mt-3">
+                  {(() => {
+                    const status = getStoreStatus(store.opening_hours);
+                    return (
+                      <Badge 
+                        variant={status.isOpen ? "default" : "secondary"} 
+                        className={`text-xs ${status.isOpen ? 'bg-green-600 hover:bg-green-600' : 'bg-gray-500 hover:bg-gray-500 text-white'}`}
+                      >
+                        <span className={`w-2 h-2 rounded-full mr-2 ${status.isOpen ? 'bg-green-300 animate-pulse' : 'bg-gray-300'}`} />
+                        {status.statusText}
+                      </Badge>
+                    );
+                  })()}
+                </div>
               )}
             </div>
 
-            {/* Description */}
+            <Separator className="bg-border" />
+
+            {/* Description / About */}
             {store.description && (
-              <div className="mb-6">
-                <h3 className="font-semibold mb-2">About</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{store.description}</p>
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">About</h3>
+                <p className="text-sm text-foreground leading-relaxed">{store.description}</p>
+              </div>
+            )}
+
+            {/* Opening Hours */}
+            {store.opening_hours && (
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Hours</h3>
+                <div className="flex items-start gap-3 text-sm">
+                  <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <span className="text-foreground">{store.opening_hours}</span>
+                </div>
               </div>
             )}
 
             {/* Contact Information */}
-            <div className="mb-6 space-y-3">
-              <h3 className="font-semibold">Contact</h3>
-              
-              {store.location && (
-                <div className="flex items-center gap-3 text-sm">
-                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <span>{store.location}</span>
+            {(store.location || store.phone || store.email || store.website) && (
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Contact</h3>
+                <div className="space-y-3">
+                  {store.location && (
+                    <div className="flex items-start gap-3 text-sm">
+                      <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <span className="text-foreground">{store.location}</span>
+                    </div>
+                  )}
+                  
+                  {store.phone && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <a href={`tel:${store.phone}`} className="text-foreground hover:text-primary transition-colors">{store.phone}</a>
+                    </div>
+                  )}
+                  
+                  {store.email && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <a href={`mailto:${store.email}`} className="text-foreground hover:text-primary transition-colors truncate">{store.email}</a>
+                    </div>
+                  )}
+                  
+                  {store.website && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <a href={store.website} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-primary transition-colors flex items-center gap-1">
+                        Visit Website
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              {store.phone && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <a href={`tel:${store.phone}`} className="hover:text-primary">{store.phone}</a>
-                </div>
-              )}
-              
-              {store.email && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <a href={`mailto:${store.email}`} className="hover:text-primary">{store.email}</a>
-                </div>
-              )}
-              
-              {store.website && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <a href={store.website} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
-                    Website
-                  </a>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Social Links */}
             {(store.instagram || store.twitter || store.facebook) && (
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3">Follow Us</h3>
-                <div className="flex gap-3">
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Social</h3>
+                <div className="flex gap-2">
                   {store.instagram && (
                     <a 
                       href={`https://instagram.com/${store.instagram}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="p-2 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 text-white hover:opacity-90 transition-opacity"
+                      className="p-2.5 rounded-lg bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 text-white hover:opacity-90 transition-opacity shadow-sm"
+                      title="Instagram"
                     >
                       <Instagram className="w-4 h-4" />
                     </a>
@@ -451,7 +546,8 @@ export default function StorePage() {
                       href={`https://twitter.com/${store.twitter}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="p-2 rounded-full bg-blue-500 text-white hover:opacity-90 transition-opacity"
+                      className="p-2.5 rounded-lg bg-black text-white hover:opacity-90 transition-opacity shadow-sm"
+                      title="X (Twitter)"
                     >
                       <Twitter className="w-4 h-4" />
                     </a>
@@ -461,7 +557,8 @@ export default function StorePage() {
                       href={`https://facebook.com/${store.facebook}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="p-2 rounded-full bg-blue-600 text-white hover:opacity-90 transition-opacity"
+                      className="p-2.5 rounded-lg bg-blue-600 text-white hover:opacity-90 transition-opacity shadow-sm"
+                      title="Facebook"
                     >
                       <Facebook className="w-4 h-4" />
                     </a>
@@ -470,15 +567,53 @@ export default function StorePage() {
               </div>
             )}
 
-            {/* Store Created Date */}
-            {store.created_at && (
+            {/* Services / What you can do */}
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                <Sparkles className="w-3 h-3 inline mr-1" />
+                What I Can Help With
+              </h3>
+              <div className="space-y-2">
+                {(store.services && store.services.length > 0) ? (
+                  store.services.map((service, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm text-foreground">
+                      <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <span>{service}</span>
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-sm text-foreground">
+                      <MessageCircle className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span>Answer questions about products</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-foreground">
+                      <ShoppingBag className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span>Browse services & offerings</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-foreground">
+                      <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span>Check operating hours</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-foreground">
+                      <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span>Get location & contact info</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Footer - Store Created Date */}
+            <div className="pt-4 border-t border-border">
               <div className="text-xs text-muted-foreground flex items-center gap-2">
                 <Calendar className="w-3 h-3" />
-                <span>Active since {new Date(store.created_at).toLocaleDateString()}</span>
+                <span>Active since {store.created_at ? new Date(store.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+
+          </div>
+        </div>
 
   {/* Chat Section */}
   <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
@@ -505,21 +640,7 @@ export default function StorePage() {
               />
             ))}
 
-            {quickActions.length > 0 && messages.length === 1 && (
-              <div className="flex flex-wrap gap-2">
-                {quickActions.map((action, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleChatAction(action)}
-                    className="text-xs h-8"
-                  >
-                    {action}
-                  </Button>
-                ))}
-              </div>
-            )}
+            {/* initial quick actions moved to the suggestions bar above the input */}
 
             {isTyping && (
               <div className="flex gap-3">
@@ -541,10 +662,24 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+            {/* Dynamic suggestions above input */}
+            {currentSuggestions.length > 0 && !isTyping && (
+              <div className="mb-3">
+                <Suggestions>
+                  {currentSuggestions.map((suggestion, index) => (
+                    <Suggestion
+                      key={index}
+                      suggestion={suggestion}
+                      onClick={handleChatAction}
+                    />
+                  ))}
+                </Suggestions>
+              </div>
+            )}
             <div className="flex gap-3 items-center">
               <Input
                   value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  onChange={(e) => { setInputValue(e.target.value); setCurrentSuggestions([]); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
