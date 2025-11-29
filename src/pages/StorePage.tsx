@@ -332,6 +332,12 @@ export default function StorePage() {
               if (leadFormComp && leadFormComp.props) {
                 return { type: 'lead_form', data: leadFormComp.props };
               }
+
+              // BookingCalendar component - renders date/time picker for service bookings
+              const bookingCalendarComp = fr.components.find((c: any) => c.type === 'BookingCalendar' || c.type === 'booking_calendar');
+              if (bookingCalendarComp && bookingCalendarComp.props) {
+                return { type: 'BookingCalendar', data: bookingCalendarComp.props };
+              }
             }
             // Fallback: if functionResult.data.hours exists
             if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {
