@@ -21,6 +21,10 @@ import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
 // Test scenarios modal - shown when debug panel is open
 import { ScenariosModal } from "@/components/qa/ScenariosModal";
+// Test runner for executing QA scenarios
+import { TestRunner } from "@/qa/lib/test-runner";
+import type { TestScenario, GoalBasedTurnResult, TestStepResult } from "@/qa/lib/types";
+import { isGoalBasedScenario } from "@/qa/lib/types";
 
 interface Message {
   id: string;
@@ -89,6 +93,8 @@ export default function StorePage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // State for test scenarios modal
   const [showScenariosModal, setShowScenariosModal] = useState(false);
+  // Test runner instance for executing QA scenarios
+  const [testRunner] = useState(() => new TestRunner());
 
   // Initial quick actions shown when chat first loads
   const initialQuickActions = [
@@ -439,28 +445,120 @@ export default function StorePage() {
     }));
   };
 
-  // Handles running a selected test scenario - sends the first user message
-  const handleRunScenario = (scenario: { id: string; name: string; steps?: Array<{ userMessage: string }> }) => {
-    if (!scenario.steps || scenario.steps.length === 0) {
-      console.warn('Scenario has no steps:', scenario.id);
-      return;
-    }
+  // Handles running a selected test scenario using the TestRunner
+  const handleRunScenario = async (scenario: TestScenario) => {
+    if (!storeId) return;
 
     // Clear existing messages for fresh test
     setMessages([{
       id: 'scenario-start',
       type: 'bot',
-      content: `🧪 Starting test: **${scenario.name}**`,
+      content: `🧪 Starting test: **${scenario.name}**\n\n${scenario.description || ''}`,
       timestamp: new Date()
     }]);
 
-    // Send the first step's user message to start the scenario
-    const firstStep = scenario.steps[0];
-    if (firstStep.userMessage) {
-      // Small delay to let the UI update
-      setTimeout(() => {
-        sendMessage(firstStep.userMessage);
-      }, 500);
+    // Clear suggestions during test
+    setCurrentSuggestions([]);
+
+    try {
+      // Run the scenario using TestRunner - handles both scripted and goal-based
+      const execution = await testRunner.runScenario(
+        scenario,
+        storeId,
+        selectedModel,  // Chat model
+        selectedModel,  // Evaluator model (same for now)
+        // Callback for scripted scenario step completion
+        (result: TestStepResult) => {
+          // Add bot response to chat
+          setMessages(prev => [...prev, {
+            id: `test-bot-${result.stepIndex}`,
+            type: 'bot',
+            content: result.botResponse,
+            timestamp: new Date(),
+            richContent: result.richContent
+          }]);
+        },
+        // Callback for scripted scenario step start
+        (userMessage: string, stepIndex: number) => {
+          // Add user message to chat
+          setMessages(prev => [...prev, {
+            id: `test-user-${stepIndex}`,
+            type: 'user',
+            content: userMessage,
+            timestamp: new Date()
+          }]);
+        },
+        // Callbacks for goal-based scenarios
+        {
+          onTurnStart: (turn: number, userMessage: string) => {
+            // Add simulated user message to chat
+            setMessages(prev => [...prev, {
+              id: `test-user-turn-${turn}`,
+              type: 'user',
+              content: `🤖 ${userMessage}`,  // Emoji indicates AI-generated
+              timestamp: new Date()
+            }]);
+          },
+          onTurnComplete: (result: GoalBasedTurnResult) => {
+            // Add bot response to chat
+            setMessages(prev => [...prev, {
+              id: `test-bot-turn-${result.turnIndex}`,
+              type: 'bot',
+              content: result.botResponse,
+              timestamp: new Date()
+            }]);
+          }
+        }
+      );
+
+      // Show test summary at the end
+      const isGoalBased = isGoalBasedScenario(scenario);
+      const passed = isGoalBased
+        ? execution.goalAchieved
+        : execution.results?.every(r => r.passed) ?? false;
+
+      const summaryLines = [
+        passed ? '✅ **TEST PASSED**' : '❌ **TEST FAILED**',
+        '',
+        `**Scenario:** ${scenario.name}`,
+        `**Type:** ${isGoalBased ? 'Goal-Based' : 'Scripted'}`,
+        `**Duration:** ${((execution.endTime || Date.now()) - execution.startTime) / 1000}s`,
+      ];
+
+      if (isGoalBased) {
+        summaryLines.push(`**Turns:** ${execution.turns?.length || 0}`);
+        summaryLines.push(`**Goal Achieved:** ${execution.goalAchieved ? 'Yes ✓' : 'No ✗'}`);
+      } else {
+        const passedSteps = execution.results?.filter(r => r.passed).length || 0;
+        const totalSteps = execution.results?.length || 0;
+        summaryLines.push(`**Steps:** ${passedSteps}/${totalSteps} passed`);
+      }
+
+      if (execution.overallEvaluation) {
+        summaryLines.push('');
+        summaryLines.push(`**Quality Score:** ${execution.overallEvaluation.score}/100`);
+        summaryLines.push(`**Evaluation:** ${execution.overallEvaluation.reasoning}`);
+      }
+
+      setMessages(prev => [...prev, {
+        id: 'test-summary',
+        type: 'bot',
+        content: summaryLines.join('\n'),
+        timestamp: new Date()
+      }]);
+
+      // Restore initial suggestions
+      setCurrentSuggestions(initialQuickActions);
+
+    } catch (error) {
+      console.error('Test scenario failed:', error);
+      setMessages(prev => [...prev, {
+        id: 'test-error',
+        type: 'bot',
+        content: `❌ **Test failed with error:**\n${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date()
+      }]);
+      setCurrentSuggestions(initialQuickActions);
     }
   };
 
