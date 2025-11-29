@@ -102,11 +102,12 @@ export function generateEventCreateUrl(
 
   // Dates
   let startDate: Date;
-  if (block.isRecurring && block.days.length > 0) {
-    // For recurring, use next occurrence of first selected day
-    startDate = getNextOccurrence(block.days[0]);
-  } else if (block.specificDate) {
+  if (block.specificDate) {
+    // Use the specified start date (works for both recurring and one-time)
     startDate = block.specificDate;
+  } else if (block.isRecurring && block.days.length > 0) {
+    // Fallback: use next occurrence of first selected day
+    startDate = getNextOccurrence(block.days[0]);
   } else {
     startDate = new Date();
   }
@@ -208,4 +209,40 @@ export function formatTimeForDisplay(time24: string): string {
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
   return `${displayHours}:${minutes} ${period}`;
+}
+
+/**
+ * Check for new events in a calendar since a given time
+ * @param calendarId - Google Calendar ID
+ * @param sinceTime - ISO timestamp to check from
+ * @param storeId - Store ID for the request
+ * @param supabase - Supabase client
+ * @returns Promise with found status and events
+ */
+export async function checkForNewEvents(
+  calendarId: string,
+  sinceTime: string,
+  storeId: string,
+  supabase: any
+): Promise<{ found: boolean; count: number; events: any[] }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('link-calendar', {
+      body: {
+        action: 'check-events',
+        storeId,
+        calendarId,
+        sinceTime
+      }
+    });
+
+    if (error) {
+      console.error('Failed to check events:', error);
+      return { found: false, count: 0, events: [] };
+    }
+
+    return data || { found: false, count: 0, events: [] };
+  } catch (error) {
+    console.error('Error checking events:', error);
+    return { found: false, count: 0, events: [] };
+  }
 }
