@@ -385,7 +385,59 @@ serve(async (req) => {
       }
     }
 
-    throw new Error('Invalid action. Use: list, link, unlink, or create');
+    // ACTION: Check for new events in calendar (for polling)
+    if (action === 'check-events') {
+      const { sinceTime } = body;
+
+      if (!calendarId) {
+        return new Response(
+          JSON.stringify({ error: 'calendarId is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      try {
+        console.log('=== CHECK EVENTS ===');
+        console.log('Calendar ID:', calendarId);
+        console.log('Since time:', sinceTime);
+
+        // List events from the calendar
+        const now = new Date();
+        const future = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year ahead
+
+        const events = await listEvents(
+          calendarId,
+          sinceTime || now.toISOString(),
+          future.toISOString(),
+          true
+        );
+
+        console.log(`Found ${events.length} events`);
+
+        return new Response(
+          JSON.stringify({
+            found: events.length > 0,
+            count: events.length,
+            events: events.map((e: any) => ({
+              id: e.id,
+              summary: e.summary,
+              start: e.start,
+              end: e.end
+            }))
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      } catch (checkError: any) {
+        console.error('Error checking events:', checkError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to check events', details: checkError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    throw new Error('Invalid action. Use: list, link, unlink, create, or check-events');
 
   } catch (error) {
     console.error('Link calendar error:', error);

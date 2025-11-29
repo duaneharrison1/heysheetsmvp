@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -31,7 +31,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical } from 'lucide-react';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink } from '@/lib/calendar-links';
 import {
@@ -48,8 +50,10 @@ import {
   openEventPopup,
   generateTimeOptions,
   formatDaysForDisplay,
-  formatTimeForDisplay
+  formatTimeForDisplay,
+  checkForNewEvents
 } from '@/lib/google-calendar-url';
+import { format } from 'date-fns';
 
 export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [store, setStore] = useState<any>(null);
@@ -96,6 +100,16 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [isOngoing, setIsOngoing] = useState(true);
   const [endRecurrenceDate, setEndRecurrenceDate] = useState<Date | undefined>();
   const [addedBlocks, setAddedBlocks] = useState<Set<string>>(new Set());
+
+  // Polling state
+  const [pollingBlockId, setPollingBlockId] = useState<string | null>(null);
+  const [pollStartTime, setPollStartTime] = useState<string | null>(null);
+  const [pollingStatus, setPollingStatus] = useState<'idle' | 'polling' | 'found' | 'timeout'>('idle');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Weekly start date
+  const [weeklyStartDate, setWeeklyStartDate] = useState<Date>(() => new Date());
 
   // Time options for dropdowns
   const timeOptions = generateTimeOptions();
@@ -395,6 +409,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           startTime: startTime,
           endTime: breakStartTime,
           isRecurring: true,
+          specificDate: weeklyStartDate,  // Use selected start date
           endDate: isOngoing ? undefined : endRecurrenceDate,
         });
 
@@ -406,6 +421,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           startTime: breakEndTime,
           endTime: endTime,
           isRecurring: true,
+          specificDate: weeklyStartDate,  // Use selected start date
           endDate: isOngoing ? undefined : endRecurrenceDate,
         });
       } else {
@@ -417,23 +433,115 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           startTime: startTime,
           endTime: endTime,
           isRecurring: true,
+          specificDate: weeklyStartDate,  // Use selected start date
           endDate: isOngoing ? undefined : endRecurrenceDate,
         });
       }
     } else if (availabilityType === 'specific' && specificDate) {
-      blocks.push({
-        id: 'specific',
-        title: 'Available',
-        days: [],
-        startTime: startTime,
-        endTime: endTime,
-        isRecurring: false,
-        specificDate: specificDate,
-      });
+      // Handle break for specific date too
+      if (hasBreak) {
+        blocks.push({
+          id: 'morning',
+          title: 'Available',
+          days: [],
+          startTime: startTime,
+          endTime: breakStartTime,
+          isRecurring: false,
+          specificDate: specificDate,
+        });
+        blocks.push({
+          id: 'afternoon',
+          title: 'Available',
+          days: [],
+          startTime: breakEndTime,
+          endTime: endTime,
+          isRecurring: false,
+          specificDate: specificDate,
+        });
+      } else {
+        blocks.push({
+          id: 'specific',
+          title: 'Available',
+          days: [],
+          startTime: startTime,
+          endTime: endTime,
+          isRecurring: false,
+          specificDate: specificDate,
+        });
+      }
     }
 
     return blocks;
   };
+
+  // Stop polling
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+  };
+
+  // Start polling for new events
+  const startPolling = async (blockId: string) => {
+    const startTime = new Date().toISOString();
+    setPollStartTime(startTime);
+    setPollingBlockId(blockId);
+    setPollingStatus('polling');
+
+    // Clear any existing polling
+    stopPolling();
+
+    // Poll every 5 seconds
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const result = await checkForNewEvents(
+          createdCalendarId,
+          startTime,
+          storeId,
+          supabase
+        );
+
+        if (result.found) {
+          // Success! Event detected
+          stopPolling();
+          setPollingStatus('found');
+          setAddedBlocks(prev => new Set([...prev, blockId]));
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 5000);
+
+    // Timeout after 2 minutes
+    pollingTimeoutRef.current = setTimeout(() => {
+      stopPolling();
+      setPollingStatus('timeout');
+    }, 120000);
+  };
+
+  // Handle Add button click
+  const handleAddBlockClick = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
+    // Open calendar view FIRST (will be behind)
+    window.open(calendarViewUrl, '_blank');
+
+    // Open event popup SECOND (will be on top)
+    openEventPopup(eventUrl);
+
+    // Start polling for this block
+    startPolling(block.id);
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, []);
 
   // Reset availability state
   const resetAvailabilityState = () => {
@@ -448,6 +556,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setIsOngoing(true);
     setEndRecurrenceDate(undefined);
     setAddedBlocks(new Set());
+    setWeeklyStartDate(new Date());
+    // Cleanup polling
+    stopPolling();
+    setPollingBlockId(null);
+    setPollStartTime(null);
+    setPollingStatus('idle');
   };
 
   // Reset dialog state
@@ -1381,6 +1495,36 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </p>
             </div>
 
+            {/* Starting from date */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Starting from
+              </label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {weeklyStartDate ? format(weeklyStartDate, 'PPP') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={weeklyStartDate}
+                    onSelect={(date) => date && setWeeklyStartDate(date)}
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground mt-1">
+                Your recurring availability will start from this date
+              </p>
+            </div>
+
             <div className="flex justify-between pt-4">
               <Button
                 variant="outline"
@@ -1410,13 +1554,26 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <label className="block text-sm font-medium text-foreground mb-2">
                 Which date?
               </label>
-              <input
-                type="date"
-                value={specificDate?.toISOString().split('T')[0] || ''}
-                onChange={(e) => setSpecificDate(new Date(e.target.value))}
-                min={new Date().toISOString().split('T')[0]}
-                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {specificDate ? format(specificDate, 'PPP') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={specificDate}
+                    onSelect={setSpecificDate}
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Time Selection */}
@@ -1456,6 +1613,52 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </div>
             </div>
 
+            {/* Break Checkbox */}
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasBreak}
+                  onChange={(e) => setHasBreak(e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm">I have a break (e.g., lunch)</span>
+              </label>
+
+              {hasBreak && (
+                <div className="mt-3 ml-6 flex items-center gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Break from</label>
+                    <select
+                      value={breakStartTime}
+                      onChange={(e) => setBreakStartTime(e.target.value)}
+                      className="block w-28 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {timeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">to</label>
+                    <select
+                      value={breakEndTime}
+                      onChange={(e) => setBreakEndTime(e.target.value)}
+                      className="block w-28 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {timeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between pt-4">
               <Button
                 variant="outline"
@@ -1489,9 +1692,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <div className="space-y-3">
               {buildAvailabilityBlocks().map((block) => {
                 const isAdded = addedBlocks.has(block.id);
+                const isPolling = pollingBlockId === block.id && pollingStatus === 'polling';
+                const isTimeout = pollingBlockId === block.id && pollingStatus === 'timeout';
                 const eventUrl = generateEventCreateUrl(block, createdCalendarId);
                 const calendarViewUrl = getCalendarWeekViewUrl(
-                  block.specificDate || new Date()
+                  block.specificDate || weeklyStartDate || new Date()
                 );
 
                 return (
@@ -1519,26 +1724,52 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       <p className="text-sm text-muted-foreground">
                         {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
                       </p>
+                      {block.isRecurring && block.specificDate && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Starting from {format(block.specificDate, 'PPP')}
+                        </p>
+                      )}
                     </div>
 
-                    {isAdded ? (
-                      <span className="text-green-600 font-medium flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" /> Added
-                      </span>
-                    ) : (
-                      <a
-                        href={calendarViewUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => {
-                          openEventPopup(eventUrl);
-                          setAddedBlocks(new Set([...addedBlocks, block.id]));
-                        }}
-                        className="inline-flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                      >
-                        Add →
-                      </a>
-                    )}
+                    <div className="flex flex-col items-end gap-1">
+                      {isAdded ? (
+                        <span className="text-green-600 font-medium flex items-center gap-1">
+                          <CheckCircle className="h-4 w-4" /> Detected!
+                        </span>
+                      ) : isPolling ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-amber-600 text-sm flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Waiting for save...
+                          </span>
+                          <button
+                            onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
+                            className="text-xs text-muted-foreground hover:text-foreground underline"
+                          >
+                            Open again
+                          </button>
+                        </div>
+                      ) : isTimeout ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-amber-600 text-sm flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" /> Not detected
+                          </span>
+                          <button
+                            onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary/90 transition-colors"
+                          >
+                            Try again →
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
+                          className="inline-flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                        >
+                          Add →
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1548,6 +1779,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <Button
                 variant="outline"
                 onClick={() => {
+                  stopPolling();
                   if (availabilityType === 'weekly') {
                     setCreateStep('weekly-setup');
                   } else {
@@ -1558,7 +1790,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 Back
               </Button>
               <Button
-                onClick={() => setCreateStep('congrats')}
+                onClick={() => {
+                  stopPolling();
+                  setCreateStep('congrats');
+                }}
               >
                 Continue
               </Button>
@@ -1581,21 +1816,28 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <p className="text-sm font-medium text-foreground mb-2">
                 Customers can now book your services during:
               </p>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {buildAvailabilityBlocks().map((block) => (
-                  <div key={block.id} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {block.id === 'morning' && '☀️'}
-                    {block.id === 'afternoon' && '🌤️'}
-                    {block.id === 'main' && '📅'}
-                    {block.id === 'specific' && '📌'}
-                    <span>
-                      {block.isRecurring
-                        ? formatDaysForDisplay(block.days)
-                        : block.specificDate?.toLocaleDateString()
-                      }
-                      {' '}
-                      {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                  <div key={block.id} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <span className="mt-0.5">
+                      {block.id === 'morning' && '☀️'}
+                      {block.id === 'afternoon' && '🌤️'}
+                      {block.id === 'main' && '📅'}
+                      {block.id === 'specific' && '📌'}
                     </span>
+                    <div>
+                      <span>
+                        {block.isRecurring
+                          ? formatDaysForDisplay(block.days)
+                          : block.specificDate?.toLocaleDateString()
+                        }
+                        {' '}
+                        {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                      </span>
+                      {block.isRecurring && block.specificDate && (
+                        <p className="text-xs">Starting from {format(block.specificDate, 'PPP')}</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
