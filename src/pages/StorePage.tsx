@@ -10,10 +10,11 @@ import { H2, Lead } from "@/components/ui/heading";
 import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
+import { Task, TaskTrigger, TaskContent, TaskItem } from "@/components/ui/ai-task";
 import { 
   Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, 
   Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink, 
-  MessageCircle, ShoppingBag, Sparkles, CheckCircle2
+  MessageCircle, ShoppingBag, Sparkles, CheckCircle2, Search, Database
 } from "lucide-react";
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
@@ -82,6 +83,7 @@ export default function StorePage() {
   const [hasSheet, setHasSheet] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
+  const [currentTaskStep, setCurrentTaskStep] = useState(0); // Track which task step is active (0, 1, 2)
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initial quick actions shown when chat first loads
@@ -104,6 +106,29 @@ export default function StorePage() {
       checkAuth();
     }
   }, [storeId]);
+
+  // Auto-progress through task steps when typing
+  useEffect(() => {
+    if (!isTyping) {
+      setCurrentTaskStep(0); // Reset when not typing
+      return;
+    }
+
+    // Progress to step 2 after 1.5s
+    const timer1 = setTimeout(() => {
+      setCurrentTaskStep(1);
+    }, 3000);
+
+    // Progress to step 3 after 3s
+    const timer2 = setTimeout(() => {
+      setCurrentTaskStep(2);
+    }, 6000);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [isTyping]);
 
   const checkAuth = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -643,18 +668,31 @@ export default function StorePage() {
             {/* initial quick actions moved to the suggestions bar above the input */}
 
             {isTyping && (
-              <div className="flex gap-3">
-                <Avatar className="w-9 h-9" variant="bot">
+              <div className="flex gap-3 items-start">
+                <Avatar className="w-9 h-9 flex-shrink-0" variant="bot">
                   <AvatarFallback className="avatar-fallback">
                     <Bot className="w-4 h-4" />
                   </AvatarFallback>
                 </Avatar>
-                <div className="bg-card rounded-2xl px-4 py-3 border border-border">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
+                <div className="min-w-[280px] pt-1">
+                  <Task defaultOpen={false}>
+                    <TaskTrigger 
+                      title="Processing your request..." 
+                      icon={<Sparkles className="h-4 w-4" />}
+                      count={currentTaskStep + 1}
+                    />
+                    <TaskContent>
+                      {currentTaskStep >= 0 && (
+                        <TaskItem isLoading={currentTaskStep === 0}>Analyzing your message</TaskItem>
+                      )}
+                      {currentTaskStep >= 1 && (
+                        <TaskItem isLoading={currentTaskStep === 1}>Searching store data</TaskItem>
+                      )}
+                      {currentTaskStep >= 2 && (
+                        <TaskItem isLoading={currentTaskStep === 2}>Generating response</TaskItem>
+                      )}
+                    </TaskContent>
+                  </Task>
                 </div>
               </div>
             )}
@@ -678,17 +716,20 @@ export default function StorePage() {
             )}
             <div className="flex gap-3 items-center">
               <Input
-                  value={inputValue}
-                  onChange={(e) => { setInputValue(e.target.value); setCurrentSuggestions([]); }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage(inputValue);
-                    }
-                  }}
-                  placeholder="Type your message..."
-                  className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                />
+                   value={inputValue}
+                   onChange={(e) => { setInputValue(e.target.value); }}
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter' && !e.shiftKey) {
+                       e.preventDefault();
+                       sendMessage(inputValue);
+                     }
+                   }}
+                   onFocus={() => {
+                     // Keep suggestions visible when input is focused
+                   }}
+                   placeholder="Type your message..."
+                   className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 />
               <Button
                 onClick={() => sendMessage(inputValue)}
                 size="sm"
