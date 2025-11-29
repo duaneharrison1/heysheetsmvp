@@ -19,6 +19,8 @@ import {
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
+// Test scenarios modal - shown when debug panel is open
+import { ScenariosModal } from "@/components/qa/ScenariosModal";
 
 interface Message {
   id: string;
@@ -85,6 +87,8 @@ export default function StorePage() {
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
   const [currentTaskStep, setCurrentTaskStep] = useState(0); // Track which task step is active (0, 1, 2)
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // State for test scenarios modal
+  const [showScenariosModal, setShowScenariosModal] = useState(false);
 
   // Initial quick actions shown when chat first loads
   const initialQuickActions = [
@@ -99,6 +103,8 @@ export default function StorePage() {
   const updateRequest = useDebugStore((state) => state.updateRequest);
   const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
+  // Check if debug panel is open to show test scenarios option
+  const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
 
   useEffect(() => {
     if (storeId) {
@@ -427,6 +433,31 @@ export default function StorePage() {
     }));
   };
 
+  // Handles running a selected test scenario - sends the first user message
+  const handleRunScenario = (scenario: { id: string; name: string; steps?: Array<{ userMessage: string }> }) => {
+    if (!scenario.steps || scenario.steps.length === 0) {
+      console.warn('Scenario has no steps:', scenario.id);
+      return;
+    }
+
+    // Clear existing messages for fresh test
+    setMessages([{
+      id: 'scenario-start',
+      type: 'bot',
+      content: `🧪 Starting test: **${scenario.name}**`,
+      timestamp: new Date()
+    }]);
+
+    // Send the first step's user message to start the scenario
+    const firstStep = scenario.steps[0];
+    if (firstStep.userMessage) {
+      // Small delay to let the UI update
+      setTimeout(() => {
+        sendMessage(firstStep.userMessage);
+      }, 500);
+    }
+  };
+
   // (quick actions now provided via `initialQuickActions` + dynamic suggestions)
 
   if (loading) {
@@ -734,10 +765,18 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            {/* Dynamic suggestions above input */}
-            {currentSuggestions.length > 0 && !isTyping && (
+            {/* Suggestions area - shows follow-up prompts and test scenarios option */}
+            {(currentSuggestions.length > 0 || isPanelOpen) && !isTyping && (
               <div className="mb-3">
                 <Suggestions>
+                  {/* Show test scenarios pill when debug panel is open */}
+                  {isPanelOpen && (
+                    <Suggestion
+                      suggestion="🧪 Scenarios"
+                      onClick={() => setShowScenariosModal(true)}
+                    />
+                  )}
+                  {/* Regular AI-suggested follow-up prompts */}
                   {currentSuggestions.map((suggestion, index) => (
                     <Suggestion
                       key={index}
@@ -776,6 +815,13 @@ export default function StorePage() {
           </div>
         </div>
       </div>
+
+      {/* Test scenarios modal - for QA testing */}
+      <ScenariosModal
+        open={showScenariosModal}
+        onOpenChange={setShowScenariosModal}
+        onSelectScenario={handleRunScenario}
+      />
     </div>
   );
 }

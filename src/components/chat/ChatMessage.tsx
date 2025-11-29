@@ -16,6 +16,12 @@ import ServicesGrid from './ServicesGrid';
 import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 import LeadForm from './LeadForm';
+// Calendar booking UI component - renders date/time picker for service bookings
+import { BookingCalendar } from './BookingCalendar';
+
+// Markdown parser for bot responses - renders bold, line breaks, horizontal rules
+// Currently disabled - uncomment to enable formatted bot messages
+// import { parseMarkdown } from '@/lib/markdown';
 
 interface TaskStep {
   label: string;
@@ -268,13 +274,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, st
       case 'lead_form':
         return (
           <div className="mt-3">
-            <LeadForm 
+            <LeadForm
               {...data}
               maxWidth="500px"
               onSubmit={(formData: any) => {
                 console.log('[ChatMessage] LeadForm submitted:', formData);
                 onActionClick?.('submit_lead', formData);
               }}
+            />
+          </div>
+        );
+
+      // Renders calendar UI for booking appointments - shows available slots and handles date/time selection
+      case 'booking_calendar':
+      case 'BookingCalendar':  // Backend sends PascalCase
+        return (
+          <div className="mt-3">
+            <BookingCalendar
+              service={data.service}
+              slots={data.slots}
+              unavailableDates={data.unavailableDates}
+              prefill={data.prefill}
+              onActionClick={onActionClick}
             />
           </div>
         );
@@ -298,6 +319,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, st
 
       <div className={`max-w-[85%] min-w-0 overflow-hidden box-border ${message.type === 'user' ? 'max-w-[70%]' : ''}`}>
         <ChatBubble type={message.type} timestamp={message.timestamp}>
+          {/* To enable markdown formatting, uncomment the import above and change to: {parseMarkdown(message.content)} */}
           <div className="text-sm leading-relaxed">{message.content}</div>
         </ChatBubble>
         
