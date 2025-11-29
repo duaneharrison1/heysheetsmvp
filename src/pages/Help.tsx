@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { H1, Lead } from "@/components/ui/heading";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { MessageSquare } from "lucide-react";
 
 const Help = () => {
@@ -15,46 +15,82 @@ const Help = () => {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email) setContactEmail(user.email);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setContactEmail(session?.user?.email ?? "");
+    const loadUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setContactEmail(user.email ?? "");
+        setUserId(user.id);
+        // Fetch user's store
+        const { data: store } = await supabase
+          .from('stores')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        if (store) setStoreId(store.id);
+      }
+    };
+    loadUserData();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const user = session?.user;
+      setContactEmail(user?.email ?? "");
+      setUserId(user?.id ?? null);
+      if (user) {
+        const { data: store } = await supabase
+          .from('stores')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        setStoreId(store?.id ?? null);
+      } else {
+        setStoreId(null);
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
 
   const submit = async () => {
     if (!subject.trim() || !message.trim()) {
-      toast({ title: "Missing fields", description: "Please add a subject and message.", variant: "destructive" });
+      toast.error("Missing fields", { description: "Please add a subject and message." });
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const { data: { session } } = await supabase.auth.getSession();
+      // Insert ticket directly into Supabase
+      const { error } = await supabase
+        .from('support_tickets')
+        .insert({
+          user_id: userId,
+          store_id: storeId,
+          category,
+          subject: subject.trim(),
+          message: message.trim(),
+          contact_email: contactEmail.trim() || null,
+        });
 
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({ category, subject, message, contactEmail }),
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
+
+      toast.success("✓ Message sent!", {
+        description: "Thanks for reaching out. We'll review your message and reply to your email within 1-3 business days.",
       });
-
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error || "Submission failed");
-
-      toast({ title: "Thanks — submitted", description: "We'll get back to you by email if you left a contact address." });
       setSubject("");
       setMessage("");
+      setCategory("feedback");
     } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Could not submit your message", variant: "destructive" });
+      console.error('Failed to submit support ticket:', err);
+      toast.error("Error", { description: err?.message ?? "Could not submit your message" });
     } finally {
       setSubmitting(false);
     }

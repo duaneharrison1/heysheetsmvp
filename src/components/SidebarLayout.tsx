@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Store, Users, UserCog, Receipt, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare } from "lucide-react";
+import { Store, Users, UserCog, Receipt, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket } from "lucide-react";
 // No sidebar tooltips needed; keep imports minimal
 
 // Create a context to share user data with child components
@@ -36,6 +36,7 @@ const adminNavItems = [
   { id: "admin-users", label: "All Users", href: "/admin/users", icon: Users },
   { id: "admin-stores", label: "All Stores", href: "/admin/stores", icon: LayoutGrid },
   { id: "admin-feedback", label: "Chat Feedback", href: "/admin/feedback", icon: MessageSquare },
+  { id: "admin-support", label: "Support Tickets", href: "/admin/support", icon: Ticket },
 ];
 
 interface SidebarLayoutProps {

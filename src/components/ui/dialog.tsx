@@ -107,7 +107,16 @@ const DialogClose = ({ children, className }: { children?: React.ReactNode; clas
 }
 
 const DialogOverlay = ({ className, ...props }: any) => {
-  return <div className={cn("fixed inset-0 z-50 bg-black/80", className)} {...props} />
+  const ctx = React.useContext(DialogContext)
+  
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && ctx) {
+      ctx.setOpen(false)
+      ctx.onOpenChange?.(false)
+    }
+  }
+  
+  return <div className={cn("fixed inset-0 z-50 bg-black/80", className)} onClick={handleOverlayClick} {...props} />
 }
 
 const DialogPortal = ({ children }: { children?: React.ReactNode }) => {

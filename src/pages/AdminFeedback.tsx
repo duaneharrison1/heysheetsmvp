@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, MessageSquare, ThumbsUp, ThumbsDown, Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Loader2, MessageSquare, ThumbsUp, ThumbsDown, Search, ChevronLeft, ChevronRight, Eye, AlertTriangle, ExternalLink, Trash } from 'lucide-react';
 import { Select, SelectItem } from '@/components/ui/select';
 import {
   Dialog,
@@ -77,20 +77,76 @@ const AdminFeedback = () => {
   const [updatingPriority, setUpdatingPriority] = useState<string | null>(null); // Track which item is being updated
   const [priorityError, setPriorityError] = useState<string | null>(null);
 
+  // Load stores once on mount
+  useEffect(() => {
+    if (!roleLoading && isSuperAdmin) {
+      loadStores();
+    }
+  }, [roleLoading, isSuperAdmin]);
+
+  // Load feedback when filters change
   useEffect(() => {
     if (roleLoading) return;
+    
     if (!isSuperAdmin) {
       setError('Unauthorized: Super admin access required');
       setLoading(false);
       return;
     }
-    loadStores();
-  }, [isSuperAdmin, roleLoading]);
+    
+    let cancelled = false;
+    
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        let query = supabase
+          .from('chat_feedback')
+          .select('*', { count: 'exact' });
 
-  useEffect(() => {
-    if (isSuperAdmin && !roleLoading) {
-      loadFeedback();
-    }
+        if (feedbackFilter !== 'all') {
+          query = query.eq('feedback_type', feedbackFilter);
+        }
+        if (storeFilter !== 'all') {
+          query = query.eq('store_id', storeFilter);
+        }
+        if (priorityFilter !== 'all') {
+          if (priorityFilter === 'none') {
+            query = query.is('priority', null);
+          } else {
+            query = query.eq('priority', priorityFilter);
+          }
+        }
+
+        query = query
+          .order('created_at', { ascending: false })
+          .range((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE - 1);
+
+        const { data, error, count } = await query;
+
+        if (error) throw error;
+        
+        if (!cancelled) {
+          setFeedback(data || []);
+          setTotalCount(count || 0);
+        }
+      } catch (err: any) {
+        console.error('Failed to load feedback:', err);
+        if (!cancelled) {
+          setError(err?.message || 'Failed to load feedback');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [isSuperAdmin, roleLoading, currentPage, feedbackFilter, storeFilter, priorityFilter]);
 
   const loadStores = async () => {
@@ -104,52 +160,6 @@ const AdminFeedback = () => {
       setStores(data || []);
     } catch (err: any) {
       console.error('Failed to load stores:', err);
-    }
-  };
-
-  const loadFeedback = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Build query
-      let query = supabase
-        .from('chat_feedback')
-        .select('*', { count: 'exact' });
-
-      // Apply feedback type filter
-      if (feedbackFilter !== 'all') {
-        query = query.eq('feedback_type', feedbackFilter);
-      }
-
-      // Apply store filter
-      if (storeFilter !== 'all') {
-        query = query.eq('store_id', storeFilter);
-      }
-
-      // Apply priority filter
-      if (priorityFilter !== 'all') {
-        if (priorityFilter === 'none') {
-          query = query.is('priority', null);
-        } else {
-          query = query.eq('priority', priorityFilter);
-        }
-      }
-
-      // Order and paginate
-      query = query
-        .order('created_at', { ascending: false })
-        .range((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE - 1);
-
-      const { data, error, count } = await query;
-
-      if (error) throw error;
-      setFeedback(data || []);
-      setTotalCount(count || 0);
-    } catch (err: any) {
-      console.error('Failed to load feedback:', err);
-      setError(err?.message || 'Failed to load feedback');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -183,6 +193,29 @@ const AdminFeedback = () => {
     } catch (err: any) {
       console.error('Failed to update priority:', err);
       setPriorityError(err?.message || 'Failed to update priority');
+    } finally {
+      setUpdatingPriority(null);
+    }
+  };
+
+  const deleteFeedback = async (feedbackId: string) => {
+    const ok = window.confirm('Delete this feedback entry? This action cannot be undone.');
+    if (!ok) return;
+    // reuse priorityError for UI errors for simplicity
+    setPriorityError(null);
+    setUpdatingPriority(feedbackId);
+    try {
+      const { error } = await supabase.from('chat_feedback').delete().eq('id', feedbackId);
+      if (error) throw error;
+
+      setFeedback(prev => prev.filter(f => f.id !== feedbackId));
+      if (selectedFeedback?.id === feedbackId) {
+        setSelectedFeedback(null);
+        setModalOpen(false);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete feedback:', err);
+      setPriorityError(err?.message || 'Failed to delete feedback');
     } finally {
       setUpdatingPriority(null);
     }
@@ -357,7 +390,7 @@ const AdminFeedback = () => {
                         <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Snippet</th>
                         <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Priority</th>
                         <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Date</th>
-                        <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground">Actions</th>
+                        <th className="text-left py-2 px-4 font-semibold text-xs text-muted-foreground whitespace-nowrap w-[120px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -389,14 +422,25 @@ const AdminFeedback = () => {
                             {new Date(item.created_at).toLocaleDateString()}
                           </td>
                           <td className="py-3 px-4">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => { e.stopPropagation(); openDetailModal(item); }}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); openDetailModal(item); }}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-600"
+                                onClick={(e) => { e.stopPropagation(); deleteFeedback(item.id); }}
+                                aria-label="Delete feedback"
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -551,12 +595,34 @@ const AdminFeedback = () => {
                         Updating...
                       </div>
                     )}
-                    {priorityError && (
-                      <div className="flex items-center gap-2 mt-2 text-xs text-red-600">
-                        <AlertTriangle className="h-3 w-3" />
-                        {priorityError}
-                      </div>
-                    )}
+                  </div>
+
+                  {priorityError && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-md text-xs text-red-600">
+                      <AlertTriangle className="h-3 w-3" />
+                      {priorityError}
+                    </div>
+                  )}
+
+                  <div className="p-4 bg-muted rounded-md">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Actions</p>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="destructive"
+                        onClick={() => deleteFeedback(selectedFeedback.id)}
+                        disabled={updatingPriority === selectedFeedback.id}
+                        className="w-full"
+                      >
+                        {updatingPriority === selectedFeedback.id ? (
+                          <span>Deleting...</span>
+                        ) : (
+                          <>
+                            <Trash className="h-4 w-4 mr-2" />
+                            <span>Delete Feedback</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </aside>
               </div>
