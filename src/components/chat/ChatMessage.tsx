@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Bot, User, Cpu } from 'lucide-react';
+import { Bot, User, Cpu, Copy, Check, ThumbsUp, ThumbsDown, RefreshCcw, Sparkles } from 'lucide-react';
 import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "lucide-react";
+import { Actions, Action } from "@/components/ui/ai-actions";
+import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from "@/components/ui/ai-task";
 import ChatBubble from './ChatBubble';
 import ProductCard from './ProductCard';
 import ServiceCard from './ServiceCard';
@@ -16,6 +18,12 @@ import LeadForm from './LeadForm';
 import { BookingCalendar } from './BookingCalendar';
 import { parseMarkdown } from '@/lib/markdown';
 import type { GoalBasedTurnResult } from '@/qa/lib/types';
+
+interface TaskStep {
+  label: string;
+  isLoading?: boolean;
+  file?: string;
+}
 
 interface Message {
   id: string;
@@ -30,17 +38,51 @@ interface Message {
   // Goal-based test fields
   isSimulated?: boolean;              // For goal-based user messages
   goalBasedTurn?: GoalBasedTurnResult; // For goal-based bot messages
+  tasks?: {
+    title: string;
+    icon?: React.ReactNode;
+    steps: TaskStep[];
+  };
 }
 
 interface ChatMessageProps {
   message: Message;
   storeLogo: string;
   onActionClick?: (action: string, data?: any) => void;
+  onRegenerate?: (messageId: string) => void;
+  onFeedback?: (messageId: string, feedback: 'like' | 'dislike') => void;
 }
 
 // Rich content components are extracted to separate files for reuse and clarity
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, onActionClick }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, onActionClick, onRegenerate, onFeedback }) => {
+  const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<'like' | 'dislike' | null>(null);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy message:', err);
+    }
+  };
+
+  const handleFeedback = (type: 'like' | 'dislike') => {
+    const newFeedback = feedback === type ? null : type;
+    setFeedback(newFeedback);
+    if (newFeedback && onFeedback) {
+      onFeedback(message.id, newFeedback);
+    }
+  };
+
+  const handleRegenerate = () => {
+    if (onRegenerate) {
+      onRegenerate(message.id);
+    }
+  };
+
   const renderRichContent = () => {
     if (!message.richContent) return null;
 
