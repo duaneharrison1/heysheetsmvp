@@ -89,11 +89,42 @@ async function getStoreSheetId(storeId: string) {
   }
   return store.sheet_id;
 }
+
+// Check if token is the service role key (for internal service-to-service calls)
+function isServiceRoleKey(token: string): boolean {
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  return token === serviceRoleKey;
+}
+
+// Get sheet ID for service role access (bypasses user ownership check)
+async function getSheetIdForServiceRole(storeId: string): Promise<string> {
+  const supabase = getSupabase();
+  const { data: store, error } = await supabase
+    .from('stores')
+    .select('sheet_id')
+    .eq('id', storeId)
+    .single();
+
+  if (error || !store) throw new Error('Store not found');
+  if (!store?.sheet_id) throw new Error('No sheet connected');
+  return store.sheet_id;
+}
+
 // Legacy function for write operations that still require auth
 async function verifyAccess(req: Request, storeId: string) {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) throw new Error('Missing authorization');
   const token = authHeader.replace('Bearer ', '');
+
+  // Allow service role access (for internal edge function calls)
+  if (isServiceRoleKey(token)) {
+    const sheetId = await getSheetIdForServiceRole(storeId);
+    return {
+      userId: 'service-role',
+      sheetId
+    };
+  }
+
   const decoded = decodeJWT(token);
   const userId = decoded.sub;
   const supabase = getSupabase();

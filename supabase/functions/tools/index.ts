@@ -10,7 +10,7 @@ import {
   CreateBookingSchema
 } from './validators.ts';
 import { semanticMatch } from './semantic-matcher.ts';
-import { checkAvailability, createBooking } from './calendar-booking.ts';
+import { checkAvailability, createBooking, getBookingSlots } from './calendar-booking.ts';
 
 // ============================================================================
 // FUNCTION EXECUTOR
@@ -39,6 +39,8 @@ export async function executeFunction(
         return await checkAvailability(params, context);
       case 'create_booking':
         return await createBooking(params, context);
+      case 'get_booking_slots':
+        return await getBookingSlots(params, context);
       default:
         return {
           success: false,
@@ -370,36 +372,135 @@ async function getProducts(
 // FUNCTION: submit_lead
 // ============================================================================
 
+/**
+ * Parse key="value" patterns from a message string
+ * Returns an object with extracted key-value pairs
+ */
+function parseFormDataFromMessage(message: string): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  // Match patterns like: key="value with spaces" or key='value with spaces'
+  const quotedRegex = /(\w+)="([^"]*)"/g;
+  let match;
+  while ((match = quotedRegex.exec(message)) !== null) {
+    result[match[1]] = match[2];
+  }
+
+  // Also try single quotes
+  const singleQuotedRegex = /(\w+)='([^']*)'/g;
+  while ((match = singleQuotedRegex.exec(message)) !== null) {
+    if (!result[match[1]]) { // Don't override double-quoted values
+      result[match[1]] = match[2];
+    }
+  }
+
+  return result;
+}
+
 async function submitLead(
   params: any,
   context: FunctionContext
 ): Promise<FunctionResult> {
-  const { storeId, authToken, store } = context;
+  const { storeId, authToken, store, lastUserMessage } = context;
 
-  // Check if required fields are missing
-  const requiredFields = ['name', 'email'];
-  const missingFields = requiredFields.filter(field => !params[field] || params[field].trim() === '');
+  // Try to extract form data from the message as a fallback
+  // This handles cases where the classifier doesn't extract all fields
+  let mergedParams = { ...params };
+  if (lastUserMessage && lastUserMessage.toLowerCase().includes('submit_lead')) {
+    const parsedFromMessage = parseFormDataFromMessage(lastUserMessage);
+    console.log('[submitLead] Parsed from message:', parsedFromMessage);
+    // Merge parsed data, preferring classifier-extracted params
+    mergedParams = { ...parsedFromMessage, ...params };
+  }
+  params = mergedParams;
 
-  // If required info is missing, return LeadForm component
+  // Find leads tab and get schema
+  const detectedSchema = store?.detected_schema || {};
+  const leadsTab = findActualTabName('leads', detectedSchema);
+
+  if (!leadsTab) {
+    return {
+      success: false,
+      error: 'Lead capture not available. Please ensure your sheet has a "Leads" tab.'
+    };
+  }
+
+  // Get leads tab schema - columns from row A of the sheet
+  const leadsSchema = detectedSchema[leadsTab];
+  const columns: string[] = leadsSchema?.columns || [];
+
+  console.log('[submitLead] Leads tab schema:', { leadsTab, columns });
+
+  // Determine which fields are required and which are optional
+  // By default, first two non-Date/Status columns are required (usually Name, Email)
+  const excludedColumns = ['date', 'status', 'timestamp', 'created', 'id'];
+  const formColumns = columns.filter(col =>
+    !excludedColumns.includes(col.toLowerCase())
+  );
+
+  // Generate field definitions from sheet columns
+  const fieldDefinitions = formColumns.map((col, index) => {
+    const colLower = col.toLowerCase();
+    let type: 'text' | 'email' | 'tel' | 'textarea' = 'text';
+
+    // Detect field type based on column name
+    if (colLower.includes('email')) {
+      type = 'email';
+    } else if (colLower.includes('phone') || colLower.includes('mobile') || colLower.includes('tel')) {
+      type = 'tel';
+    } else if (colLower.includes('message') || colLower.includes('note') || colLower.includes('comment') || colLower.includes('description')) {
+      type = 'textarea';
+    }
+
+    // First two fields are typically required (name, email)
+    const isRequired = index < 2;
+
+    return {
+      name: col,
+      label: col,
+      type,
+      required: isRequired,
+      placeholder: getPlaceholder(col)
+    };
+  });
+
+  console.log('[submitLead] Generated field definitions:', fieldDefinitions);
+
+  // Check if required fields are provided
+  const requiredFields = fieldDefinitions.filter(f => f.required).map(f => f.name);
+  const missingFields = requiredFields.filter(field => {
+    const value = params[field] || params[field.toLowerCase()];
+    return !value || String(value).trim() === '';
+  });
+
+  console.log('[submitLead] Checking params:', { params, requiredFields, missingFields });
+
+  // If required info is missing, return LeadForm component with dynamic fields
   if (missingFields.length > 0) {
+    // Build defaultValues from any params that were provided
+    const defaultValues: Record<string, string> = {};
+    for (const field of fieldDefinitions) {
+      const value = params[field.name] || params[field.name.toLowerCase()] || '';
+      if (value) {
+        defaultValues[field.name] = String(value);
+      }
+    }
+
     const components = [{
       id: `lead-form-${storeId}-${Date.now()}`,
       type: 'LeadForm',
       props: {
-        // Pre-fill any data that was provided
-        defaultValues: {
-          name: params.name || '',
-          email: params.email || '',
-          phone: params.phone || '',
-          message: params.message || ''
-        }
+        fields: fieldDefinitions,
+        defaultValues
       }
     }];
 
     return {
-      success: false,
+      success: true,  // NOT an error - we're just collecting input
+      awaiting_input: true,  // Flag to indicate we need user input
       data: {
-        missing_fields: missingFields
+        missing_fields: missingFields,
+        fields: fieldDefinitions
       },
       message: `Please provide your contact information so we can assist you better.`,
       components,
@@ -407,45 +508,48 @@ async function submitLead(
     };
   }
 
-  // Validate params
-  const validation = validateParams(SubmitLeadSchema, params);
-  if (!validation.valid) {
-    return {
-      success: false,
-      error: `Invalid parameters: ${validation.errors.join(', ')}`
-    };
+  // All required fields are present - write to sheet
+  // Build data object matching sheet columns exactly
+  const leadData: Record<string, any> = {};
+
+  // Add timestamp if there's a Date column
+  const dateColumn = columns.find(col => col.toLowerCase() === 'date' || col.toLowerCase() === 'timestamp');
+  if (dateColumn) {
+    leadData[dateColumn] = new Date().toISOString();
   }
 
-  // Find leads tab
-  const detectedSchema = store?.detected_schema || {};
-  const leadsTab = findActualTabName('leads', detectedSchema);
-
-  if (!leadsTab) {
-    return {
-      success: false,
-      error: 'Lead capture not available. Please ensure your sheet has a leads tab.'
-    };
+  // Add status if there's a Status column
+  const statusColumn = columns.find(col => col.toLowerCase() === 'status');
+  if (statusColumn) {
+    leadData[statusColumn] = 'new';
   }
 
-  // Get leads tab schema to know what columns exist
-  const leadsSchema = detectedSchema[leadsTab];
-  const columns = leadsSchema?.columns || ['Date', 'Name', 'Email', 'Phone', 'Status'];
-
-  // Build data object matching sheet columns
-  const leadData: Record<string, any> = {
-    Date: new Date().toISOString(),
-    Name: params.name,
-    Email: params.email,
-    Phone: params.phone || '',
-    Status: 'new'
-  };
-
-  // Add any additional fields from params that match column names
+  // Map all form data to sheet columns (case-insensitive matching)
   for (const col of columns) {
-    if (col !== 'Date' && col !== 'Status' && params[col] !== undefined) {
-      leadData[col] = params[col];
+    if (leadData[col]) continue; // Already set (date/status)
+
+    // Try exact match first, then case-insensitive
+    let value = params[col] || params[col.toLowerCase()];
+
+    // Also check for common field name variations
+    const colLower = col.toLowerCase();
+    if (!value && colLower.includes('name')) {
+      value = params.name || params.Name || params.fullname || params.full_name;
     }
+    if (!value && colLower.includes('email')) {
+      value = params.email || params.Email || params.e_mail;
+    }
+    if (!value && (colLower.includes('phone') || colLower.includes('mobile'))) {
+      value = params.phone || params.Phone || params.mobile || params.Mobile || params.tel;
+    }
+    if (!value && (colLower.includes('message') || colLower.includes('note'))) {
+      value = params.message || params.Message || params.note || params.Note || params.comment;
+    }
+
+    leadData[col] = value || '';
   }
+
+  console.log('[submitLead] Writing to sheet:', { leadsTab, leadData });
 
   // Append to sheet
   try {
@@ -459,6 +563,7 @@ async function submitLead(
       }
     };
   } catch (error) {
+    console.error('[submitLead] Error writing to sheet:', error);
     return {
       success: false,
       error: 'Failed to save your information. Please try again or contact us directly.'
@@ -548,6 +653,19 @@ async function getMiscData(
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Get placeholder text for a field based on its name
+ */
+function getPlaceholder(fieldName: string): string {
+  const name = fieldName.toLowerCase();
+  if (name.includes('name')) return 'Your full name';
+  if (name.includes('email')) return 'you@example.com';
+  if (name.includes('phone')) return '+1 555 555 5555';
+  if (name.includes('message') || name.includes('note')) return 'How can we help you?';
+  if (name.includes('interest')) return 'What are you interested in?';
+  return `Enter ${fieldName.toLowerCase()}`;
+}
 
 /**
  * Find actual tab name from detected schema using fuzzy matching

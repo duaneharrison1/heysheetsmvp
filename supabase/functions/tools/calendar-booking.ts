@@ -7,6 +7,25 @@ import { createEvent, listEvents, countBookings } from '../_shared/google-calend
 import { FunctionContext } from '../_shared/types.ts';
 
 /**
+ * Extract date (YYYY-MM-DD) from ISO datetime string
+ * Preserves the original timezone from the calendar
+ * Example: "2025-11-28T09:00:00+08:00" → "2025-11-28"
+ */
+function extractDateFromISO(isoString: string): string {
+  return isoString.split('T')[0];
+}
+
+/**
+ * Extract time (HH:MM) from ISO datetime string
+ * Preserves the original timezone from the calendar
+ * Example: "2025-11-28T09:00:00+08:00" → "09:00"
+ */
+function extractTimeFromISO(isoString: string): string {
+  const timePart = isoString.split('T')[1];  // "09:00:00+08:00" or "09:00:00Z"
+  return timePart.slice(0, 5);  // "09:00"
+}
+
+/**
  * Load sheet tab data (reuse from existing tools)
  */
 async function loadSheetTab(
@@ -51,6 +70,49 @@ function findActualTabName(target: string, schema: any): string | null {
     name.toLowerCase().includes(targetLower) ||
     targetLower.includes(name.toLowerCase())
   ) || null;
+}
+
+/**
+ * Generate time slots within an availability window
+ * @param startTime - Start time in HH:MM format (e.g., "09:00")
+ * @param endTime - End time in HH:MM format (e.g., "18:45")
+ * @param durationMinutes - Slot duration in minutes (e.g., 120)
+ * @returns Array of time strings (e.g., ["09:00", "11:00", "13:00", "15:00"])
+ */
+function generateTimeSlots(
+  startTime: string,
+  endTime: string,
+  durationMinutes: number
+): string[] {
+  const slots: string[] = [];
+
+  // Parse times to minutes since midnight
+  const [startH, startM] = startTime.split(':').map(Number);
+  const [endH, endM] = endTime.split(':').map(Number);
+
+  let currentMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  // Generate slots until we can't fit another full duration
+  while (currentMinutes + durationMinutes <= endMinutes) {
+    const hours = Math.floor(currentMinutes / 60);
+    const mins = currentMinutes % 60;
+    slots.push(`${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`);
+    currentMinutes += durationMinutes;
+  }
+
+  return slots;
+}
+
+/**
+ * Calculate end time given start time and duration
+ */
+function calculateEndTime(startTime: string, durationMinutes: number): string {
+  const [h, m] = startTime.split(':').map(Number);
+  const endMinutes = h * 60 + m + durationMinutes;
+  const endH = Math.floor(endMinutes / 60);
+  const endM = endMinutes % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 }
 
 /**
@@ -150,9 +212,22 @@ export async function checkAvailability(
     console.log('[check_availability] Found service:', serviceId);
 
     // Find which calendar this service is linked to
-    const calendarId = Object.keys(mappings).find(
-      calId => mappings[calId] === serviceId
-    );
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      // New format: {name: "...", serviceIds: [...]}
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      // Legacy array format: ["S001", "S002"]
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      // Legacy string format: "S001"
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
 
     if (!calendarId) {
       console.log('[check_availability] Service not linked to any calendar');
@@ -255,6 +330,390 @@ export async function checkAvailability(
 }
 
 /**
+ * Get available booking slots for a service
+ * Shows calendar availability from Google Calendar
+ */
+export async function getBookingSlots(
+  params: {
+    service_name: string
+    start_date?: string  // YYYY-MM-DD, default: today
+    end_date?: string    // YYYY-MM-DD, default: today + 14 days
+    // Prefill data extracted from user message
+    prefill_date?: string
+    prefill_time?: string
+    prefill_name?: string
+    prefill_email?: string
+    prefill_phone?: string
+  },
+  context: FunctionContext
+): Promise<any> {
+  try {
+    const { storeId, authToken } = context;
+    const {
+      service_name,
+      start_date,
+      end_date,
+      prefill_date,
+      prefill_time,
+      prefill_name,
+      prefill_email,
+      prefill_phone
+    } = params;
+
+    console.log('[get_booking_slots] Called with:', { service_name, start_date, end_date, prefill_date, prefill_time });
+
+    if (!service_name) {
+      return {
+        success: false,
+        needs_clarification: true,
+        message: 'Which service would you like to book?',
+      };
+    }
+
+    // Get SUPABASE_URL from environment
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    if (!supabaseUrl) {
+      console.error('❌ SUPABASE_URL not set');
+      throw new Error('SUPABASE_URL environment variable not set');
+    }
+
+    // Get store with calendar config
+    const supabase = createClient(supabaseUrl, authToken);
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('name, calendar_mappings, invite_calendar_id, sheet_id, detected_schema')
+      .eq('id', storeId)
+      .single();
+
+    if (storeError || !store) {
+      console.error('[get_booking_slots] Store not found:', storeError);
+      return {
+        success: false,
+        error: 'Store not found',
+      };
+    }
+
+    if (!store.invite_calendar_id) {
+      console.log('[get_booking_slots] Calendar booking not set up');
+      return {
+        success: false,
+        error: 'Calendar booking not set up for this store',
+        message: 'Calendar booking is not enabled. Please contact the store owner.',
+      };
+    }
+
+    // Parse calendar mappings
+    const mappings = store.calendar_mappings
+      ? (typeof store.calendar_mappings === 'string'
+          ? JSON.parse(store.calendar_mappings)
+          : store.calendar_mappings)
+      : {};
+
+    console.log('[get_booking_slots] Calendar mappings:', mappings);
+
+    // Get services from sheet
+    const schema = JSON.parse(store.detected_schema);
+    const servicesTab = findActualTabName('services', schema);
+
+    if (!servicesTab) {
+      console.error('[get_booking_slots] Services tab not found in schema');
+      return {
+        success: false,
+        error: 'Services not configured',
+      };
+    }
+
+    const servicesData = await loadSheetTab(storeId, servicesTab, authToken);
+    console.log('[get_booking_slots] Found services:', servicesData.length);
+
+    // Find matching service (fuzzy)
+    const service = servicesData.find((s: any) =>
+      s.serviceName?.toLowerCase().includes(service_name.toLowerCase())
+    );
+
+    if (!service) {
+      console.log('[get_booking_slots] Service not found:', service_name);
+      return {
+        success: false,
+        message: `I couldn't find a service matching "${service_name}". Would you like to see our available services?`,
+        components: [{
+          type: 'quick_actions',
+          props: { actions: ['Show services'] }
+        }]
+      };
+    }
+
+    const serviceId = service.serviceID || service.serviceName;
+    console.log('[get_booking_slots] Found service:', serviceId);
+
+    // Find which calendar this service is linked to
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
+
+    if (!calendarId) {
+      console.log('[get_booking_slots] Service not linked to any calendar');
+      return {
+        success: false,
+        message: `Booking is not yet set up for ${service.serviceName}. Please contact us directly.`,
+      };
+    }
+
+    console.log('[get_booking_slots] Service linked to calendar:', calendarId);
+
+    // Calculate date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const startDateObj = start_date
+      ? new Date(start_date + 'T00:00:00+08:00')
+      : today;
+
+    const endDateObj = end_date
+      ? new Date(end_date + 'T23:59:59+08:00')
+      : new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000); // +14 days
+
+    console.log('[get_booking_slots] Date range:', startDateObj.toISOString(), 'to', endDateObj.toISOString());
+
+    // Query availability calendar for events
+    const availabilityEvents = await listEvents(
+      calendarId,
+      startDateObj.toISOString(),
+      endDateObj.toISOString(),
+      true // singleEvents - expand recurring
+    );
+
+    console.log('[get_booking_slots] Found availability events:', availabilityEvents.length);
+
+    // Get capacity and duration from service
+    const capacity = parseInt(service.capacity) || 8;
+    const duration = parseInt(service.duration) || 120; // Default 2 hours
+
+    console.log('[get_booking_slots] Service info:', { capacity, duration });
+
+    // Build slots with availability
+    const slots: Array<{
+      date: string
+      time: string
+      endTime: string
+      spotsLeft: number
+    }> = [];
+
+    for (const event of availabilityEvents) {
+      // Skip all-day events
+      if (!event.start.dateTime || !event.end.dateTime) continue;
+
+      // Extract date/time directly from ISO string - preserves calendar timezone
+      const dateStr = extractDateFromISO(event.start.dateTime);
+      const availStart = extractTimeFromISO(event.start.dateTime);
+      const availEnd = extractTimeFromISO(event.end.dateTime);
+
+      // Skip if event is in the past (compare using the event's actual datetime)
+      const eventEnd = new Date(event.end.dateTime);
+      if (eventEnd < new Date()) continue;
+
+      console.log(`[get_booking_slots] Availability: ${dateStr} ${availStart}-${availEnd}`);
+
+      // Generate time slots within this availability window
+      const timeSlots = generateTimeSlots(availStart, availEnd, duration);
+
+      console.log(`[get_booking_slots] Generated ${timeSlots.length} slots:`, timeSlots);
+
+      // For each generated time slot, check bookings and add to slots
+      for (const time of timeSlots) {
+        // Count existing bookings for this slot
+        const dateTimeStr = `${dateStr}T${time}:00+08:00`;
+        const bookedCount = await countBookings(
+          store.invite_calendar_id,
+          serviceId,
+          dateTimeStr
+        );
+
+        const spotsLeft = capacity - bookedCount;
+
+        console.log(`[get_booking_slots] Slot ${dateStr} ${time}: ${spotsLeft} spots left (${bookedCount} booked)`);
+
+        // Only add slots with available spots
+        if (spotsLeft > 0) {
+          slots.push({
+            date: dateStr,
+            time: time,
+            endTime: calculateEndTime(time, duration),
+            spotsLeft: spotsLeft
+          });
+        }
+      }
+    }
+
+    // Sort by date, then time
+    slots.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.time.localeCompare(b.time);
+    });
+
+    console.log('[get_booking_slots] Total slots found:', slots.length);
+
+    // Find dates with no availability (for disabling in calendar)
+    // Use local date formatting to avoid timezone issues
+    const allDatesInRange: string[] = [];
+    const cursor = new Date(startDateObj);
+    while (cursor <= endDateObj) {
+      // Format as YYYY-MM-DD using local date parts
+      const year = cursor.getFullYear();
+      const month = String(cursor.getMonth() + 1).padStart(2, '0');
+      const day = String(cursor.getDate()).padStart(2, '0');
+      allDatesInRange.push(`${year}-${month}-${day}`);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    const datesWithSlots = [...new Set(slots.map(s => s.date))];
+    const unavailableDates = allDatesInRange.filter(d => !datesWithSlots.includes(d));
+
+    // Build intelligent message
+    let message = `Here are available times for ${service.serviceName}:`;
+
+    if (slots.length === 0) {
+      message = `Unfortunately, there are no available times for ${service.serviceName} in the next 2 weeks. Would you like to check a different service?`;
+    } else if (prefill_date && !datesWithSlots.includes(prefill_date)) {
+      message = `${prefill_date} doesn't have availability for ${service.serviceName}. Here are the dates that do:`;
+    } else if (prefill_date && prefill_time) {
+      const matchingSlot = slots.find(
+        s => s.date === prefill_date && s.time === prefill_time
+      );
+      if (matchingSlot && matchingSlot.spotsLeft > 0) {
+        message = `Great news! ${prefill_time} on ${prefill_date} is available. Just need a few details to confirm:`;
+      } else if (matchingSlot && matchingSlot.spotsLeft <= 0) {
+        message = `Sorry, ${prefill_time} on ${prefill_date} is fully booked. Here are other available times:`;
+      } else {
+        // Time doesn't match any class - find closest
+        const slotsOnDate = slots.filter(s => s.date === prefill_date);
+        if (slotsOnDate.length > 0) {
+          message = `There's no class at ${prefill_time}, but here are the times available on ${prefill_date}:`;
+        }
+      }
+    }
+
+    // Check if prefill date/time is available
+    const prefillDateAvailable = prefill_date
+      ? datesWithSlots.includes(prefill_date)
+      : null;
+
+    const prefillTimeAvailable = prefill_date && prefill_time
+      ? slots.some(s => s.date === prefill_date && s.time === prefill_time)
+      : null;
+
+    console.log('[get_booking_slots] Availability context:', {
+      prefillDateAvailable,
+      prefillTimeAvailable,
+      prefill_date,
+      prefill_time
+    });
+
+    // Build response data (shared across all cases)
+    const responseData = {
+      success: true,
+      service: {
+        id: serviceId,
+        name: service.serviceName,
+        duration: String(duration),
+        price: service.price
+      },
+      slots,
+      unavailableDates,
+      prefill: {
+        // Only include prefill date if it's actually available
+        date: prefillDateAvailable ? prefill_date : undefined,
+        time: prefillTimeAvailable ? prefill_time : undefined,
+        name: prefill_name,
+        email: prefill_email,
+        phone: prefill_phone
+      },
+      availableDates: datesWithSlots,
+      requestedDateAvailable: prefillDateAvailable,
+      requestedTimeAvailable: prefillTimeAvailable,
+      components: [{
+        id: `booking-calendar-${storeId}-${Date.now()}`,
+        type: 'BookingCalendar',
+        props: {
+          service: {
+            id: serviceId,
+            name: service.serviceName,
+            duration: service.duration ? `${service.duration} min` : undefined,
+            price: service.price
+          },
+          slots,
+          unavailableDates,
+          prefill: {
+            // Only include prefill date if it's actually available
+            date: prefillDateAvailable ? prefill_date : undefined,
+            time: prefillTimeAvailable ? prefill_time : undefined,
+            name: prefill_name,
+            email: prefill_email,
+            phone: prefill_phone
+          }
+        }
+      }],
+      componentsVersion: '1'
+    };
+
+    // CRITICAL: For unavailable dates, build response in JavaScript (not LLM)
+    // This is the demo-dh "OrderAgent" pattern - deterministic responses
+    if (prefill_date && !prefillDateAvailable) {
+      const datesList = datesWithSlots.length <= 3
+        ? datesWithSlots.join(' and ')
+        : `${datesWithSlots.slice(0, 3).join(', ')} and ${datesWithSlots.length - 3} more`;
+
+      console.log('[get_booking_slots] Using skipResponder for unavailable date');
+
+      return {
+        ...responseData,
+        // Pre-built message - bypasses LLM responder
+        message: `I'd love to help you book ${service.serviceName}! Unfortunately, ${prefill_date} isn't available for this class. We have openings on ${datesList}. I've shown the calendar below so you can pick a date and time that works for you!`,
+        skipResponder: true  // Flag for orchestrator to bypass LLM
+      };
+    }
+
+    if (prefillDateAvailable && prefill_time && !prefillTimeAvailable) {
+      const timesOnDate = slots.filter(s => s.date === prefill_date).map(s => s.time);
+      const timesList = timesOnDate.join(', ');
+
+      console.log('[get_booking_slots] Using skipResponder for unavailable time');
+
+      return {
+        ...responseData,
+        message: `Great choice on ${service.serviceName}! The ${prefill_time} slot on ${prefill_date} isn't available, but we have openings at ${timesList}. Pick a time that works for you!`,
+        skipResponder: true
+      };
+    }
+
+    // Normal case: date/time available OR no prefill - let LLM respond
+    return {
+      ...responseData,
+      message: `Here's the booking calendar for ${service.serviceName}. Pick a date and time that works for you!`
+    };
+
+  } catch (error) {
+    console.error('[get_booking_slots] Error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      error: errorMsg || 'Unknown error getting booking slots',
+      message: 'Sorry, I had trouble checking availability. Please try again.',
+    };
+  }
+}
+
+/**
  * Create a booking
  */
 export async function createBooking(
@@ -341,9 +800,22 @@ export async function createBooking(
     console.log('[create_booking] Found service:', serviceId);
 
     // Find calendar
-    const calendarId = Object.keys(mappings).find(
-      calId => mappings[calId] === serviceId
-    );
+    const calendarId = Object.keys(mappings).find(calId => {
+      const value = mappings[calId];
+      // New format: {name: "...", serviceIds: [...]}
+      if (value?.serviceIds) {
+        return value.serviceIds.includes(serviceId);
+      }
+      // Legacy array format: ["S001", "S002"]
+      if (Array.isArray(value)) {
+        return value.includes(serviceId);
+      }
+      // Legacy string format: "S001"
+      if (typeof value === 'string') {
+        return value === serviceId;
+      }
+      return false;
+    });
 
     if (!calendarId) {
       console.error('[create_booking] Service not linked to calendar');
@@ -352,6 +824,55 @@ export async function createBooking(
         error: 'Service not available for booking',
       };
     }
+
+    // ============================================
+    // VALIDATE: Check if availability event exists
+    // ============================================
+    const dayStart = new Date(`${date}T00:00:00+08:00`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    console.log('[create_booking] Checking availability events for:', date);
+
+    const availabilityEvents = await listEvents(
+      calendarId,  // The availability calendar from calendar_mappings
+      dayStart.toISOString(),
+      dayEnd.toISOString(),
+      true  // singleEvents - expand recurring
+    );
+
+    console.log('[create_booking] Found availability events:', availabilityEvents.length);
+
+    // Build the requested datetime
+    const requestedTime = new Date(`${date}T${time}:00+08:00`);
+
+    // Find an availability event that contains the requested time
+    const matchingEvent = availabilityEvents.find((event: any) => {
+      // Skip all-day events (no dateTime)
+      if (!event.start.dateTime || !event.end.dateTime) {
+        return false;
+      }
+
+      const eventStart = new Date(event.start.dateTime);
+      const eventEnd = new Date(event.end.dateTime);
+
+      // Check if requested time falls within this event
+      return requestedTime >= eventStart && requestedTime < eventEnd;
+    });
+
+    if (!matchingEvent) {
+      console.log('[create_booking] No availability event found for:', date, time);
+      return {
+        success: false,
+        error: 'no_class_scheduled',
+        message: `Sorry, ${service.serviceName} doesn't have any classes scheduled on ${date} at ${time}. This date/time isn't on the calendar yet. Would you like to try a different date?`,
+      };
+    }
+
+    console.log('[create_booking] Found matching availability event:', matchingEvent.summary);
+    // ============================================
+    // END: Availability validation
+    // ============================================
 
     // Build dateTime
     const dateTimeStr = `${date}T${time}:00+08:00`;
@@ -371,8 +892,8 @@ export async function createBooking(
       console.log('[create_booking] Fully booked');
       return {
         success: false,
-        error: 'Fully booked',
-        message: `Sorry, ${service.serviceName} is fully booked on ${date} at ${time}.`,
+        error: 'fully_booked',
+        message: `Sorry, ${service.serviceName} is fully booked on ${date} at ${time}. All ${capacity} spots are taken. Would you like to try another time?`,
       };
     }
 

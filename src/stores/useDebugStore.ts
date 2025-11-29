@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { TestExecution, TestStepResult } from '@/qa/lib/types'
 
 export interface Message {
   id: string
@@ -81,6 +82,47 @@ export interface DebugRequest {
     message: string
     stack?: string
   }
+
+  // 🆕 TEST MODE: Optional test result data
+  testResult?: {
+    passed: boolean
+    performanceScore?: number  // 0-100 score based on timing (not pass/fail)
+    technical?: {
+      intentCorrect: boolean
+      intentActual?: string
+      intentExpected?: string | string[]
+      confidenceOK: boolean
+      confidence?: number
+      minConfidence?: number
+      functionsCorrect: boolean
+      functionsActual?: string[]
+      functionsExpected?: string[]
+      timingOK: boolean  // Kept for backwards compatibility, not used in pass/fail
+      timeMs?: number
+      maxTimeMs?: number
+      noErrors: boolean
+      error?: string
+    }
+    quality?: {
+      score: number
+      passed: boolean
+      reasoning: string
+    }
+    overall?: {  // Overall test evaluation (after all steps)
+      score: number
+      passed: boolean
+      reasoning: string
+      evaluatorModel: string
+    }
+  }
+
+  // 🆕 GOAL-BASED TEST: Turn information
+  goalBasedTurn?: {
+    turnIndex: number
+    userMessage: string
+    isSimulated: true
+    performanceScore?: number
+  }
 }
 
 interface DebugStore {
@@ -95,6 +137,13 @@ interface DebugStore {
     model: 'all' | string
   }
 
+  // NEW: Test mode state
+  isTestMode: boolean
+  selectedScenario: string | null
+  currentTest: TestExecution | null
+  evaluatorModel: string  // Default to chat model
+  clearChatRequested: boolean  // Flag to signal chat should be cleared
+
   addRequest: (request: DebugRequest) => void
   updateRequest: (id: string, updates: Partial<DebugRequest>) => void
   addMessage: (message: Message) => void
@@ -103,8 +152,21 @@ interface DebugStore {
   setFilter: (key: string, value: any) => void
   togglePanel: () => void
   clearHistory: () => void
+  clearAll: () => void  // Clears debug panel + signals chat to clear
+  acknowledgeClearChat: () => void  // Reset the clearChatRequested flag
   toggleRequestExpanded: (id: string) => void
   isRequestExpanded: (id: string) => boolean
+
+  // NEW: Test methods
+  setTestMode: (enabled: boolean) => void
+  setSelectedScenario: (scenarioId: string | null) => void
+  setEvaluatorModel: (model: string) => void
+  startTest: (execution: TestExecution) => void
+  updateTestExecution: (updates: Partial<TestExecution>) => void
+  addTestResult: (result: TestStepResult) => void
+  completeTest: () => void
+  pauseTest: () => void
+  stopTest: () => void
 
   getFilteredRequests: () => DebugRequest[]
   getAverageIntentTime: () => number
@@ -122,9 +184,16 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   isPanelOpen: false, // Closed by default
   expandedRequests: new Set(),
   selectedModel: typeof localStorage !== 'undefined'
-    ? localStorage.getItem('heysheets-debug-model') || 'anthropic/claude-3.5-sonnet'
-    : 'anthropic/claude-3.5-sonnet',
+    ? localStorage.getItem('heysheets-debug-model') || 'x-ai/grok-4.1-fast'
+    : 'x-ai/grok-4.1-fast',
   filters: { status: 'all', model: 'all' },
+
+  // NEW: Test state
+  isTestMode: false,
+  selectedScenario: null,
+  currentTest: null,
+  evaluatorModel: 'x-ai/grok-4.1-fast', // Default evaluator model
+  clearChatRequested: false,
 
   addRequest: (request) =>
     set((state) => {
@@ -189,6 +258,15 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
 
   clearHistory: () => set({ requests: [], messages: [], expandedRequests: new Set() }),
 
+  clearAll: () => set({
+    requests: [],
+    messages: [],
+    expandedRequests: new Set(),
+    clearChatRequested: true  // Signal chat to clear
+  }),
+
+  acknowledgeClearChat: () => set({ clearChatRequested: false }),
+
   getFilteredRequests: () => {
     const { requests, filters } = get()
     return requests.filter(
@@ -246,4 +324,72 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
       outputTokens,
     }
   },
+
+  // NEW: Test methods
+  setTestMode: (enabled) =>
+    set({
+      isTestMode: enabled,
+      selectedScenario: enabled ? get().selectedScenario : null,
+    }),
+
+  setSelectedScenario: (scenarioId) => set({ selectedScenario: scenarioId }),
+
+  setEvaluatorModel: (model) => set({ evaluatorModel: model }),
+
+  startTest: (execution) =>
+    set((state) => ({
+      currentTest: execution,
+      // Mark all requests from this test
+      requests: state.requests.map((r) => ({
+        ...r,
+        testRunId: execution.testRunId,
+      })),
+    })),
+
+  updateTestExecution: (updates) =>
+    set((state) => ({
+      currentTest: state.currentTest
+        ? { ...state.currentTest, ...updates }
+        : null,
+    })),
+
+  addTestResult: (result) =>
+    set((state) => {
+      if (!state.currentTest) return state
+
+      return {
+        currentTest: {
+          ...state.currentTest,
+          results: [...state.currentTest.results, result],
+          currentStepIndex: state.currentTest.currentStepIndex + 1,
+        },
+      }
+    }),
+
+  completeTest: () =>
+    set((state) => {
+      if (!state.currentTest) return state
+
+      return {
+        currentTest: {
+          ...state.currentTest,
+          status: 'complete',
+          endTime: Date.now(),
+        },
+      }
+    }),
+
+  pauseTest: () =>
+    set((state) => ({
+      currentTest: state.currentTest
+        ? { ...state.currentTest, status: 'paused' }
+        : null,
+    })),
+
+  stopTest: () =>
+    set((state) => ({
+      currentTest: state.currentTest
+        ? { ...state.currentTest, status: 'stopped', endTime: Date.now() }
+        : null,
+    })),
 }))

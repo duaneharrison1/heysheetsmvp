@@ -8,10 +8,12 @@ import { ExternalLink, Copy, X, Loader2 } from 'lucide-react';
 import { generateSupabaseLogLink } from '@/lib/debug/correlation-id';
 import { formatRequestForAI, formatAllRequestsForAI } from '@/lib/debug/format-for-ai';
 import { DEBUG_CONFIG } from '@/config/debug';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useEffect, useRef } from 'react';
 
 export function DebugPanel() {
+  const timelineRef = useRef<HTMLDivElement>(null);
+
   const {
     isPanelOpen,
     togglePanel,
@@ -28,6 +30,11 @@ export function DebugPanel() {
     getTotalCost,
     getCostBreakdown,
     clearHistory,
+    clearAll,
+    isTestMode,
+    currentTest,
+    evaluatorModel,
+    setEvaluatorModel,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -36,18 +43,15 @@ export function DebugPanel() {
 
     const formatted = formatRequestForAI(request, messages);
     navigator.clipboard.writeText(formatted);
-    toast.success('Copied with conversation context!');
   };
 
   const handleCopyAll = () => {
     if (requests.length === 0) {
-      toast.error('No requests to copy');
       return;
     }
 
     const formatted = formatAllRequestsForAI(requests, messages);
     navigator.clipboard.writeText(formatted);
-    toast.success(`Copied ${requests.length} requests!`);
   };
 
   const minMaxResponse = getMinMaxResponseTime();
@@ -59,6 +63,22 @@ export function DebugPanel() {
     const model = DEBUG_CONFIG.models.find(m => m.id === modelId);
     return model?.name || modelId;
   };
+
+  // 🆕 Reverse requests array for timeline (oldest first, newest last)
+  const reversedRequests = [...requests].reverse();
+
+  // 🆕 Auto-scroll to bottom when new requests arrive (smooth)
+  useEffect(() => {
+    if (timelineRef.current && requests.length > 0) {
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        timelineRef.current?.scrollTo({
+          top: timelineRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }, 100);
+    }
+  }, [requests.length]);
 
   if (!isPanelOpen) return null;
 
@@ -78,6 +98,7 @@ export function DebugPanel() {
 
         {/* Model Selector */}
         <div className="mb-3">
+          <label className="text-xs text-gray-400 block mb-1">Chat Model</label>
           <select
             value={selectedModel}
             onChange={(e) => setModel(e.target.value)}
@@ -90,6 +111,24 @@ export function DebugPanel() {
             ))}
           </select>
         </div>
+
+        {/* Evaluator Model Selector - Only visible in test mode */}
+        {isTestMode && (
+          <div className="mb-3">
+            <label className="text-xs text-gray-400 block mb-1">Evaluator Model (QA)</label>
+            <select
+              value={evaluatorModel}
+              onChange={(e) => setEvaluatorModel(e.target.value)}
+              className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
+            >
+              {DEBUG_CONFIG.models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
@@ -151,14 +190,14 @@ export function DebugPanel() {
       </div>
 
       {/* Request History */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-950" style={{ scrollbarColor: '#374151 #111827', scrollbarWidth: 'thin' }}>
+      <div ref={timelineRef} className="flex-1 overflow-y-auto p-4 bg-gray-950" style={{ scrollbarColor: '#374151 #111827', scrollbarWidth: 'thin' }}>
         <div className="space-y-3">
-          {requests.length === 0 ? (
+          {reversedRequests.length === 0 ? (
             <div className="text-center text-gray-500 mt-8">
               No requests yet. Start chatting!
             </div>
           ) : (
-            requests.map((request) => (
+            reversedRequests.map((request) => (
               <RequestCard
                 key={request.id}
                 request={request}
@@ -187,10 +226,10 @@ export function DebugPanel() {
           <Button
             variant="outline"
             size="sm"
-            onClick={clearHistory}
+            onClick={clearAll}
             className="flex-1 bg-gray-900 border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-gray-100"
           >
-            Clear History
+            Clear Chat
           </Button>
         </div>
       </div>
@@ -293,6 +332,39 @@ function RequestCard({
         )
       )}
 
+      {/* 🆕 GOAL-BASED TEST: Turn & Simulated badges */}
+      {request.goalBasedTurn && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30"
+          >
+            Turn {request.goalBasedTurn.turnIndex + 1}
+          </Badge>
+          {request.goalBasedTurn.isSimulated && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
+            >
+              🤖 Simulated
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* 🆕 TEST RESULT BADGE (collapsed view) */}
+      {request.testResult && (
+        <div className="mb-2">
+          <Badge
+            variant={request.testResult.passed ? 'default' : 'destructive'}
+            className="text-xs"
+          >
+            {request.testResult.passed ? '✅ Test Passed' : '❌ Test Failed'}
+            {request.testResult.quality?.score && ` • ${request.testResult.quality.score}/100`}
+          </Badge>
+        </div>
+      )}
+
       {/* Error Preview */}
       {request.error && (
         <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded mb-2">
@@ -303,6 +375,21 @@ function RequestCard({
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
+          {/* Response Text (for test scenario cards - scripted and goal-based) */}
+          {request.response?.text && (
+            request.userMessage.startsWith('📋 Test Scenario:') ||
+            request.userMessage.startsWith('🎯 Goal-Based Test:')
+          ) && (
+            <div className="text-xs text-gray-300">
+              <div className="text-gray-400 font-semibold mb-1">
+                Details:
+              </div>
+              <div className="text-gray-300 whitespace-pre-wrap bg-gray-800 p-2 rounded">
+                {request.response.text}
+              </div>
+            </div>
+          )}
+
           {/* Timeline */}
           {request.timings.intentDuration && (
             <div className="text-xs text-gray-300">
@@ -348,6 +435,103 @@ function RequestCard({
                     ⏭️ Response: skipped
                   </div>
                 ) : null}
+              </div>
+            </div>
+          )}
+
+          {/* 🆕 TEST RESULTS DETAILS (expanded view) */}
+          {request.testResult && (
+            <div className="text-xs text-gray-300">
+              <div className="text-gray-400 font-semibold mb-1">
+                Test Results:
+              </div>
+              <div className="space-y-1">
+                {/* Overall Pass/Fail */}
+                <div className={request.testResult.passed ? 'text-green-400' : 'text-red-400'}>
+                  {request.testResult.passed ? '✅ Passed' : '❌ Failed'}
+                </div>
+
+                {/* Technical Checks */}
+                {request.testResult.technical && (
+                  <div className="ml-2 space-y-0.5">
+                    <div className={request.testResult.technical.intentCorrect ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.intentCorrect ? '✓' : '✗'} Intent correct
+                      {!request.testResult.technical.intentCorrect && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Expected: {Array.isArray((request.testResult.technical as any).intentExpected)
+                            ? (request.testResult.technical as any).intentExpected.join(' or ')
+                            : (request.testResult.technical as any).intentExpected}
+                          <br />
+                          Got: {(request.testResult.technical as any).intentActual || 'none'}
+                        </div>
+                      )}
+                    </div>
+                    <div className={request.testResult.technical.confidenceOK ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.confidenceOK ? '✓' : '✗'} Confidence OK
+                      {!request.testResult.technical.confidenceOK && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Min: {(request.testResult.technical as any).minConfidence}%,
+                          Got: {Math.round((request.testResult.technical as any).confidence || 0)}%
+                        </div>
+                      )}
+                    </div>
+                    <div className={request.testResult.technical.functionsCorrect ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.functionsCorrect ? '✓' : '✗'} Functions correct
+                      {!request.testResult.technical.functionsCorrect && (
+                        <div className="text-xs ml-4 text-red-300">
+                          Expected: {((request.testResult.technical as any).functionsExpected || []).join(', ') || 'none'}
+                          <br />
+                          Got: {((request.testResult.technical as any).functionsActual || []).join(', ') || 'none'}
+                        </div>
+                      )}
+                    </div>
+                    {/* Performance Score (color-coded, not pass/fail) */}
+                    {request.testResult.performanceScore !== undefined && (
+                      <div className={
+                        request.testResult.performanceScore >= 90 ? 'text-green-400' :
+                        request.testResult.performanceScore >= 70 ? 'text-blue-400' :
+                        request.testResult.performanceScore >= 50 ? 'text-yellow-400' :
+                        request.testResult.performanceScore >= 25 ? 'text-red-400' : 'text-red-500'
+                      }>
+                        {request.testResult.performanceScore >= 90 ? '🏆' :
+                         request.testResult.performanceScore >= 70 ? '✅' :
+                         request.testResult.performanceScore >= 50 ? '⚠️' :
+                         request.testResult.performanceScore >= 25 ? '🐌' : '❌'}
+                        {' '}Performance: {request.testResult.performanceScore.toFixed(0)}/100
+                        <span className="text-xs ml-2">
+                          ({((request.testResult.technical as any).timeMs / 1000).toFixed(1)}s)
+                        </span>
+                        <span className="text-xs ml-2">
+                          {request.testResult.performanceScore >= 90 ? 'Excellent' :
+                           request.testResult.performanceScore >= 70 ? 'Good' :
+                           request.testResult.performanceScore >= 50 ? 'Acceptable' :
+                           request.testResult.performanceScore >= 25 ? 'Slow' : 'Unacceptable'}
+                        </span>
+                      </div>
+                    )}
+                    <div className={request.testResult.technical.noErrors ? 'text-gray-400' : 'text-red-400'}>
+                      {request.testResult.technical.noErrors ? '✓' : '✗'} No errors
+                      {!request.testResult.technical.noErrors && (request.testResult.technical as any).error && (
+                        <div className="text-xs ml-4 text-red-300">
+                          {(request.testResult.technical as any).error}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quality Evaluation */}
+                {request.testResult.quality && (
+                  <div className="mt-2 p-2 bg-gray-800 rounded">
+                    <div className="text-gray-400 font-semibold mb-1">
+                      Quality: {request.testResult.quality.score}/100
+                      {request.testResult.quality.passed ? ' ✓' : ' ✗'}
+                    </div>
+                    <div className="text-gray-400 text-xs">
+                      {request.testResult.quality.reasoning}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

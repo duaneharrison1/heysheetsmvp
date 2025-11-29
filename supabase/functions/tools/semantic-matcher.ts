@@ -116,7 +116,14 @@ Be generous with matches but prioritize the most relevant.`;
     // Extract JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
+      // Strip JavaScript-style comments that LLM might add
+      const cleanJson = jsonMatch[0]
+        .replace(/\/\/[^\n]*/g, '')  // Remove // comments
+        .replace(/\/\*[\s\S]*?\*\//g, '')  // Remove /* */ comments
+        .replace(/,\s*}/g, '}')  // Fix trailing commas
+        .replace(/,\s*]/g, ']');  // Fix trailing commas in arrays
+
+      const parsed = JSON.parse(cleanJson);
       return parsed.scores || items.map(() => 50);
     }
 
