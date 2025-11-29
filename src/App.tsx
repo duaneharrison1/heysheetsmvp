@@ -16,6 +16,7 @@ import Billing from './pages/Billing';
 import Help from './pages/Help';
 import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
+import AdminFeedback from './pages/AdminFeedback';
 import { DebugPanel } from "@/components/debug/DebugPanel";
 import { DebugToggle } from "@/components/debug/DebugToggle";
 import { QAResultsPage } from "@/qa/components/QAResultsPage";
@@ -46,6 +47,7 @@ const App = () => (
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
           <Route path="/admin/users" element={<SidebarLayout><AdminUsers /></SidebarLayout>} />
           <Route path="/admin/stores" element={<SidebarLayout><AdminStores /></SidebarLayout>} />
+          <Route path="/admin/feedback" element={<SidebarLayout><AdminFeedback /></SidebarLayout>} />
           <Route path="/qa-results" element={<SidebarLayout><QAResultsPage /></SidebarLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

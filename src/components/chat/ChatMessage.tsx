@@ -7,6 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Actions, Action } from "@/components/ui/ai-actions";
 import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from "@/components/ui/ai-task";
 import { Bot, User, Copy, Check, ThumbsUp, ThumbsDown, RefreshCcw } from 'lucide-react';
+import { likeMessage, dislikeMessage } from '@/lib/ai-actions';
 import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package, Search, Database, Sparkles } from "lucide-react";
 import ChatBubble from './ChatBubble';
 import ProductCard from './ProductCard';
@@ -38,14 +39,15 @@ interface Message {
 interface ChatMessageProps {
   message: Message;
   storeLogo: string;
+  storeId: string;
+  conversationHistory: Array<{ role: string; content: string }>;
   onActionClick?: (action: string, data?: any) => void;
   onRegenerate?: (messageId: string) => void;
-  onFeedback?: (messageId: string, feedback: 'like' | 'dislike') => void;
 }
 
 // Rich content components are extracted to separate files for reuse and clarity
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, onActionClick, onRegenerate, onFeedback }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, storeId, conversationHistory, onActionClick, onRegenerate }) => {
   // State for action feedback
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'like' | 'dislike' | null>(null);
@@ -61,12 +63,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
     }
   };
 
-  // Handle like/dislike feedback
-  const handleFeedback = (type: 'like' | 'dislike') => {
-    const newFeedback = feedback === type ? null : type;
-    setFeedback(newFeedback);
-    if (newFeedback && onFeedback) {
-      onFeedback(message.id, newFeedback);
+  // Handle like/dislike feedback - sends to Supabase
+  const handleFeedback = async (type: 'like' | 'dislike') => {
+    if (feedback === type) return; // Already selected
+    setFeedback(type);
+    
+    // Send to Supabase
+    if (type === 'like') {
+      await likeMessage(storeId, message.id, message.content, conversationHistory);
+    } else {
+      await dislikeMessage(storeId, message.id, message.content, conversationHistory);
     }
   };
 
@@ -331,14 +337,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
               isActive={feedback === 'like'}
               label="Like"
             >
-              <ThumbsUp className="h-3.5 w-3.5" />
+              <ThumbsUp className="h-3.5 w-3.5" fill={feedback === 'like' ? 'currentColor' : 'none'} />
             </Action>
             <Action
               onClick={() => handleFeedback('dislike')}
               isActive={feedback === 'dislike'}
               label="Dislike"
             >
-              <ThumbsDown className="h-3.5 w-3.5" />
+              <ThumbsDown className="h-3.5 w-3.5" fill={feedback === 'dislike' ? 'currentColor' : 'none'} />
             </Action>
             <Action
               onClick={handleRegenerate}

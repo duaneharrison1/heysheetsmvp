@@ -15,6 +15,22 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { ThumbsUp, ThumbsDown, RefreshCw, Copy, Check } from 'lucide-react';
+import { likeMessage, dislikeMessage } from '@/lib/ai-actions';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface MessageActionsProps {
+  storeId: string;
+  messageId: string;
+  messageContent: string;
+  conversationHistory: Array<{ role: string; content: string }>;
+  onRegenerate?: () => void;
+  showCopy?: boolean;
+  showRegenerate?: boolean;
+}
 
 // ============================================================================
 // Actions Container
@@ -88,7 +104,79 @@ export const Action = ({
 };
 
 // ============================================================================
+// Message Actions - Pre-built component with like/dislike/regenerate/copy
+// ============================================================================
+
+export const MessageActions = ({
+  storeId,
+  messageId,
+  messageContent,
+  conversationHistory,
+  onRegenerate,
+  showCopy = true,
+  showRegenerate = true,
+}: MessageActionsProps) => {
+  const [feedback, setFeedback] = React.useState<'like' | 'dislike' | null>(null);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleLike = async () => {
+    if (feedback === 'like') return; // Already liked
+    setFeedback('like');
+    await likeMessage(storeId, messageId, messageContent, conversationHistory);
+  };
+
+  const handleDislike = async () => {
+    if (feedback === 'dislike') return; // Already disliked
+    setFeedback('dislike');
+    await dislikeMessage(storeId, messageId, messageContent, conversationHistory);
+  };
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(messageContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRegenerate = () => {
+    onRegenerate?.();
+  };
+
+  return (
+    <Actions>
+      {showCopy && (
+        <Action
+          tooltip={copied ? 'Copied!' : 'Copy'}
+          onClick={handleCopy}
+          isActive={copied}
+        >
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+        </Action>
+      )}
+      <Action
+        tooltip="Like"
+        onClick={handleLike}
+        isActive={feedback === 'like'}
+      >
+        <ThumbsUp className="h-4 w-4" />
+      </Action>
+      <Action
+        tooltip="Dislike"
+        onClick={handleDislike}
+        isActive={feedback === 'dislike'}
+      >
+        <ThumbsDown className="h-4 w-4" />
+      </Action>
+      {showRegenerate && onRegenerate && (
+        <Action tooltip="Regenerate" onClick={handleRegenerate}>
+          <RefreshCw className="h-4 w-4" />
+        </Action>
+      )}
+    </Actions>
+  );
+};
+
+// ============================================================================
 // Export
 // ============================================================================
 
-export default { Actions, Action };
+export default { Actions, Action, MessageActions };

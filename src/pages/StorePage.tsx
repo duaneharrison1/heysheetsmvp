@@ -396,6 +396,37 @@ export default function StorePage() {
     sendMessage(action);
   };
 
+  // Regenerate: resend the last user message before the given bot message
+  const handleRegenerate = (messageId: string) => {
+    // Find the bot message index
+    const botIndex = messages.findIndex(m => m.id === messageId);
+    if (botIndex <= 0) return;
+    
+    // Find the user message right before this bot message
+    let userMessageContent = '';
+    for (let i = botIndex - 1; i >= 0; i--) {
+      if (messages[i].type === 'user') {
+        userMessageContent = messages[i].content;
+        break;
+      }
+    }
+    
+    if (userMessageContent) {
+      // Remove the bot message we're regenerating
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      // Resend the user message
+      sendMessage(userMessageContent);
+    }
+  };
+
+  // Build conversation history for feedback
+  const getConversationHistory = () => {
+    return messages.map(m => ({
+      role: m.type === 'user' ? 'user' : 'assistant',
+      content: m.content
+    }));
+  };
+
   // (quick actions now provided via `initialQuickActions` + dynamic suggestions)
 
   if (loading) {
@@ -661,7 +692,10 @@ export default function StorePage() {
                 key={message.id}
                 message={message}
                 storeLogo={store.name.substring(0, 2).toUpperCase()}
+                storeId={storeId!}
+                conversationHistory={getConversationHistory()}
                 onActionClick={handleChatAction}
+                onRegenerate={handleRegenerate}
               />
             ))}
 

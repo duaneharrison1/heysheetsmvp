@@ -54,12 +54,48 @@ const DialogTrigger = ({ children, asChild }: { children?: React.ReactNode; asCh
   )
 }
 
-const DialogClose = ({ children }: { children?: React.ReactNode }) => {
+const DialogClose = ({ children, className }: { children?: React.ReactNode; className?: string }) => {
   const ctx = React.useContext(DialogContext)
   if (!ctx) return null
+
+  // If the child is a valid React element and not a button, clone it and attach onClick.
+  if (React.isValidElement(children)) {
+    const child = children as React.ReactElement
+    // If the child is a button element, avoid nesting: clone and attach props directly to the child
+    if ((child.type as any) === 'button') {
+      const existingOnClick = (child.props as any).onClick
+      return React.cloneElement(child, {
+        onClick: (e: any) => {
+          try {
+            existingOnClick?.(e)
+          } catch (err) {
+            // ignore
+          }
+          ctx.setOpen(false)
+          ctx.onOpenChange?.(false)
+        },
+      })
+    }
+
+    // Otherwise clone the child and add click handler
+    return React.cloneElement(child, {
+      onClick: (e: any) => {
+        const existingOnClick = (child.props as any).onClick
+        try {
+          existingOnClick?.(e)
+        } catch (err) {
+          // ignore
+        }
+        ctx.setOpen(false)
+        ctx.onOpenChange?.(false)
+      },
+    })
+  }
+
   return (
     <button
       type="button"
+      className={className}
       onClick={() => {
         ctx.setOpen(false)
         ctx.onOpenChange?.(false)
@@ -99,11 +135,9 @@ const DialogContent = ({ className, children, ...props }: any) => {
         {...props}
       >
         <div className="absolute right-4 top-4">
-          <DialogClose>
-            <button className="rounded-sm opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </button>
+          <DialogClose className="rounded-sm opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
           </DialogClose>
         </div>
         {children}
