@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Bot, User, Cpu, Copy, Check, ThumbsUp, ThumbsDown, RefreshCcw, Sparkles } from 'lucide-react';
-import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package } from "lucide-react";
 import { Actions, Action } from "@/components/ui/ai-actions";
 import { Task, TaskTrigger, TaskContent, TaskItem, TaskItemFile } from "@/components/ui/ai-task";
+import { Bot, User, Copy, Check, ThumbsUp, ThumbsDown, RefreshCcw } from 'lucide-react';
+import { Calendar, Clock, MapPin, Phone, ShoppingCart, Star, Package, Search, Database, Sparkles } from "lucide-react";
 import ChatBubble from './ChatBubble';
 import ProductCard from './ProductCard';
 import ServiceCard from './ServiceCard';
@@ -15,9 +15,6 @@ import ServicesGrid from './ServicesGrid';
 import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 import LeadForm from './LeadForm';
-import { BookingCalendar } from './BookingCalendar';
-import { parseMarkdown } from '@/lib/markdown';
-import type { GoalBasedTurnResult } from '@/qa/lib/types';
 
 interface TaskStep {
   label: string;
@@ -31,13 +28,6 @@ interface Message {
   content: string;
   timestamp: Date;
   richContent?: any;
-  testResult?: {
-    passed: boolean;
-    qualityScore?: number;
-  };
-  // Goal-based test fields
-  isSimulated?: boolean;              // For goal-based user messages
-  goalBasedTurn?: GoalBasedTurnResult; // For goal-based bot messages
   tasks?: {
     title: string;
     icon?: React.ReactNode;
@@ -56,9 +46,11 @@ interface ChatMessageProps {
 // Rich content components are extracted to separate files for reuse and clarity
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, onActionClick, onRegenerate, onFeedback }) => {
+  // State for action feedback
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'like' | 'dislike' | null>(null);
 
+  // Handle copy message content
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -69,6 +61,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
     }
   };
 
+  // Handle like/dislike feedback
   const handleFeedback = (type: 'like' | 'dislike') => {
     const newFeedback = feedback === type ? null : type;
     setFeedback(newFeedback);
@@ -77,12 +70,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
     }
   };
 
+  // Handle regenerate
   const handleRegenerate = () => {
     if (onRegenerate) {
       onRegenerate(message.id);
     }
   };
-
   const renderRichContent = () => {
     if (!message.richContent) return null;
 
@@ -269,7 +262,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
       case 'lead_form':
         return (
           <div className="mt-3">
-            <LeadForm
+            <LeadForm 
               {...data}
               maxWidth="500px"
               onSubmit={(formData: any) => {
@@ -280,26 +273,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
           </div>
         );
 
-      case 'booking_calendar':
-        return (
-          <div className="mt-3">
-            <BookingCalendar
-              service={data.service}
-              slots={data.slots}
-              unavailableDates={data.unavailableDates}
-              prefill={data.prefill}
-              onActionClick={onActionClick}
-            />
-          </div>
-        );
-
       default:
         return null;
     }
   };
 
   return (
-    <div className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
       {message.type === 'bot' && (
         <div className="mt-1 flex-shrink-0">
           <Avatar className="w-9 h-9" variant="bot">
@@ -312,18 +292,61 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, on
 
       <div className={`max-w-[85%] min-w-0 overflow-hidden box-border ${message.type === 'user' ? 'max-w-[70%]' : ''}`}>
         <ChatBubble type={message.type} timestamp={message.timestamp}>
-          <div className="text-sm leading-relaxed">{parseMarkdown(message.content)}</div>
+          <div className="text-sm leading-relaxed">{message.content}</div>
         </ChatBubble>
+        
+        {/* AI Task list showing work progress */}
+        {message.type === 'bot' && message.tasks && (
+          <Task className="mt-2">
+            <TaskTrigger 
+              title={message.tasks.title} 
+              icon={message.tasks.icon || <Sparkles className="h-4 w-4" />}
+              count={message.tasks.steps.length}
+            />
+            <TaskContent>
+              {message.tasks.steps.map((step, index) => (
+                <TaskItem key={index} isLoading={step.isLoading}>
+                  {step.label}
+                  {step.file && <TaskItemFile name={step.file} />}
+                </TaskItem>
+              ))}
+            </TaskContent>
+          </Task>
+        )}
+        
         {renderRichContent()}
-
-        {/* Goal-based test: Simulated user badge */}
-        {message.isSimulated && message.type === 'user' && (
-          <div className="mt-1">
-            <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30">
-              <Cpu className="w-3 h-3 mr-1" />
-              Simulated User
-            </Badge>
-          </div>
+        
+        {/* AI Actions for bot messages (always visible). Labels are screen-reader only; no tooltip popovers in chat. */}
+        {message.type === 'bot' && (
+          <Actions className="mt-1.5">
+            <Action
+              onClick={handleCopy}
+              isActive={copied}
+              label={copied ? 'Copied' : 'Copy'}
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </Action>
+            <Action
+              onClick={() => handleFeedback('like')}
+              isActive={feedback === 'like'}
+              label="Like"
+            >
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </Action>
+            <Action
+              onClick={() => handleFeedback('dislike')}
+              isActive={feedback === 'dislike'}
+              label="Dislike"
+            >
+              <ThumbsDown className="h-3.5 w-3.5" />
+            </Action>
+            <Action
+              onClick={handleRegenerate}
+              label="Regenerate"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+            </Action>
+          </Actions>
         )}
       </div>
 

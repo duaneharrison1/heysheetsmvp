@@ -4,13 +4,18 @@ import { Classification, Message, FunctionResult, StoreConfig } from '../_shared
 // RESPONDER FUNCTION
 // ============================================================================
 
+export interface ResponderResult {
+  text: string;
+  suggestions: string[];
+  usage: { input: number; output: number };
+}
+
 export async function generateResponse(
   messages: Message[],
   classification: Classification,
   functionResult?: FunctionResult,
-  store?: StoreConfig,
-  model?: string
-): Promise<{ text: string; usage: { input: number; output: number } }> {
+  store?: StoreConfig
+): Promise<ResponderResult> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
   if (!OPENROUTER_API_KEY) {
@@ -33,14 +38,7 @@ ${store?.description ? `Description: ${store.description}` : ''}
   // Build function result context
   let functionContext = '';
   if (functionResult) {
-    if (functionResult.success && functionResult.awaiting_input) {
-      // Handle form display - user needs to provide input (NOT an error!)
-      functionContext = `AWAITING USER INPUT:
-A form has been displayed to collect information from the user.
-${functionResult.message || 'Please fill in the required details.'}
-
-IMPORTANT: Naturally ask the user to fill in the form that has been displayed. Do NOT apologize or mention any error - this is a normal part of the process. Be encouraging and helpful.`;
-    } else if (functionResult.success) {
+    if (functionResult.success) {
       // Handle both wrapped {success, data} and direct data formats
       const resultData = functionResult.data || functionResult;
       functionContext = `FUNCTION RESULT (Use this data in your response):
@@ -89,7 +87,19 @@ RESPONSE GUIDELINES:
 
 ${classification.needs_clarification ? `CLARIFICATION NEEDED: ${classification.clarification_question}` : ''}
 
-RESPOND NATURALLY:`;
+IMPORTANT: You must respond in JSON format with the following structure:
+{
+  "response": "Your natural conversational response here",
+  "suggestions": ["2-4 short follow-up prompts the user might want to ask next"]
+}
+
+The suggestions should be:
+- Brief (3-7 words each)
+- Contextually relevant to your response and the conversation
+- Actionable prompts that help the user continue the conversation
+- Examples: "Show me more options", "What are the prices?", "Book this service", "Tell me about availability"
+
+RESPOND WITH JSON ONLY:`;
 
   // Call OpenRouter API
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -101,9 +111,9 @@ RESPOND NATURALLY:`;
       'X-Title': 'HeySheets MVP'
     },
     body: JSON.stringify({
-      model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
+      model: 'anthropic/claude-3.5-sonnet',
       messages: [{ role: 'user', content: responsePrompt }],
-      max_tokens: 500,
+      max_tokens: 600,
       temperature: 0.7 // Higher temperature for more natural, varied responses
     })
   });
@@ -115,18 +125,57 @@ RESPOND NATURALLY:`;
   }
 
   const result = await response.json();
-  const responseText = result.choices[0].message.content;
+  const rawContent = result.choices[0].message.content;
+
+  // Parse the JSON response
+  let responseText = '';
+  let suggestions: string[] = [];
+
+  try {
+    // Try to parse as JSON
+    const parsed = JSON.parse(rawContent);
+    responseText = parsed.response || rawContent;
+    suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [];
+  } catch {
+    // If JSON parsing fails, use raw content as response
+    console.warn('[Responder] Failed to parse JSON response, using raw content');
+    responseText = rawContent;
+    // Generate default suggestions based on intent
+    suggestions = getDefaultSuggestions(classification.intent);
+  }
 
   // Extract token usage from OpenRouter response
   const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
   console.log('[Responder] Generated response');
   console.log('[Responder] Token usage:', usage);
+  console.log('[Responder] Suggestions:', suggestions);
 
   return {
     text: responseText,
+    suggestions,
     usage: {
       input: usage.prompt_tokens || 0,
       output: usage.completion_tokens || 0,
     },
   };
+}
+
+/**
+ * Get default suggestions based on intent when JSON parsing fails
+ */
+function getDefaultSuggestions(intent: string): string[] {
+  switch (intent) {
+    case 'SERVICE_INQUIRY':
+      return ['Book this service', 'Show pricing', 'Check availability'];
+    case 'PRODUCT_INQUIRY':
+      return ['Show more products', 'Check availability', 'Add to cart'];
+    case 'INFO_REQUEST':
+      return ['Show services', 'Contact information', 'Operating hours'];
+    case 'BOOKING_REQUEST':
+      return ['See available times', 'Change date', 'Confirm booking'];
+    case 'GREETING':
+      return ['Show me products', 'Show me services', 'Operating hours', 'Store information'];
+    default:
+      return ['Show products', 'Show services', 'Store information'];
+  }
 }
