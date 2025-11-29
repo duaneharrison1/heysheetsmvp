@@ -41,6 +41,15 @@ import {
   formatEventTime,
   type CalendarEvent
 } from '@/lib/calendar-data';
+import {
+  AvailabilityBlock,
+  generateEventCreateUrl,
+  getCalendarWeekViewUrl,
+  openEventPopup,
+  generateTimeOptions,
+  formatDaysForDisplay,
+  formatTimeForDisplay
+} from '@/lib/google-calendar-url';
 
 export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [store, setStore] = useState<any>(null);
@@ -51,7 +60,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Auto-create dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createStep, setCreateStep] = useState<'choice' | 'general' | 'specific' | 'success'>('choice');
+  const [createStep, setCreateStep] = useState<
+    'choice' | 'general' | 'specific' |
+    'availability-type' | 'weekly-setup' | 'specific-setup' | 'add-blocks' | 'congrats'
+  >('choice');
   const [selectedType, setSelectedType] = useState<'general' | 'specific' | null>(null);
   const [calendarName, setCalendarName] = useState('');
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -71,6 +83,22 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [editServicesDialogOpen, setEditServicesDialogOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState<{ calendarId: string; serviceIds: string[]; name: string } | null>(null);
   const [editSelectedServices, setEditSelectedServices] = useState<string[]>([]);
+
+  // Availability setup state
+  const [availabilityType, setAvailabilityType] = useState<'weekly' | 'specific' | null>(null);
+  const [availabilityDays, setAvailabilityDays] = useState<string[]>(['MO', 'TU', 'WE', 'TH', 'FR']);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
+  const [hasBreak, setHasBreak] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState('12:00');
+  const [breakEndTime, setBreakEndTime] = useState('13:00');
+  const [specificDate, setSpecificDate] = useState<Date | undefined>();
+  const [isOngoing, setIsOngoing] = useState(true);
+  const [endRecurrenceDate, setEndRecurrenceDate] = useState<Date | undefined>();
+  const [addedBlocks, setAddedBlocks] = useState<Set<string>>(new Set());
+
+  // Time options for dropdowns
+  const timeOptions = generateTimeOptions();
 
   useEffect(() => {
     loadStore();
@@ -331,7 +359,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
       // Success!
       setCreatedCalendarId(data.calendarId);
-      setCreateStep('success');
+      setCreateStep('availability-type');
 
       // Reload store to show new mapping
       await loadStore();
@@ -353,6 +381,75 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   }
 
+  // Build availability blocks based on current state
+  const buildAvailabilityBlocks = (): AvailabilityBlock[] => {
+    const blocks: AvailabilityBlock[] = [];
+
+    if (availabilityType === 'weekly') {
+      if (hasBreak) {
+        // Morning block
+        blocks.push({
+          id: 'morning',
+          title: 'Available',
+          days: availabilityDays,
+          startTime: startTime,
+          endTime: breakStartTime,
+          isRecurring: true,
+          endDate: isOngoing ? undefined : endRecurrenceDate,
+        });
+
+        // Afternoon block
+        blocks.push({
+          id: 'afternoon',
+          title: 'Available',
+          days: availabilityDays,
+          startTime: breakEndTime,
+          endTime: endTime,
+          isRecurring: true,
+          endDate: isOngoing ? undefined : endRecurrenceDate,
+        });
+      } else {
+        // Single block
+        blocks.push({
+          id: 'main',
+          title: 'Available',
+          days: availabilityDays,
+          startTime: startTime,
+          endTime: endTime,
+          isRecurring: true,
+          endDate: isOngoing ? undefined : endRecurrenceDate,
+        });
+      }
+    } else if (availabilityType === 'specific' && specificDate) {
+      blocks.push({
+        id: 'specific',
+        title: 'Available',
+        days: [],
+        startTime: startTime,
+        endTime: endTime,
+        isRecurring: false,
+        specificDate: specificDate,
+      });
+    }
+
+    return blocks;
+  };
+
+  // Reset availability state
+  const resetAvailabilityState = () => {
+    setAvailabilityType(null);
+    setAvailabilityDays(['MO', 'TU', 'WE', 'TH', 'FR']);
+    setStartTime('09:00');
+    setEndTime('17:00');
+    setHasBreak(false);
+    setBreakStartTime('12:00');
+    setBreakEndTime('13:00');
+    setSpecificDate(undefined);
+    setIsOngoing(true);
+    setEndRecurrenceDate(undefined);
+    setAddedBlocks(new Set());
+  };
+
   // Reset dialog state
   const resetCreateDialog = () => {
     setCreateDialogOpen(false);
@@ -362,6 +459,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setSelectedServices([]);
     setCreatedCalendarId('');
     setCreatingCalendar(false);
+    resetAvailabilityState();
   };
 
   // Handle confirmation of schedule removal
@@ -1025,55 +1123,500 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         )}
 
 
-        {/* STEP 3: Success with Guidance */}
-        {createStep === 'success' && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                Calendar Created!
-              </DialogTitle>
-              <DialogDescription>
-                "{calendarName}" has been created and shared with your email
-              </DialogDescription>
-            </DialogHeader>
+        {/* Step: Availability Type Selection */}
+        {createStep === 'availability-type' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold">Let's add your first availability block</h2>
+              <p className="text-muted-foreground mt-1">
+                This tells customers when your services are open to book.
+              </p>
+            </div>
 
-            <div className="space-y-4 py-4">
-              <Alert>
-                <div className="space-y-2">
-                  <div className="font-semibold">Next: Add Your Available Time Slots</div>
-                  <div className="text-sm space-y-2">
-                    <p className="font-medium">When adding events in Google Calendar:</p>
-                    <ol className="list-decimal list-inside ml-2 space-y-1">
-                      <li>Click "+ Create" or click on a time slot</li>
-                      <li><strong>Important:</strong> Select the calendar "<span className="font-semibold">{calendarName}</span>" from the dropdown</li>
-                      <li>Add your available time (e.g., "Mon-Fri 9 AM - 5 PM")</li>
-                      <li>Make it recurring if needed</li>
-                      <li>Save the event</li>
-                    </ol>
-
-                    {selectedType === 'general' ? (
-                      <p className="mt-2">All {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} will become bookable during the times you add to this calendar.</p>
-                    ) : (
-                      <p className="mt-2">Your {selectedServices.length} selected service{selectedServices.length === 1 ? '' : 's'} will become bookable during the times you add to this calendar.</p>
-                    )}
-                  </div>
-                </div>
-              </Alert>
-
-              {/* Single button - use regular calendar view */}
-              <Button
-                onClick={() => {
-                  window.open(getCalendarViewLink(createdCalendarId), '_blank');
-                  resetCreateDialog();
-                }}
-                className="w-full"
+            <div className="space-y-3">
+              <label
+                className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-colors hover:bg-gray-50 ${
+                  availabilityType === 'weekly' ? 'border-primary bg-primary/5' : 'border-gray-200'
+                }`}
+                onClick={() => setAvailabilityType('weekly')}
               >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Open in Google Calendar
+                <input
+                  type="radio"
+                  name="availabilityType"
+                  checked={availabilityType === 'weekly'}
+                  onChange={() => setAvailabilityType('weekly')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="flex items-center gap-2 font-medium">
+                    📅 Weekly Schedule
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Hours that repeat every week
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    e.g., "Mon-Fri 9am-5pm"
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-colors hover:bg-gray-50 ${
+                  availabilityType === 'specific' ? 'border-primary bg-primary/5' : 'border-gray-200'
+                }`}
+                onClick={() => setAvailabilityType('specific')}
+              >
+                <input
+                  type="radio"
+                  name="availabilityType"
+                  checked={availabilityType === 'specific'}
+                  onChange={() => setAvailabilityType('specific')}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="flex items-center gap-2 font-medium">
+                    📌 Specific Day/Time
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    One-off availability for a particular date
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    e.g., "Sat Dec 14, 10am-2pm"
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-between pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setCreateStep(selectedType === 'general' ? 'general' : 'specific')}
+              >
+                Back
+              </Button>
+              <Button
+                disabled={!availabilityType}
+                onClick={() => {
+                  if (availabilityType === 'weekly') {
+                    setCreateStep('weekly-setup');
+                  } else {
+                    setCreateStep('specific-setup');
+                  }
+                }}
+              >
+                Continue
               </Button>
             </div>
-          </>
+          </div>
+        )}
+
+        {/* Step: Weekly Schedule Setup */}
+        {createStep === 'weekly-setup' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold">Set your weekly hours</h2>
+            </div>
+
+            {/* Day Selection */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Which days?
+              </label>
+              <div className="flex gap-2">
+                {[
+                  { code: 'MO', label: 'Mon' },
+                  { code: 'TU', label: 'Tue' },
+                  { code: 'WE', label: 'Wed' },
+                  { code: 'TH', label: 'Thu' },
+                  { code: 'FR', label: 'Fri' },
+                  { code: 'SA', label: 'Sat' },
+                  { code: 'SU', label: 'Sun' },
+                ].map((day) => (
+                  <label
+                    key={day.code}
+                    className={`flex flex-col items-center justify-center w-12 h-14 rounded-lg border-2 cursor-pointer transition-all text-center ${
+                      availabilityDays.includes(day.code)
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={availabilityDays.includes(day.code)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setAvailabilityDays([...availabilityDays, day.code]);
+                        } else {
+                          setAvailabilityDays(availabilityDays.filter(d => d !== day.code));
+                        }
+                      }}
+                      className="sr-only"
+                    />
+                    <span className="text-xs font-medium">{day.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Selection */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Hours
+              </label>
+              <div className="flex items-center gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">From</label>
+                  <select
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="block w-32 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {timeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">To</label>
+                  <select
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="block w-32 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {timeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Break Checkbox */}
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasBreak}
+                  onChange={(e) => setHasBreak(e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm">I have a break (e.g., lunch)</span>
+              </label>
+
+              {hasBreak && (
+                <div className="mt-3 ml-6 flex items-center gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Break from</label>
+                    <select
+                      value={breakStartTime}
+                      onChange={(e) => setBreakStartTime(e.target.value)}
+                      className="block w-28 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {timeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">to</label>
+                    <select
+                      value={breakEndTime}
+                      onChange={(e) => setBreakEndTime(e.target.value)}
+                      className="block w-28 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {timeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Recurrence End */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Runs until
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="recurrenceEnd"
+                    checked={isOngoing}
+                    onChange={() => setIsOngoing(true)}
+                    className="text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm">Ongoing (no end date)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="recurrenceEnd"
+                    checked={!isOngoing}
+                    onChange={() => setIsOngoing(false)}
+                    className="text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm">Until:</span>
+                  {!isOngoing && (
+                    <input
+                      type="date"
+                      value={endRecurrenceDate?.toISOString().split('T')[0] || ''}
+                      onChange={(e) => setEndRecurrenceDate(new Date(e.target.value))}
+                      className="rounded-md border border-input bg-background px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 You can change this anytime in Google Calendar
+              </p>
+            </div>
+
+            <div className="flex justify-between pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setCreateStep('availability-type')}
+              >
+                Back
+              </Button>
+              <Button
+                disabled={availabilityDays.length === 0}
+                onClick={() => setCreateStep('add-blocks')}
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Specific Date Setup */}
+        {createStep === 'specific-setup' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold">Set your availability</h2>
+            </div>
+
+            {/* Date Selection */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Which date?
+              </label>
+              <input
+                type="date"
+                value={specificDate?.toISOString().split('T')[0] || ''}
+                onChange={(e) => setSpecificDate(new Date(e.target.value))}
+                min={new Date().toISOString().split('T')[0]}
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            {/* Time Selection */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Hours
+              </label>
+              <div className="flex items-center gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">From</label>
+                  <select
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="block w-32 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {timeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">To</label>
+                  <select
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="block w-32 mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {timeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setCreateStep('availability-type')}
+              >
+                Back
+              </Button>
+              <Button
+                disabled={!specificDate}
+                onClick={() => setCreateStep('add-blocks')}
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Add Blocks to Calendar */}
+        {createStep === 'add-blocks' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold">Add to Google Calendar</h2>
+              <p className="text-muted-foreground mt-1">
+                Your availability is ready to add to "{calendarName}" calendar.
+              </p>
+              <p className="text-muted-foreground mt-1">
+                Click Add, then click <strong>Save</strong> in Google Calendar.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {buildAvailabilityBlocks().map((block) => {
+                const isAdded = addedBlocks.has(block.id);
+                const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                const calendarViewUrl = getCalendarWeekViewUrl(
+                  block.specificDate || new Date()
+                );
+
+                return (
+                  <div
+                    key={block.id}
+                    className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 font-medium">
+                        {block.id === 'morning' && '☀️'}
+                        {block.id === 'afternoon' && '🌤️'}
+                        {block.id === 'main' && '📅'}
+                        {block.id === 'specific' && '📌'}
+                        {' '}
+                        {block.id === 'morning' ? 'Morning' :
+                         block.id === 'afternoon' ? 'Afternoon' :
+                         block.title}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {block.isRecurring
+                          ? `Every ${formatDaysForDisplay(block.days)}`
+                          : block.specificDate?.toLocaleDateString()
+                        }
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                      </p>
+                    </div>
+
+                    {isAdded ? (
+                      <span className="text-green-600 font-medium flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" /> Added
+                      </span>
+                    ) : (
+                      <a
+                        href={calendarViewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          openEventPopup(eventUrl);
+                          setAddedBlocks(new Set([...addedBlocks, block.id]));
+                        }}
+                        className="inline-flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                      >
+                        Add →
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-between pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (availabilityType === 'weekly') {
+                    setCreateStep('weekly-setup');
+                  } else {
+                    setCreateStep('specific-setup');
+                  }
+                }}
+              >
+                Back
+              </Button>
+              <Button
+                onClick={() => setCreateStep('congrats')}
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Congratulations */}
+        {createStep === 'congrats' && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-4xl mb-4">🎉</div>
+              <h2 className="text-xl font-semibold">Congratulations!</h2>
+              <p className="text-muted-foreground mt-1">
+                You've set up availability for "{calendarName}"!
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm font-medium text-foreground mb-2">
+                Customers can now book your services during:
+              </p>
+              <div className="space-y-1">
+                {buildAvailabilityBlocks().map((block) => (
+                  <div key={block.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                    {block.id === 'morning' && '☀️'}
+                    {block.id === 'afternoon' && '🌤️'}
+                    {block.id === 'main' && '📅'}
+                    {block.id === 'specific' && '📌'}
+                    <span>
+                      {block.isRecurring
+                        ? formatDaysForDisplay(block.days)
+                        : block.specificDate?.toLocaleDateString()
+                      }
+                      {' '}
+                      {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Now you know how it works!</strong> You can add or change availability
+                directly in Google Calendar anytime. Just select "{calendarName}" as the calendar.
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex justify-center pt-4">
+              <Button
+                onClick={resetCreateDialog}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
         )}
       </DialogContent>
     </Dialog>
