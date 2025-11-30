@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical } from 'lucide-react';
+import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink } from '@/lib/calendar-links';
 import {
@@ -49,29 +49,11 @@ import {
   generateTimeOptions,
   formatDaysForDisplay,
   formatTimeForDisplay,
-  checkForNewEvents
+  checkForNewEvents,
+  getCalendarEmbedUrl,
+  getSmartCalendarView,
+  parseTimeToHour
 } from '@/lib/google-calendar-url';
-
-// Greyscale calendar SVG for Option A guidance zone
-const CalendarPlaceholderSVG = () => (
-  <svg
-    className="w-32 h-32 text-gray-300"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1"
-  >
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-    <line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/>
-    <line x1="3" y1="10" x2="21" y2="10"/>
-    <rect x="6" y="13" width="3" height="3" fill="currentColor" opacity="0.3"/>
-    <rect x="10.5" y="13" width="3" height="3" fill="currentColor" opacity="0.3"/>
-    <rect x="15" y="13" width="3" height="3" fill="currentColor" opacity="0.3"/>
-    <rect x="6" y="17" width="3" height="3" fill="currentColor" opacity="0.3"/>
-    <rect x="10.5" y="17" width="3" height="3" fill="currentColor" opacity="0.3"/>
-  </svg>
-);
 
 export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [store, setStore] = useState<any>(null);
@@ -129,11 +111,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Weekly start date
   const [weeklyStartDate, setWeeklyStartDate] = useState<Date>(() => new Date());
 
-  // Layout mode for add-blocks step (A/B/C testing)
-  const [layoutMode, setLayoutMode] = useState<'split' | 'embed' | 'sidebar'>('embed');
-
   // Calendar refresh key - increment to force iframe reload
   const [calendarKey, setCalendarKey] = useState(0);
+
+  // View mode for calendar embed
+  const [calendarViewMode, setCalendarViewMode] = useState<'WEEK' | 'MONTH' | 'AGENDA'>('WEEK');
+
+  // Current step in the add availability flow
+  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'waiting-save' | 'success'>('choose-type');
+
+  // Track which availability type was selected (for form step)
+  const [selectedAvailabilityType, setSelectedAvailabilityType] = useState<'weekly' | 'specific' | null>(null);
+
+  // Duplicate calendar name check
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const [duplicateExists, setDuplicateExists] = useState(false);
+
+  // Get session for API calls
+  const [session, setSession] = useState<any>(null);
 
   // Time options for dropdowns
   const timeOptions = generateTimeOptions();
@@ -141,6 +136,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   useEffect(() => {
     loadStore();
   }, [storeId]);
+
+  // Get session for API calls
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+  }, []);
 
   // Load schedule slots when calendar mappings change
   useEffect(() => {
@@ -239,6 +241,42 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       }
     } catch (error) {
       console.error('Failed to load services:', error);
+    }
+  }
+
+  // Check for duplicate calendar name
+  async function checkDuplicateCalendarName(name: string) {
+    if (!name.trim()) {
+      setDuplicateExists(false);
+      return;
+    }
+
+    setIsCheckingDuplicate(true);
+    try {
+      // Call edge function to list calendars and check for duplicate
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/link-calendar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'list',
+          storeId: store?.id,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.calendars) {
+        const exists = data.calendars.some(
+          (cal: any) => cal.summary.toLowerCase() === name.trim().toLowerCase()
+        );
+        setDuplicateExists(exists);
+      }
+    } catch (error) {
+      console.error('Error checking duplicate:', error);
+    } finally {
+      setIsCheckingDuplicate(false);
     }
   }
 
@@ -397,7 +435,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
       // Success!
       setCreatedCalendarId(data.calendarId);
-      setCreateStep('availability-type');
+      setCreateStep('add-blocks');
+      setAvailabilityStep('choose-type');  // Start at choose type step
 
       // Reload store to show new mapping
       await loadStore();
@@ -498,32 +537,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     return blocks;
   };
 
-  // Generate Google Calendar embed URL with smart date
-  const getCalendarEmbedUrl = (calendarId: string, startDate?: Date) => {
-    const formatDateForUrl = (d: Date) => d.toISOString().split('T')[0].replace(/-/g, '');
-
-    // Default to today if no date provided
-    const start = startDate || new Date();
-
-    // Get end date (7 days later for week view)
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-
-    const params = new URLSearchParams({
-      src: calendarId,
-      mode: 'WEEK',
-      showTitle: '0',
-      showNav: '1',
-      showPrint: '0',
-      showTabs: '0',
-      showCalendars: '0',
-      ctz: 'Asia/Hong_Kong',
-      dates: `${formatDateForUrl(start)}/${formatDateForUrl(end)}`
-    });
-
-    return `https://calendar.google.com/calendar/embed?${params.toString()}`;
-  };
-
   // Stop polling
   const stopPolling = () => {
     if (pollingIntervalRef.current) {
@@ -561,8 +574,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           stopPolling();
           setPollingStatus('found');
           setAddedBlocks(prev => new Set([...prev, blockId]));
+
+          // Calculate smart view based on the event that was just added
+          const eventStartHour = parseTimeToHour(startTime);
+          const eventEndHour = parseTimeToHour(endTime);
+          const eventDate = selectedAvailabilityType === 'specific'
+            ? specificDate
+            : weeklyStartDate || new Date();
+
+          if (eventDate) {
+            const smartView = getSmartCalendarView(eventStartHour, eventEndHour, eventDate);
+            setCalendarViewMode(smartView.mode);
+          }
+
           // Force calendar iframe to reload by changing key
           setCalendarKey(prev => prev + 1);
+
+          // Move to success step
+          setAvailabilityStep('success');
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -597,11 +626,28 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setEndRecurrenceDate(undefined);
     setAddedBlocks(new Set());
     setWeeklyStartDate(new Date());
+    // Reset new flow state
+    setSelectedAvailabilityType(null);
+    setAvailabilityStep('choose-type');
+    setCalendarViewMode('WEEK');
     // Cleanup polling
     stopPolling();
     setPollingBlockId(null);
     setPollStartTime(null);
     setPollingStatus('idle');
+  };
+
+  // Handle "Add Another" from success state
+  const handleAddAnother = () => {
+    setSelectedAvailabilityType(null);
+    setAvailabilityDays(['MO', 'TU', 'WE', 'TH', 'FR']);
+    setStartTime('09:00');
+    setEndTime('17:00');
+    setHasBreak(false);
+    setBreakStartTime('12:00');
+    setBreakEndTime('13:00');
+    setSpecificDate(undefined);
+    setAvailabilityStep('choose-type');
   };
 
   // Reset dialog state
@@ -613,6 +659,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setSelectedServices([]);
     setCreatedCalendarId('');
     setCreatingCalendar(false);
+    setDuplicateExists(false);
     resetAvailabilityState();
   };
 
@@ -1075,12 +1122,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </label>
                 <Input
                   value={calendarName}
-                  onChange={(e) => setCalendarName(e.target.value)}
+                  onChange={(e) => {
+                    setCalendarName(e.target.value);
+                    setDuplicateExists(false);
+                  }}
+                  onBlur={(e) => checkDuplicateCalendarName(e.target.value)}
                   placeholder="e.g., Store Hours"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Name this availability schedule
-                </p>
+                {duplicateExists && (
+                  <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-4 w-4" />
+                    A calendar with this name already exists
+                  </p>
+                )}
+                {!duplicateExists && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Name this availability schedule
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1146,15 +1205,17 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </Button>
               <Button
                 onClick={handleCreateCalendar}
-                disabled={creatingCalendar || selectedServices.length === 0 || !calendarName.trim()}
+                disabled={creatingCalendar || selectedServices.length === 0 || !calendarName.trim() || duplicateExists || isCheckingDuplicate}
               >
                 {creatingCalendar ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Creating...
                   </>
+                ) : isCheckingDuplicate ? (
+                  'Checking...'
                 ) : (
-                  'Create Calendar'
+                  'Create'
                 )}
               </Button>
             </div>
@@ -1180,12 +1241,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </label>
                 <Input
                   value={calendarName}
-                  onChange={(e) => setCalendarName(e.target.value)}
+                  onChange={(e) => {
+                    setCalendarName(e.target.value);
+                    setDuplicateExists(false);
+                  }}
+                  onBlur={(e) => checkDuplicateCalendarName(e.target.value)}
                   placeholder="e.g., Weekend Classes"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Name this availability schedule
-                </p>
+                {duplicateExists && (
+                  <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-4 w-4" />
+                    A calendar with this name already exists
+                  </p>
+                )}
+                {!duplicateExists && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Name this availability schedule
+                  </p>
+                )}
               </div>
 
               {/* SECOND: Select Services */}
@@ -1261,15 +1334,17 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </Button>
               <Button
                 onClick={handleCreateCalendar}
-                disabled={creatingCalendar || selectedServices.length === 0 || !calendarName.trim()}
+                disabled={creatingCalendar || selectedServices.length === 0 || !calendarName.trim() || duplicateExists || isCheckingDuplicate}
               >
                 {creatingCalendar ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Creating...
                   </>
+                ) : isCheckingDuplicate ? (
+                  'Checking...'
                 ) : (
-                  'Create Calendar'
+                  'Create'
                 )}
               </Button>
             </div>
@@ -1769,351 +1844,374 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       </DialogContent>
     </Dialog>
 
-      {/* Add Blocks Step - Fullscreen Layouts (Outside Dialog) */}
+      {/* Fullscreen Calendar View - Shows after calendar is created */}
       {createStep === 'add-blocks' && (
-        <>
-          {/* Layout Toggle - Temporary for testing */}
-          <div className="fixed top-4 right-4 z-[100] flex gap-2 bg-white p-2 rounded-lg shadow-lg border">
-            <span className="text-sm font-medium mr-2">Layout:</span>
-            <Button
-              size="sm"
-              variant={layoutMode === 'split' ? 'default' : 'outline'}
-              onClick={() => setLayoutMode('split')}
-            >
-              A
-            </Button>
-            <Button
-              size="sm"
-              variant={layoutMode === 'embed' ? 'default' : 'outline'}
-              onClick={() => setLayoutMode('embed')}
-            >
-              B
-            </Button>
-            <Button
-              size="sm"
-              variant={layoutMode === 'sidebar' ? 'default' : 'outline'}
-              onClick={() => setLayoutMode('sidebar')}
-            >
-              C
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          {/* Top Header Bar */}
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
+            <h1 className="text-lg font-semibold truncate">{calendarName}</h1>
+            <Button onClick={() => {
+              setCreateDialogOpen(false);
+              setCreateStep('choice');
+              resetCreateDialog();
+            }}>
+              Done ✓
             </Button>
           </div>
 
-          {/* Option A: Split Screen */}
-          {layoutMode === 'split' && (
-            <div className="fixed inset-0 z-50 flex">
-              {/* Left Half - Our Content */}
-              <div className="w-1/2 bg-white p-8 overflow-y-auto border-r">
-                <div className="max-w-md mx-auto space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-semibold">Add Your Availability</h2>
-                    <p className="text-muted-foreground mt-2">
-                      Click "Add" to open the event form on the right. Fill it in and click Save.
+          {/* Main Content Area */}
+          <div className="flex-1 relative">
+
+            {/* Calendar Embed - Full width, no border */}
+            <iframe
+              key={calendarKey}
+              src={getCalendarEmbedUrl(
+                createdCalendarId,
+                selectedAvailabilityType === 'specific' ? specificDate : weeklyStartDate,
+                calendarViewMode
+              )}
+              className="w-full h-full"
+              style={{ border: 'none' }}
+              frameBorder="0"
+            />
+
+            {/* Floating Controls - Only show in success state */}
+            {availabilityStep === 'success' && (
+              <>
+                {/* Top-left: Add Availability Button */}
+                <div className="absolute top-4 left-4">
+                  <Button
+                    onClick={handleAddAnother}
+                    className="shadow-lg"
+                  >
+                    + Add Availability
+                  </Button>
+                </div>
+
+                {/* Top-right: View Mode Dropdown */}
+                <div className="absolute top-4 right-4">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="shadow-lg">
+                        {calendarViewMode === 'WEEK' && 'Week'}
+                        {calendarViewMode === 'MONTH' && 'Month'}
+                        {calendarViewMode === 'AGENDA' && 'Agenda'}
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
+                        Week
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
+                        Month
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
+                        Agenda
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Bottom Tip */}
+                <div className="absolute bottom-4 left-4 right-4">
+                  <div className="bg-white/90 backdrop-blur rounded-lg px-4 py-3 shadow-lg border">
+                    <p className="text-sm text-muted-foreground">
+                      💡 You can also add availability directly in Google Calendar.
+                      Create an event and select "<strong>{calendarName}</strong>" as the calendar.
                     </p>
                   </div>
-
-                  {/* Block Cards */}
-                  <div className="space-y-3">
-                    {buildAvailabilityBlocks().map((block) => {
-                      const isAdded = addedBlocks.has(block.id);
-                      const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-
-                      return (
-                        <div
-                          key={block.id}
-                          className="flex items-center justify-between p-4 rounded-lg border bg-gray-50"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2 font-medium">
-                              {block.id === 'morning' && '☀️ Morning'}
-                              {block.id === 'afternoon' && '🌤️ Afternoon'}
-                              {block.id === 'main' && '📅 Available'}
-                              {block.id === 'specific' && '📌 Available'}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {block.isRecurring
-                                ? `Every ${formatDaysForDisplay(block.days)}`
-                                : block.specificDate?.toLocaleDateString()
-                              }
-                              {' • '}
-                              {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                            </p>
-                          </div>
-
-                          {isAdded ? (
-                            <span className="text-green-600 font-medium flex items-center gap-1">
-                              <CheckCircle className="h-4 w-4" />
-                              Added!
-                            </span>
-                          ) : (
-                            <Button
-                              onClick={() => {
-                                openEventPopup(eventUrl);
-                                startPolling(block.id);
-                              }}
-                            >
-                              Add →
-                            </Button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Continue Button */}
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        stopPolling();
-                        setCreateStep(availabilityType === 'weekly' ? 'weekly-setup' : 'specific-setup');
-                      }}
-                    >
-                      Back
-                    </Button>
-                    <Button onClick={() => {
-                      stopPolling();
-                      setCreateStep('congrats');
-                    }}>
-                      Continue
-                    </Button>
-                  </div>
                 </div>
-              </div>
+              </>
+            )}
 
-              {/* Right Half - Guidance Zone */}
-              <div className="w-1/2 bg-gray-50 flex flex-col items-center justify-center p-8">
-                <CalendarPlaceholderSVG />
-                <h3 className="text-xl font-medium text-gray-400 mt-6">
-                  We'll set up your calendar here
-                </h3>
-                <p className="text-gray-400 mt-2 text-center max-w-sm">
-                  Click "Add" on the left to open the event form.
-                  It will appear in this area.
-                </p>
-                <div className="mt-8 flex items-center gap-2 text-gray-400">
-                  <span>←</span>
-                  <span className="text-sm">Click Add to begin</span>
-                </div>
-              </div>
-            </div>
-          )}
+            {/* Modal Overlay for Steps */}
+            {availabilityStep !== 'success' && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
 
-          {/* Option B: Big Modal with Large Calendar Embed */}
-          {layoutMode === 'embed' && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div className="bg-white rounded-lg shadow-xl w-[90vw] max-w-6xl h-[85vh] flex flex-col">
-                {/* Header */}
-                <div className="p-4 border-b">
-                  <h2 className="text-xl font-semibold">Add Your Availability</h2>
-                  <p className="text-muted-foreground text-sm">
-                    Click "Add" to open the event form. Your events will appear in the calendar.
-                  </p>
-                </div>
+                {/* Step: Choose Type */}
+                {availabilityStep === 'choose-type' && (
+                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                    <h2 className="text-xl font-semibold mb-2">
+                      Let's add your first availability block
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                      This tells customers when your services are open to book.
+                    </p>
 
-                {/* Content - Split */}
-                <div className="flex-1 flex overflow-hidden">
-                  {/* Left - Block Cards */}
-                  <div className="w-[280px] border-r p-4 overflow-y-auto">
                     <div className="space-y-3">
-                      {buildAvailabilityBlocks().map((block) => {
-                        const isAdded = addedBlocks.has(block.id);
-                        const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-
-                        return (
-                          <div
-                            key={block.id}
-                            className="p-3 rounded-lg border bg-gray-50"
-                          >
-                            <div className="flex items-center gap-2 font-medium text-sm">
-                              {block.id === 'morning' && '☀️'}
-                              {block.id === 'afternoon' && '🌤️'}
-                              {block.id === 'main' && '📅'}
-                              {block.id === 'specific' && '📌'}
-                              {block.id === 'morning' ? 'Morning' :
-                               block.id === 'afternoon' ? 'Afternoon' : 'Available'}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {block.isRecurring
-                                ? formatDaysForDisplay(block.days)
-                                : block.specificDate?.toLocaleDateString()
-                              }
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                            </p>
-
-                            <div className="mt-2">
-                              {isAdded ? (
-                                <span className="text-green-600 font-medium text-sm flex items-center gap-1">
-                                  <CheckCircle className="h-3 w-3" />
-                                  Added!
-                                </span>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  className="w-full"
-                                  onClick={() => {
-                                    openEventPopup(eventUrl);
-                                    startPolling(block.id);
-                                  }}
-                                >
-                                  Add →
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Buttons */}
-                    <div className="mt-4 space-y-2">
-                      <Button
-                        className="w-full"
+                      {/* Weekly Option */}
+                      <button
                         onClick={() => {
-                          stopPolling();
-                          setCreateStep('congrats');
+                          setSelectedAvailabilityType('weekly');
+                          setAvailabilityType('weekly');
+                          setAvailabilityStep('set-availability');
                         }}
+                        className="w-full p-4 rounded-lg border-2 border-gray-200 hover:border-primary hover:bg-primary/5 transition-all text-left"
                       >
-                        Continue
-                      </Button>
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">📅</span>
+                          <div>
+                            <p className="font-medium">Weekly Schedule</p>
+                            <p className="text-sm text-muted-foreground">
+                              Hours that repeat every week
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              e.g., "Mon-Fri 9am-5pm"
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Specific Option */}
+                      <button
+                        onClick={() => {
+                          setSelectedAvailabilityType('specific');
+                          setAvailabilityType('specific');
+                          setAvailabilityStep('set-availability');
+                        }}
+                        className="w-full p-4 rounded-lg border-2 border-gray-200 hover:border-primary hover:bg-primary/5 transition-all text-left"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">📌</span>
+                          <div>
+                            <p className="font-medium">Specific Day/Time</p>
+                            <p className="text-sm text-muted-foreground">
+                              One-off availability for a particular date
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              e.g., "Sat Dec 14, 10am-2pm"
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step: Set Availability */}
+                {availabilityStep === 'set-availability' && (
+                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                    <h2 className="text-xl font-semibold mb-4">
+                      Set your availability
+                    </h2>
+
+                    {/* Weekly Form */}
+                    {selectedAvailabilityType === 'weekly' && (
+                      <div className="space-y-4">
+                        {/* Days Selection */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Which days?</label>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { code: 'MO', label: 'Mon' },
+                              { code: 'TU', label: 'Tue' },
+                              { code: 'WE', label: 'Wed' },
+                              { code: 'TH', label: 'Thu' },
+                              { code: 'FR', label: 'Fri' },
+                              { code: 'SA', label: 'Sat' },
+                              { code: 'SU', label: 'Sun' },
+                            ].map((day) => (
+                              <button
+                                key={day.code}
+                                onClick={() => {
+                                  setAvailabilityDays(prev =>
+                                    prev.includes(day.code)
+                                      ? prev.filter(d => d !== day.code)
+                                      : [...prev, day.code]
+                                  );
+                                }}
+                                className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                                  availabilityDays.includes(day.code)
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-white border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                {day.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time Selection */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">What time?</label>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={startTime}
+                              onChange={(e) => setStartTime(e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                              {timeOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                            <span className="text-muted-foreground">to</span>
+                            <select
+                              value={endTime}
+                              onChange={(e) => setEndTime(e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                              {timeOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Break Option */}
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="hasBreak-modal"
+                            checked={hasBreak}
+                            onChange={(e) => setHasBreak(e.target.checked)}
+                          >
+                            I have a break
+                          </Checkbox>
+                        </div>
+
+                        {hasBreak && (
+                          <div className="flex items-center gap-2 pl-6">
+                            <select
+                              value={breakStartTime}
+                              onChange={(e) => setBreakStartTime(e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                              {timeOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                            <span className="text-muted-foreground">to</span>
+                            <select
+                              value={breakEndTime}
+                              onChange={(e) => setBreakEndTime(e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                              {timeOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Starting Date */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Starting from</label>
+                          <input
+                            type="date"
+                            value={weeklyStartDate ? weeklyStartDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                            onChange={(e) => setWeeklyStartDate(e.target.value ? new Date(e.target.value) : new Date())}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-auto max-w-[160px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Specific Date Form */}
+                    {selectedAvailabilityType === 'specific' && (
+                      <div className="space-y-4">
+                        {/* Date Selection */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Which date?</label>
+                          <input
+                            type="date"
+                            value={specificDate ? specificDate.toISOString().split('T')[0] : ''}
+                            onChange={(e) => setSpecificDate(e.target.value ? new Date(e.target.value) : undefined)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-auto max-w-[160px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </div>
+
+                        {/* Time Selection */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">What time?</label>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={startTime}
+                              onChange={(e) => setStartTime(e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                              {timeOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                            <span className="text-muted-foreground">to</span>
+                            <select
+                              value={endTime}
+                              onChange={(e) => setEndTime(e.target.value)}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            >
+                              {timeOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 mt-6">
                       <Button
                         variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          stopPolling();
-                          setCreateStep(availabilityType === 'weekly' ? 'weekly-setup' : 'specific-setup');
-                        }}
+                        onClick={() => setAvailabilityStep('choose-type')}
                       >
                         Back
                       </Button>
-                    </div>
-                  </div>
-
-                  {/* Right - Calendar Embed */}
-                  <div className="flex-1 p-4">
-                    <div className="h-full rounded-lg border overflow-hidden">
-                      <iframe
-                        key={calendarKey}
-                        src={getCalendarEmbedUrl(
-                          createdCalendarId,
-                          availabilityType === 'specific' ? specificDate : weeklyStartDate
-                        )}
-                        style={{ border: 0 }}
-                        width="100%"
-                        height="100%"
-                        frameBorder="0"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Option C: Fullscreen with Sidebar */}
-          {layoutMode === 'sidebar' && (
-            <div className="fixed inset-0 z-50 flex bg-gray-100">
-              {/* Left Sidebar */}
-              <div className="w-[240px] bg-white border-r p-4 flex flex-col">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold">Add Availability</h2>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Click Add, then Save in Google Calendar
-                  </p>
-                </div>
-
-                {/* Block Cards */}
-                <div className="flex-1 space-y-2 overflow-y-auto">
-                  {buildAvailabilityBlocks().map((block) => {
-                    const isAdded = addedBlocks.has(block.id);
-                    const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-
-                    return (
-                      <div
-                        key={block.id}
-                        className="p-3 rounded-lg border bg-gray-50"
+                      <Button
+                        className="flex-1"
+                        disabled={selectedAvailabilityType === 'specific' && !specificDate}
+                        onClick={() => {
+                          // Build the availability block and open popup
+                          const blocks = buildAvailabilityBlocks();
+                          if (blocks.length > 0) {
+                            const block = blocks[0];
+                            const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                            openEventPopup(eventUrl);
+                            startPolling(block.id);
+                            setAvailabilityStep('waiting-save');
+                          }
+                        }}
                       >
-                        <div className="flex items-center gap-2 font-medium text-sm">
-                          {block.id === 'morning' && '☀️'}
-                          {block.id === 'afternoon' && '🌤️'}
-                          {block.id === 'main' && '📅'}
-                          {block.id === 'specific' && '📌'}
-                          {block.id === 'morning' ? 'Morn' :
-                           block.id === 'afternoon' ? 'Aftn' : 'Avail'}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                        </p>
+                        Add to Calendar →
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
-                        <div className="mt-2">
-                          {isAdded ? (
-                            <span className="text-green-600 font-medium text-xs flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3" />
-                              Added!
-                            </span>
-                          ) : (
-                            <Button
-                              size="sm"
-                              className="w-full h-7 text-xs"
-                              onClick={() => {
-                                openEventPopup(eventUrl);
-                                startPolling(block.id);
-                              }}
-                            >
-                              Add →
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* Step: Waiting for Save */}
+                {availabilityStep === 'waiting-save' && (
+                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-center">
+                    <div className="text-4xl mb-4">👉</div>
+                    <h2 className="text-xl font-semibold mb-2">
+                      A popup has appeared with your availability block prefilled
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                      Just click <strong>Save</strong> in the popup to add it!
+                    </p>
 
-                {/* Buttons */}
-                <div className="mt-4 space-y-2">
-                  <Button
-                    className="w-full"
-                    onClick={() => {
-                      stopPolling();
-                      setCreateStep('congrats');
-                    }}
-                  >
-                    Continue
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => {
-                      stopPolling();
-                      setCreateStep(availabilityType === 'weekly' ? 'weekly-setup' : 'specific-setup');
-                    }}
-                  >
-                    Back
-                  </Button>
-                </div>
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Waiting for you to save...</span>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAvailabilityStep('set-availability')}
+                      >
+                        ← Go back
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
               </div>
-
-              {/* Main - Calendar Embed */}
-              <div className="flex-1 p-4">
-                <div className="h-full rounded-lg border bg-white overflow-hidden shadow-sm">
-                  <iframe
-                    key={calendarKey}
-                    src={getCalendarEmbedUrl(
-                      createdCalendarId,
-                      availabilityType === 'specific' ? specificDate : weeklyStartDate
-                    )}
-                    style={{ border: 0 }}
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Remove Schedule Confirmation Dialog */}
