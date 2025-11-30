@@ -55,8 +55,18 @@ function UserProfileSection({ user }: { user: any }) {
   const handleSignOut = async () => {
     try {
       setLoading(true);
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Sign out error:', error);
+        // Force redirect even on error - user wants to leave
+      }
+      // Clear any cached state and redirect
       navigate('/auth');
+      window.location.href = '/auth';
+    } catch (err) {
+      console.error('Sign out exception:', err);
+      // Force redirect even on exception
+      window.location.href = '/auth';
     } finally {
       setLoading(false);
     }
