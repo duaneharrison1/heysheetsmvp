@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -524,7 +526,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }, 120000);
   };
 
-  // Handle Add button click
+  // Handle Add button click - Strategy A: Current implementation
   const handleAddBlockClick = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
     // Open calendar view FIRST (will be behind)
     window.open(calendarViewUrl, '_blank');
@@ -533,6 +535,44 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     openEventPopup(eventUrl);
 
     // Start polling for this block
+    startPolling(block.id);
+  };
+
+  // Strategy B: Both in setTimeout(0)
+  const handleTestB = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
+    setTimeout(() => {
+      window.open(calendarViewUrl, '_blank');
+      openEventPopup(eventUrl);
+    }, 0);
+    startPolling(block.id);
+  };
+
+  // Strategy C: Reversed order (popup first, calendar second)
+  const handleTestC = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
+    openEventPopup(eventUrl);
+    window.open(calendarViewUrl, '_blank');
+    startPolling(block.id);
+  };
+
+  // Strategy D: Both via <a> links triggered programmatically
+  const handleTestD = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
+    // Create temporary links and click them
+    const calendarLink = document.createElement('a');
+    calendarLink.href = calendarViewUrl;
+    calendarLink.target = '_blank';
+    calendarLink.rel = 'noopener noreferrer';
+    document.body.appendChild(calendarLink);
+    calendarLink.click();
+    document.body.removeChild(calendarLink);
+
+    const eventLink = document.createElement('a');
+    eventLink.href = eventUrl;
+    eventLink.target = '_blank';
+    eventLink.rel = 'noopener noreferrer';
+    document.body.appendChild(eventLink);
+    eventLink.click();
+    document.body.removeChild(eventLink);
+
     startPolling(block.id);
   };
 
@@ -1247,20 +1287,18 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               </p>
             </div>
 
-            <div className="space-y-3">
-              <label
+            <RadioGroup
+              value={availabilityType || ''}
+              onValueChange={(value) => setAvailabilityType(value as 'weekly' | 'specific')}
+              className="space-y-3"
+            >
+              <Label
+                htmlFor="availability-weekly"
                 className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-colors hover:bg-gray-50 ${
                   availabilityType === 'weekly' ? 'border-primary bg-primary/5' : 'border-gray-200'
                 }`}
-                onClick={() => setAvailabilityType('weekly')}
               >
-                <input
-                  type="radio"
-                  name="availabilityType"
-                  checked={availabilityType === 'weekly'}
-                  onChange={() => setAvailabilityType('weekly')}
-                  className="mt-1"
-                />
+                <RadioGroupItem value="weekly" id="availability-weekly" className="mt-1" />
                 <div>
                   <div className="flex items-center gap-2 font-medium">
                     📅 Weekly Schedule
@@ -1272,21 +1310,15 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     e.g., "Mon-Fri 9am-5pm"
                   </p>
                 </div>
-              </label>
+              </Label>
 
-              <label
+              <Label
+                htmlFor="availability-specific"
                 className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-colors hover:bg-gray-50 ${
                   availabilityType === 'specific' ? 'border-primary bg-primary/5' : 'border-gray-200'
                 }`}
-                onClick={() => setAvailabilityType('specific')}
               >
-                <input
-                  type="radio"
-                  name="availabilityType"
-                  checked={availabilityType === 'specific'}
-                  onChange={() => setAvailabilityType('specific')}
-                  className="mt-1"
-                />
+                <RadioGroupItem value="specific" id="availability-specific" className="mt-1" />
                 <div>
                   <div className="flex items-center gap-2 font-medium">
                     📌 Specific Day/Time
@@ -1298,8 +1330,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     e.g., "Sat Dec 14, 10am-2pm"
                   </p>
                 </div>
-              </label>
-            </div>
+              </Label>
+            </RadioGroup>
 
             <div className="flex justify-between pt-4">
               <Button
@@ -1411,15 +1443,16 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Break Checkbox */}
             <div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="hasBreak-weekly"
                   checked={hasBreak}
-                  onChange={(e) => setHasBreak(e.target.checked)}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                  onCheckedChange={(checked) => setHasBreak(checked === true)}
                 />
-                <span className="text-sm">I have a break (e.g., lunch)</span>
-              </label>
+                <Label htmlFor="hasBreak-weekly" className="text-sm cursor-pointer">
+                  I have a break (e.g., lunch)
+                </Label>
+              </div>
 
               {hasBreak && (
                 <div className="mt-3 ml-6 flex items-center gap-3">
@@ -1460,36 +1493,46 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <label className="block text-sm font-medium text-foreground mb-2">
                 Runs until
               </label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="recurrenceEnd"
-                    checked={isOngoing}
-                    onChange={() => setIsOngoing(true)}
-                    className="text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm">Ongoing (no end date)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="recurrenceEnd"
-                    checked={!isOngoing}
-                    onChange={() => setIsOngoing(false)}
-                    className="text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm">Until:</span>
-                  {!isOngoing && (
-                    <input
-                      type="date"
-                      value={endRecurrenceDate?.toISOString().split('T')[0] || ''}
-                      onChange={(e) => setEndRecurrenceDate(new Date(e.target.value))}
-                      className="rounded-md border border-input bg-background px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  )}
-                </label>
-              </div>
+              <RadioGroup
+                value={isOngoing ? 'ongoing' : 'until'}
+                onValueChange={(value) => setIsOngoing(value === 'ongoing')}
+                className="space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="ongoing" id="ongoing" />
+                  <Label htmlFor="ongoing" className="text-sm cursor-pointer">Ongoing (no end date)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="until" id="until" />
+                  <Label htmlFor="until" className="text-sm cursor-pointer">Until specific date</Label>
+                </div>
+              </RadioGroup>
+
+              {!isOngoing && (
+                <div className="mt-3 ml-6">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {endRecurrenceDate ? format(endRecurrenceDate, 'PPP') : 'Pick end date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 z-[60]" align="start" sideOffset={4}>
+                      <CalendarComponent
+                        mode="single"
+                        selected={endRecurrenceDate}
+                        onSelect={setEndRecurrenceDate}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground mt-2">
                 💡 You can change this anytime in Google Calendar
               </p>
@@ -1510,7 +1553,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     {weeklyStartDate ? format(weeklyStartDate, 'PPP') : 'Pick a date'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0 z-[60]" align="start" sideOffset={4}>
                   <CalendarComponent
                     mode="single"
                     selected={weeklyStartDate}
@@ -1564,7 +1607,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     {specificDate ? format(specificDate, 'PPP') : 'Pick a date'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0 z-[60]" align="start" sideOffset={4}>
                   <CalendarComponent
                     mode="single"
                     selected={specificDate}
@@ -1615,15 +1658,16 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Break Checkbox */}
             <div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="hasBreak-specific"
                   checked={hasBreak}
-                  onChange={(e) => setHasBreak(e.target.checked)}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                  onCheckedChange={(checked) => setHasBreak(checked === true)}
                 />
-                <span className="text-sm">I have a break (e.g., lunch)</span>
-              </label>
+                <Label htmlFor="hasBreak-specific" className="text-sm cursor-pointer">
+                  I have a break (e.g., lunch)
+                </Label>
+              </div>
 
               {hasBreak && (
                 <div className="mt-3 ml-6 flex items-center gap-3">
@@ -1692,8 +1736,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             <div className="space-y-3">
               {buildAvailabilityBlocks().map((block) => {
                 const isAdded = addedBlocks.has(block.id);
-                const isPolling = pollingBlockId === block.id && pollingStatus === 'polling';
-                const isTimeout = pollingBlockId === block.id && pollingStatus === 'timeout';
                 const eventUrl = generateEventCreateUrl(block, createdCalendarId);
                 const calendarViewUrl = getCalendarWeekViewUrl(
                   block.specificDate || weeklyStartDate || new Date()
@@ -1731,43 +1773,58 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col items-end gap-2">
                       {isAdded ? (
                         <span className="text-green-600 font-medium flex items-center gap-1">
-                          <CheckCircle className="h-4 w-4" /> Detected!
+                          <CheckCircle className="h-4 w-4" /> Added
                         </span>
-                      ) : isPolling ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-amber-600 text-sm flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Waiting for save...
-                          </span>
-                          <button
-                            onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
-                            className="text-xs text-muted-foreground hover:text-foreground underline"
-                          >
-                            Open again
-                          </button>
-                        </div>
-                      ) : isTimeout ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-amber-600 text-sm flex items-center gap-1">
-                            <AlertCircle className="h-4 w-4" /> Not detected
-                          </span>
-                          <button
-                            onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary/90 transition-colors"
-                          >
-                            Try again →
-                          </button>
-                        </div>
                       ) : (
-                        <button
-                          onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
-                          className="inline-flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                        >
-                          Add →
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
+                            className="inline-flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                          >
+                            Add →
+                          </button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
+                              className="h-6 w-6 p-0 text-xs"
+                              title="Strategy A: Current (calendar first, popup second)"
+                            >
+                              A
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTestB(block, calendarViewUrl, eventUrl)}
+                              className="h-6 w-6 p-0 text-xs"
+                              title="Strategy B: Both in setTimeout(0)"
+                            >
+                              B
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTestC(block, calendarViewUrl, eventUrl)}
+                              className="h-6 w-6 p-0 text-xs"
+                              title="Strategy C: Reversed (popup first, calendar second)"
+                            >
+                              C
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTestD(block, calendarViewUrl, eventUrl)}
+                              className="h-6 w-6 p-0 text-xs"
+                              title="Strategy D: Both via programmatic <a> clicks"
+                            >
+                              D
+                            </Button>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1804,44 +1861,101 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         {/* Step: Congratulations */}
         {createStep === 'congrats' && (
           <div className="space-y-6">
-            <div className="text-center">
-              <div className="text-4xl mb-4">🎉</div>
-              <h2 className="text-xl font-semibold">Congratulations!</h2>
-              <p className="text-muted-foreground mt-1">
-                You've set up availability for "{calendarName}"!
-              </p>
-            </div>
+            {addedBlocks.size > 0 ? (
+              // Events were detected
+              <>
+                <div className="text-center">
+                  <div className="text-4xl mb-4">🎉</div>
+                  <h2 className="text-xl font-semibold">Congratulations!</h2>
+                  <p className="text-muted-foreground mt-1">
+                    You've set up availability for "{calendarName}"!
+                  </p>
+                </div>
 
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm font-medium text-foreground mb-2">
-                Customers can now book your services during:
-              </p>
-              <div className="space-y-2">
-                {buildAvailabilityBlocks().map((block) => (
-                  <div key={block.id} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="mt-0.5">
-                      {block.id === 'morning' && '☀️'}
-                      {block.id === 'afternoon' && '🌤️'}
-                      {block.id === 'main' && '📅'}
-                      {block.id === 'specific' && '📌'}
-                    </span>
-                    <div>
-                      <span>
-                        {block.isRecurring
-                          ? formatDaysForDisplay(block.days)
-                          : block.specificDate?.toLocaleDateString()
-                        }
-                        {' '}
-                        {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                      </span>
-                      {block.isRecurring && block.specificDate && (
-                        <p className="text-xs">Starting from {format(block.specificDate, 'PPP')}</p>
-                      )}
-                    </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-foreground mb-2">
+                    Customers can now book your services during:
+                  </p>
+                  <div className="space-y-2">
+                    {buildAvailabilityBlocks().map((block) => (
+                      <div key={block.id} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="mt-0.5">
+                          {block.id === 'morning' && '☀️'}
+                          {block.id === 'afternoon' && '🌤️'}
+                          {block.id === 'main' && '📅'}
+                          {block.id === 'specific' && '📌'}
+                        </span>
+                        <div>
+                          <span>
+                            {block.isRecurring
+                              ? formatDaysForDisplay(block.days)
+                              : block.specificDate?.toLocaleDateString()
+                            }
+                            {' '}
+                            {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                          </span>
+                          {block.isRecurring && block.specificDate && (
+                            <p className="text-xs">Starting from {format(block.specificDate, 'PPP')}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              </>
+            ) : (
+              // No events detected
+              <>
+                <div className="text-center">
+                  <div className="text-4xl mb-4">📅</div>
+                  <h2 className="text-xl font-semibold">Calendar Created!</h2>
+                  <p className="text-muted-foreground mt-1">
+                    "{calendarName}" is ready for availability events.
+                  </p>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-amber-800 mb-2">
+                    Don't forget to add your availability
+                  </p>
+                  <p className="text-sm text-amber-700">
+                    Go back and click "Add" to open Google Calendar and save your availability blocks.
+                    Or add events directly in Google Calendar anytime.
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm font-medium text-foreground mb-2">
+                    Your configured schedule:
+                  </p>
+                  <div className="space-y-2">
+                    {buildAvailabilityBlocks().map((block) => (
+                      <div key={block.id} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="mt-0.5">
+                          {block.id === 'morning' && '☀️'}
+                          {block.id === 'afternoon' && '🌤️'}
+                          {block.id === 'main' && '📅'}
+                          {block.id === 'specific' && '📌'}
+                        </span>
+                        <div>
+                          <span>
+                            {block.isRecurring
+                              ? formatDaysForDisplay(block.days)
+                              : block.specificDate?.toLocaleDateString()
+                            }
+                            {' '}
+                            {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                          </span>
+                          {block.isRecurring && block.specificDate && (
+                            <p className="text-xs">Starting from {format(block.specificDate, 'PPP')}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             <Alert>
               <Info className="h-4 w-4" />
