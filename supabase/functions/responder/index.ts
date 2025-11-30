@@ -10,11 +10,13 @@ export interface ResponderResult {
   usage: { input: number; output: number };
 }
 
+// Added model parameter to allow user selection of AI model
 export async function generateResponse(
   messages: Message[],
   classification: Classification,
   functionResult?: FunctionResult,
-  store?: StoreConfig
+  store?: StoreConfig,
+  model?: string  // User-selected model, defaults to Grok
 ): Promise<ResponderResult> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
@@ -111,7 +113,8 @@ RESPOND WITH JSON ONLY:`;
       'X-Title': 'HeySheets MVP'
     },
     body: JSON.stringify({
-      model: 'anthropic/claude-3.5-sonnet',
+      // Use user-selected model or default to Grok for cost-effectiveness
+      model: model || 'x-ai/grok-4.1-fast',
       messages: [{ role: 'user', content: responsePrompt }],
       max_tokens: 600,
       temperature: 0.7 // Higher temperature for more natural, varied responses

@@ -19,6 +19,12 @@ import {
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
+// Test scenarios modal - shown when debug panel is open
+import { ScenariosModal } from "@/components/qa/ScenariosModal";
+// Test runner for executing QA scenarios
+import { TestRunner } from "@/qa/lib/test-runner";
+import type { TestScenario, GoalBasedTurnResult, TestStepResult } from "@/qa/lib/types";
+import { isGoalBasedScenario } from "@/qa/lib/types";
 
 interface Message {
   id: string;
@@ -85,6 +91,10 @@ export default function StorePage() {
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
   const [currentTaskStep, setCurrentTaskStep] = useState(0); // Track which task step is active (0, 1, 2)
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // State for test scenarios modal
+  const [showScenariosModal, setShowScenariosModal] = useState(false);
+  // Test runner instance for executing QA scenarios
+  const [testRunner] = useState(() => new TestRunner());
 
   // Initial quick actions shown when chat first loads
   const initialQuickActions = [
@@ -99,6 +109,8 @@ export default function StorePage() {
   const updateRequest = useDebugStore((state) => state.updateRequest);
   const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
+  // Check if debug panel is open to show test scenarios option
+  const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
 
   useEffect(() => {
     if (storeId) {
@@ -326,6 +338,12 @@ export default function StorePage() {
               if (leadFormComp && leadFormComp.props) {
                 return { type: 'lead_form', data: leadFormComp.props };
               }
+
+              // BookingCalendar component - renders date/time picker for service bookings
+              const bookingCalendarComp = fr.components.find((c: any) => c.type === 'BookingCalendar' || c.type === 'booking_calendar');
+              if (bookingCalendarComp && bookingCalendarComp.props) {
+                return { type: 'BookingCalendar', data: bookingCalendarComp.props };
+              }
             }
             // Fallback: if functionResult.data.hours exists
             if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {
@@ -425,6 +443,123 @@ export default function StorePage() {
       role: m.type === 'user' ? 'user' : 'assistant',
       content: m.content
     }));
+  };
+
+  // Handles running a selected test scenario using the TestRunner
+  const handleRunScenario = async (scenario: TestScenario) => {
+    if (!storeId) return;
+
+    // Clear existing messages for fresh test
+    setMessages([{
+      id: 'scenario-start',
+      type: 'bot',
+      content: `🧪 Starting test: **${scenario.name}**\n\n${scenario.description || ''}`,
+      timestamp: new Date()
+    }]);
+
+    // Clear suggestions during test
+    setCurrentSuggestions([]);
+
+    try {
+      // Run the scenario using TestRunner - handles both scripted and goal-based
+      const execution = await testRunner.runScenario(
+        scenario,
+        storeId,
+        selectedModel,  // Chat model
+        selectedModel,  // Evaluator model (same for now)
+        // Callback for scripted scenario step completion
+        (result: TestStepResult) => {
+          // Add bot response to chat
+          setMessages(prev => [...prev, {
+            id: `test-bot-${result.stepIndex}`,
+            type: 'bot',
+            content: result.botResponse,
+            timestamp: new Date(),
+            richContent: result.richContent
+          }]);
+        },
+        // Callback for scripted scenario step start
+        (userMessage: string, stepIndex: number) => {
+          // Add user message to chat
+          setMessages(prev => [...prev, {
+            id: `test-user-${stepIndex}`,
+            type: 'user',
+            content: userMessage,
+            timestamp: new Date()
+          }]);
+        },
+        // Callbacks for goal-based scenarios
+        {
+          onTurnStart: (turn: number, userMessage: string) => {
+            // Add simulated user message to chat
+            setMessages(prev => [...prev, {
+              id: `test-user-turn-${turn}`,
+              type: 'user',
+              content: `🤖 ${userMessage}`,  // Emoji indicates AI-generated
+              timestamp: new Date()
+            }]);
+          },
+          onTurnComplete: (result: GoalBasedTurnResult) => {
+            // Add bot response to chat
+            setMessages(prev => [...prev, {
+              id: `test-bot-turn-${result.turnIndex}`,
+              type: 'bot',
+              content: result.botResponse,
+              timestamp: new Date()
+            }]);
+          }
+        }
+      );
+
+      // Show test summary at the end
+      const isGoalBased = isGoalBasedScenario(scenario);
+      const passed = isGoalBased
+        ? execution.goalAchieved
+        : execution.results?.every(r => r.passed) ?? false;
+
+      const summaryLines = [
+        passed ? '✅ **TEST PASSED**' : '❌ **TEST FAILED**',
+        '',
+        `**Scenario:** ${scenario.name}`,
+        `**Type:** ${isGoalBased ? 'Goal-Based' : 'Scripted'}`,
+        `**Duration:** ${((execution.endTime || Date.now()) - execution.startTime) / 1000}s`,
+      ];
+
+      if (isGoalBased) {
+        summaryLines.push(`**Turns:** ${execution.turns?.length || 0}`);
+        summaryLines.push(`**Goal Achieved:** ${execution.goalAchieved ? 'Yes ✓' : 'No ✗'}`);
+      } else {
+        const passedSteps = execution.results?.filter(r => r.passed).length || 0;
+        const totalSteps = execution.results?.length || 0;
+        summaryLines.push(`**Steps:** ${passedSteps}/${totalSteps} passed`);
+      }
+
+      if (execution.overallEvaluation) {
+        summaryLines.push('');
+        summaryLines.push(`**Quality Score:** ${execution.overallEvaluation.score}/100`);
+        summaryLines.push(`**Evaluation:** ${execution.overallEvaluation.reasoning}`);
+      }
+
+      setMessages(prev => [...prev, {
+        id: 'test-summary',
+        type: 'bot',
+        content: summaryLines.join('\n'),
+        timestamp: new Date()
+      }]);
+
+      // Restore initial suggestions
+      setCurrentSuggestions(initialQuickActions);
+
+    } catch (error) {
+      console.error('Test scenario failed:', error);
+      setMessages(prev => [...prev, {
+        id: 'test-error',
+        type: 'bot',
+        content: `❌ **Test failed with error:**\n${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date()
+      }]);
+      setCurrentSuggestions(initialQuickActions);
+    }
   };
 
   // (quick actions now provided via `initialQuickActions` + dynamic suggestions)
@@ -734,10 +869,18 @@ export default function StorePage() {
           </div>
 
           <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            {/* Dynamic suggestions above input */}
-            {currentSuggestions.length > 0 && !isTyping && (
+            {/* Suggestions area - shows follow-up prompts and test scenarios option */}
+            {(currentSuggestions.length > 0 || isPanelOpen) && !isTyping && (
               <div className="mb-3">
                 <Suggestions>
+                  {/* Show test scenarios pill when debug panel is open */}
+                  {isPanelOpen && (
+                    <Suggestion
+                      suggestion="🧪 Scenarios"
+                      onClick={() => setShowScenariosModal(true)}
+                    />
+                  )}
+                  {/* Regular AI-suggested follow-up prompts */}
                   {currentSuggestions.map((suggestion, index) => (
                     <Suggestion
                       key={index}
@@ -776,6 +919,13 @@ export default function StorePage() {
           </div>
         </div>
       </div>
+
+      {/* Test scenarios modal - for QA testing */}
+      <ScenariosModal
+        open={showScenariosModal}
+        onOpenChange={setShowScenariosModal}
+        onSelectScenario={handleRunScenario}
+      />
     </div>
   );
 }
