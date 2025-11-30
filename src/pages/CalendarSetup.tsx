@@ -1292,13 +1292,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               onValueChange={(value) => setAvailabilityType(value as 'weekly' | 'specific')}
               className="space-y-3"
             >
-              <Label
-                htmlFor="availability-weekly"
+              <RadioGroupItem
+                value="weekly"
+                id="availability-weekly"
                 className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-colors hover:bg-gray-50 ${
                   availabilityType === 'weekly' ? 'border-primary bg-primary/5' : 'border-gray-200'
                 }`}
               >
-                <RadioGroupItem value="weekly" id="availability-weekly" className="mt-1" />
                 <div>
                   <div className="flex items-center gap-2 font-medium">
                     📅 Weekly Schedule
@@ -1310,15 +1310,15 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     e.g., "Mon-Fri 9am-5pm"
                   </p>
                 </div>
-              </Label>
+              </RadioGroupItem>
 
-              <Label
-                htmlFor="availability-specific"
+              <RadioGroupItem
+                value="specific"
+                id="availability-specific"
                 className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-colors hover:bg-gray-50 ${
                   availabilityType === 'specific' ? 'border-primary bg-primary/5' : 'border-gray-200'
                 }`}
               >
-                <RadioGroupItem value="specific" id="availability-specific" className="mt-1" />
                 <div>
                   <div className="flex items-center gap-2 font-medium">
                     📌 Specific Day/Time
@@ -1330,7 +1330,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     e.g., "Sat Dec 14, 10am-2pm"
                   </p>
                 </div>
-              </Label>
+              </RadioGroupItem>
             </RadioGroup>
 
             <div className="flex justify-between pt-4">
@@ -1443,16 +1443,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Break Checkbox */}
             <div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="hasBreak-weekly"
-                  checked={hasBreak}
-                  onCheckedChange={(checked) => setHasBreak(checked === true)}
-                />
-                <Label htmlFor="hasBreak-weekly" className="text-sm cursor-pointer">
-                  I have a break (e.g., lunch)
-                </Label>
-              </div>
+              <Checkbox
+                id="hasBreak-weekly"
+                checked={hasBreak}
+                onChange={(e) => setHasBreak(e.target.checked)}
+                className="text-sm cursor-pointer"
+              >
+                I have a break (e.g., lunch)
+              </Checkbox>
 
               {hasBreak && (
                 <div className="mt-3 ml-6 flex items-center gap-3">
@@ -1498,14 +1496,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 onValueChange={(value) => setIsOngoing(value === 'ongoing')}
                 className="space-y-2"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="ongoing" id="ongoing" />
-                  <Label htmlFor="ongoing" className="text-sm cursor-pointer">Ongoing (no end date)</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="until" id="until" />
-                  <Label htmlFor="until" className="text-sm cursor-pointer">Until specific date</Label>
-                </div>
+                <RadioGroupItem value="ongoing" id="ongoing" className="text-sm cursor-pointer">
+                  Ongoing (no end date)
+                </RadioGroupItem>
+                <RadioGroupItem value="until" id="until" className="text-sm cursor-pointer">
+                  Until specific date
+                </RadioGroupItem>
               </RadioGroup>
 
               {!isOngoing && (
@@ -1658,16 +1654,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Break Checkbox */}
             <div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="hasBreak-specific"
-                  checked={hasBreak}
-                  onCheckedChange={(checked) => setHasBreak(checked === true)}
-                />
-                <Label htmlFor="hasBreak-specific" className="text-sm cursor-pointer">
-                  I have a break (e.g., lunch)
-                </Label>
-              </div>
+              <Checkbox
+                id="hasBreak-specific"
+                checked={hasBreak}
+                onChange={(e) => setHasBreak(e.target.checked)}
+                className="text-sm cursor-pointer"
+              >
+                I have a break (e.g., lunch)
+              </Checkbox>
 
               {hasBreak && (
                 <div className="mt-3 ml-6 flex items-center gap-3">
