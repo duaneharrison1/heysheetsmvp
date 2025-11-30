@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,9 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, CalendarIcon } from 'lucide-react';
+import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink } from '@/lib/calendar-links';
 import {
@@ -1506,26 +1503,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
               {!isOngoing && (
                 <div className="mt-3 ml-6">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {endRecurrenceDate ? format(endRecurrenceDate, 'PPP') : 'Pick end date'}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 z-[60]" align="start" sideOffset={4}>
-                      <CalendarComponent
-                        mode="single"
-                        selected={endRecurrenceDate}
-                        onSelect={setEndRecurrenceDate}
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <input
+                    type="date"
+                    value={endRecurrenceDate ? endRecurrenceDate.toISOString().split('T')[0] : ''}
+                    onChange={(e) => setEndRecurrenceDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : undefined)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
                 </div>
               )}
 
@@ -1539,26 +1523,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <label className="block text-sm font-medium text-foreground mb-2">
                 Starting from
               </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {weeklyStartDate ? format(weeklyStartDate, 'PPP') : 'Pick a date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 z-[60]" align="start" sideOffset={4}>
-                  <CalendarComponent
-                    mode="single"
-                    selected={weeklyStartDate}
-                    onSelect={(date) => date && setWeeklyStartDate(date)}
-                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <input
+                type="date"
+                value={weeklyStartDate ? weeklyStartDate.toISOString().split('T')[0] : ''}
+                onChange={(e) => setWeeklyStartDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : new Date())}
+                min={new Date().toISOString().split('T')[0]}
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
               <p className="text-xs text-muted-foreground mt-1">
                 Your recurring availability will start from this date
               </p>
@@ -1593,26 +1564,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <label className="block text-sm font-medium text-foreground mb-2">
                 Which date?
               </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {specificDate ? format(specificDate, 'PPP') : 'Pick a date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 z-[60]" align="start" sideOffset={4}>
-                  <CalendarComponent
-                    mode="single"
-                    selected={specificDate}
-                    onSelect={setSpecificDate}
-                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <input
+                type="date"
+                value={specificDate ? specificDate.toISOString().split('T')[0] : ''}
+                onChange={(e) => setSpecificDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : undefined)}
+                min={new Date().toISOString().split('T')[0]}
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
             </div>
 
             {/* Time Selection */}
