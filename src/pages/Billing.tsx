@@ -44,22 +44,23 @@ const Billing = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // First try edge function (when Stripe is integrated)
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payment-methods`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setPaymentMethods(data?.methods || []);
-            return;
-          }
-        }
-      } catch (err) {
-        console.log('Edge function not available, falling back to Supabase table');
-      }
+      // Edge functions for Stripe are not deployed yet
+      // When Stripe is integrated, uncomment this block:
+      // try {
+      //   const { data: { session } } = await supabase.auth.getSession();
+      //   if (session) {
+      //     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payment-methods`, {
+      //       headers: { 'Authorization': `Bearer ${session.access_token}` }
+      //     });
+      //     if (res.ok) {
+      //       const data = await res.json();
+      //       setPaymentMethods(data?.methods || []);
+      //       return;
+      //     }
+      //   }
+      // } catch (err) {
+      //   console.log('Edge function not available, falling back to Supabase table');
+      // }
 
       // Fallback: Read from Supabase table directly
       const { data, error } = await supabase
@@ -83,22 +84,23 @@ const Billing = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // First try edge function (when Stripe is integrated)
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/subscription`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setSubscription(data?.subscription || null);
-            return;
-          }
-        }
-      } catch (err) {
-        console.log('Edge function not available, falling back to Supabase table');
-      }
+      // Edge functions for Stripe are not deployed yet
+      // When Stripe is integrated, uncomment this block:
+      // try {
+      //   const { data: { session } } = await supabase.auth.getSession();
+      //   if (session) {
+      //     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/subscription`, {
+      //       headers: { 'Authorization': `Bearer ${session.access_token}` }
+      //     });
+      //     if (res.ok) {
+      //       const data = await res.json();
+      //       setSubscription(data?.subscription || null);
+      //       return;
+      //     }
+      //   }
+      // } catch (err) {
+      //   console.log('Edge function not available, falling back to Supabase table');
+      // }
 
       // Fallback: Read from Supabase table directly
       const { data, error } = await supabase
@@ -122,22 +124,23 @@ const Billing = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // First try edge function (when Stripe is integrated)
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invoices`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setInvoices(data?.invoices || []);
-            return;
-          }
-        }
-      } catch (err) {
-        console.log('Edge function not available, falling back to Supabase table');
-      }
+      // Edge functions for Stripe are not deployed yet
+      // When Stripe is integrated, uncomment this block:
+      // try {
+      //   const { data: { session } } = await supabase.auth.getSession();
+      //   if (session) {
+      //     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invoices`, {
+      //       headers: { 'Authorization': `Bearer ${session.access_token}` }
+      //     });
+      //     if (res.ok) {
+      //       const data = await res.json();
+      //       setInvoices(data?.invoices || []);
+      //       return;
+      //     }
+      //   }
+      // } catch (err) {
+      //   console.log('Edge function not available, falling back to Supabase table');
+      // }
 
       // Fallback: Read from Supabase table directly
       const { data, error } = await supabase

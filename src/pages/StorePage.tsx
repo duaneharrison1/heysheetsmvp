@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { H2, Lead } from "@/components/ui/heading";
 import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
 import { supabase } from "@/lib/supabase";
+import { ScenariosModal } from "@/qa/components/ScenariosModal";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Task, TaskTrigger, TaskContent, TaskItem } from "@/components/ui/ai-task";
 import { 

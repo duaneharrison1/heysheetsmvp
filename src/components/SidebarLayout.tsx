@@ -17,26 +17,28 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Store, Users, UserCog, Receipt, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket } from "lucide-react";
+import { Store, Users, UserCog, Receipt, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image } from "lucide-react";
 // No sidebar tooltips needed; keep imports minimal
 
 // Create a context to share user data with child components
 export const UserContext = React.createContext<any>(null);
 
-// Navigation items configuration
+// Navigation items for Store Admin
 const navItems = [
   { id: "stores", label: "My Stores", href: "/", icon: Store },
   { id: "account", label: "Account Settings", href: "/account", icon: UserCog },
+  { id: "images", label: "Manage Images", href: "/images", icon: Image },
   { id: "billing", label: "Billing", href: "/billing", icon: Receipt },
   { id: "help", label: "Help & Support", href: "/help", icon: LifeBuoy },
 ];
 
-// Admin navigation items
+// Navigation items for Super Admin (platform admin)
 const adminNavItems = [
   { id: "admin-users", label: "All Users", href: "/admin/users", icon: Users },
   { id: "admin-stores", label: "All Stores", href: "/admin/stores", icon: LayoutGrid },
   { id: "admin-feedback", label: "Chat Feedback", href: "/admin/feedback", icon: MessageSquare },
   { id: "admin-support", label: "Support Tickets", href: "/admin/support", icon: Ticket },
+  { id: "admin-qa", label: "QA Results", href: "/admin/qa-results", icon: LayoutGrid },
 ];
 
 interface SidebarLayoutProps {
@@ -53,8 +55,18 @@ function UserProfileSection({ user }: { user: any }) {
   const handleSignOut = async () => {
     try {
       setLoading(true);
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Sign out error:', error);
+        // Force redirect even on error - user wants to leave
+      }
+      // Clear any cached state and redirect
       navigate('/auth');
+      window.location.href = '/auth';
+    } catch (err) {
+      console.error('Sign out exception:', err);
+      // Force redirect even on exception
+      window.location.href = '/auth';
     } finally {
       setLoading(false);
     }
@@ -208,7 +220,7 @@ function SidebarWrapper({ user, location }: { user: any; location: any }) {
           {/* Admin Section */}
               <div className="my-3 border-t border-border" />
               <div className="px-2 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider group-data-[collapsible=icon]:hidden">
-                Admin
+                Super Admin
               </div>
           {adminNavItems.map((item) => {
             const Icon = item.icon;

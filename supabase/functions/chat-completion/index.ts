@@ -332,7 +332,6 @@ serve(async (req) => {
       classification,
       functionResult,
       storeConfig,
-      model
     );
 
     const responseDuration = performance.now() - responseStart;
