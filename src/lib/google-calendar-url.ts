@@ -145,10 +145,12 @@ export function getCalendarWeekViewUrl(date: Date = new Date()): string {
  * @param eventCreateUrl - URL for event creation form
  */
 export function openEventPopup(eventCreateUrl: string): void {
-  const width = 650;
+  const width = 580;
   const height = 700;
-  const left = 50;  // Position on left side
-  const top = Math.round((window.screen.height - height) / 2);  // Vertically centered
+
+  // Position on RIGHT side of screen (50% from left + small margin)
+  const left = Math.round(window.screen.width / 2) + 20;
+  const top = Math.max(0, (window.screen.height - height) / 2);
 
   window.open(
     eventCreateUrl,
