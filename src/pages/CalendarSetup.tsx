@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, ChevronDown } from 'lucide-react';
+import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, ChevronDown, Circle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink } from '@/lib/calendar-links';
 import {
@@ -135,6 +135,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Track if this is first availability (for dynamic title)
   const [isFirstAvailability, setIsFirstAvailability] = useState(true);
+
+  // Multi-block support (for breaks)
+  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
+  const [pendingBlocks, setPendingBlocks] = useState<AvailabilityBlock[]>([]);
 
   // Time options for dropdowns
   const timeOptions = generateTimeOptions();
@@ -386,7 +390,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     }
   }
 
-  // Auto-create calendar handler
+  // Auto-create calendar handler - async, no loading state
   async function handleCreateCalendar() {
     if (!calendarName.trim()) {
       toast({
@@ -415,8 +419,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       return;
     }
 
-    setCreatingCalendar(true);
+    // Immediately transition to fullscreen view - no loading state
+    setCreateStep('add-blocks');
+    setAvailabilityStep('choose-type');
 
+    // Create calendar in background
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
@@ -439,18 +446,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         throw new Error(data.error || 'Failed to create calendar');
       }
 
-      // Success!
+      // Success - set the calendar ID
       setCreatedCalendarId(data.calendarId);
-      setCreateStep('add-blocks');
-      setAvailabilityStep('choose-type');  // Start at choose type step
 
       // Reload store to show new mapping
       await loadStore();
-
-      toast({
-        title: 'Calendar created!',
-        description: `${calendarName} is ready for availability events`,
-      });
 
     } catch (error: any) {
       console.error('Error creating calendar:', error);
@@ -459,8 +459,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         description: error.message || 'Please try again',
         variant: 'destructive',
       });
-    } finally {
-      setCreatingCalendar(false);
+      // Go back to name step on failure
+      setCreateStep('name');
     }
   }
 
@@ -581,26 +581,38 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           setPollingStatus('found');
           setAddedBlocks(prev => new Set([...prev, blockId]));
 
-          // No longer first time
-          setIsFirstAvailability(false);
-
-          // Calculate smart view based on the event that was just added
-          const eventStartHour = parseTimeToHour(startTime);
-          const eventEndHour = parseTimeToHour(endTime);
-          const eventDate = selectedAvailabilityType === 'specific'
-            ? specificDate
-            : weeklyStartDate || new Date();
-
-          if (eventDate) {
-            const smartView = getSmartCalendarView(eventStartHour, eventEndHour, eventDate);
-            setCalendarViewMode(smartView.mode);
-          }
-
           // Force calendar iframe to reload by changing key
           setCalendarKey(prev => prev + 1);
 
-          // Move to success step
-          setAvailabilityStep('success');
+          // Check if there are more blocks to add (multi-block support)
+          const nextIndex = currentBlockIndex + 1;
+          if (nextIndex < pendingBlocks.length) {
+            // Move to next block
+            setCurrentBlockIndex(nextIndex);
+            const nextBlock = pendingBlocks[nextIndex];
+            const eventUrl = generateEventCreateUrl(nextBlock, createdCalendarId);
+            const positioning = getSmartPositioning();
+            openEventPopup(eventUrl, positioning.popupLeft);
+            startPolling(nextBlock.id);
+          } else {
+            // All blocks added - go to success
+            setIsFirstAvailability(false);
+
+            // Calculate smart view based on the event that was just added
+            const eventStartHour = parseTimeToHour(startTime);
+            const eventEndHour = parseTimeToHour(endTime);
+            const eventDate = selectedAvailabilityType === 'specific'
+              ? specificDate
+              : weeklyStartDate || new Date();
+
+            if (eventDate) {
+              const smartView = getSmartCalendarView(eventStartHour, eventEndHour, eventDate);
+              setCalendarViewMode(smartView.mode);
+            }
+
+            // Move to success step
+            setAvailabilityStep('success');
+          }
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -656,6 +668,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setBreakStartTime('12:00');
     setBreakEndTime('13:00');
     setSpecificDate(undefined);
+    setPendingBlocks([]);
+    setCurrentBlockIndex(0);
     setAvailabilityStep('choose-type');
   };
 
@@ -664,20 +678,22 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
     const popupWidth = 590;  // 10px wider than original 580
     const modalWidth = 420;
-    const minGap = 40;
+    const minGap = 20;  // Reduced from 40
 
     const totalNeeded = modalWidth + minGap + popupWidth;
     const canFitSideBySide = viewportWidth >= totalNeeded;
 
     if (canFitSideBySide) {
+      // Position popup closer to modal
+      const popupLeft = modalWidth + minGap + 40;  // Tighter positioning
       return {
         modalClassName: 'ml-8 mr-auto',
-        popupLeft: viewportWidth - popupWidth - 20,
+        popupLeft: Math.min(popupLeft, viewportWidth - popupWidth - 20),
         sideBySide: true
       };
     } else {
       return {
-        modalClassName: 'mx-auto',
+        modalClassName: '',
         popupLeft: Math.max(20, viewportWidth - popupWidth - 20),
         sideBySide: false
       };
@@ -1233,24 +1249,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <Button
                 variant="outline"
                 onClick={() => setCreateStep('choice')}
-                disabled={creatingCalendar}
               >
                 Back
               </Button>
               <Button
                 onClick={handleCreateCalendar}
-                disabled={creatingCalendar || selectedServices.length === 0 || !calendarName.trim() || duplicateExists || isCheckingDuplicate}
+                disabled={selectedServices.length === 0 || !calendarName.trim() || duplicateExists || isCheckingDuplicate}
               >
-                {creatingCalendar ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : isCheckingDuplicate ? (
-                  'Checking...'
-                ) : (
-                  'Create'
-                )}
+                {isCheckingDuplicate ? 'Checking...' : 'Create'}
               </Button>
             </div>
           </>
@@ -1362,24 +1368,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   setSelectedServices([]);
                   setCalendarName('');
                 }}
-                disabled={creatingCalendar}
               >
                 Back
               </Button>
               <Button
                 onClick={handleCreateCalendar}
-                disabled={creatingCalendar || selectedServices.length === 0 || !calendarName.trim() || duplicateExists || isCheckingDuplicate}
+                disabled={selectedServices.length === 0 || !calendarName.trim() || duplicateExists || isCheckingDuplicate}
               >
-                {creatingCalendar ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : isCheckingDuplicate ? (
-                  'Checking...'
-                ) : (
-                  'Create'
-                )}
+                {isCheckingDuplicate ? 'Checking...' : 'Create'}
               </Button>
             </div>
           </>
@@ -1899,46 +1895,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           {/* Main Content Area */}
           <div className="flex-1 relative flex flex-col">
 
-            {/* Gap area for floating controls - only in success state */}
-            {availabilityStep === 'success' && (
-              <div
-                className="flex justify-between items-center px-4 py-2"
-                style={{ backgroundColor: '#f8f9fa' }}
-              >
-                {/* Left: Add Availability */}
-                <Button
-                  size="sm"
-                  onClick={handleAddAnother}
-                >
-                  + Add Availability
-                </Button>
+            {/* 10px gap between header and calendar */}
+            <div
+              className="h-[10px] w-full"
+              style={{ backgroundColor: '#f1f3f4' }}
+            />
 
-                {/* Right: View Dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      {calendarViewMode === 'WEEK' && 'Week'}
-                      {calendarViewMode === 'MONTH' && 'Month'}
-                      {calendarViewMode === 'AGENDA' && 'Agenda'}
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
-                      Week
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
-                      Month
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
-                      Agenda
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
-
-            {/* Calendar Embed */}
+            {/* Calendar Embed Container */}
             <div className="flex-1 relative">
               <iframe
                 key={calendarKey}
@@ -1951,6 +1914,49 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 style={{ border: 'none' }}
                 frameBorder="0"
               />
+
+              {/* Floating Controls - on same line as calendar nav */}
+              {availabilityStep === 'success' && (
+                <div
+                  className="absolute z-10 flex items-center gap-2"
+                  style={{
+                    top: '10px',
+                    right: '50px',
+                  }}
+                >
+                  {/* View Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="bg-white shadow-sm">
+                        {calendarViewMode === 'WEEK' && 'Week'}
+                        {calendarViewMode === 'MONTH' && 'Month'}
+                        {calendarViewMode === 'AGENDA' && 'Agenda'}
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
+                        Week
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
+                        Month
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
+                        Agenda
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Add Availability Button */}
+                  <Button
+                    size="sm"
+                    className="shadow-sm"
+                    onClick={handleAddAnother}
+                  >
+                    + Add Availability
+                  </Button>
+                </div>
+              )}
 
               {/* Bottom Tip - only in success state */}
               {availabilityStep === 'success' && showTip && (
@@ -1971,18 +1977,18 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </div>
               )}
 
-              {/* Modal Overlay - Only show when there's actual modal content */}
-              {(availabilityStep === 'choose-type' ||
-                availabilityStep === 'set-availability' ||
-                availabilityStep === 'waiting-save') && (
-                <div
-                  className="absolute inset-0 bg-black/50 flex items-center justify-center p-4"
-                  onClick={(e) => {
-                    if (e.target === e.currentTarget && availabilityStep === 'choose-type') {
-                      setAvailabilityStep('success');
-                    }
-                  }}
-                >
+            {/* Modal Overlay - covers entire screen including header */}
+            {(availabilityStep === 'choose-type' ||
+              availabilityStep === 'set-availability' ||
+              availabilityStep === 'waiting-save') && (
+              <div
+                className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget && availabilityStep === 'choose-type') {
+                    setAvailabilityStep('success');
+                  }
+                }}
+              >
 
                   {/* Step: Choose Type */}
                   {availabilityStep === 'choose-type' && (
@@ -2248,8 +2254,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                         className="flex-1"
                         disabled={selectedAvailabilityType === 'specific' && !specificDate}
                         onClick={() => {
-                          // Build the availability block and open popup
+                          // Build the availability blocks and open popup for first one
                           const blocks = buildAvailabilityBlocks();
+                          setPendingBlocks(blocks);
+                          setCurrentBlockIndex(0);
+
                           if (blocks.length > 0) {
                             const block = blocks[0];
                             const eventUrl = generateEventCreateUrl(block, createdCalendarId);
@@ -2266,69 +2275,148 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
-                  {/* Step: Waiting for Save */}
-                  {availabilityStep === 'waiting-save' && (
-                    <div
-                      className={`bg-white rounded-xl shadow-2xl w-full max-w-md p-6 ${getSmartPositioning().modalClassName}`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="space-y-4">
-                        {/* Header with icon */}
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                            <Calendar className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <h2 className="text-lg font-semibold">
-                              Complete your availability in Google Calendar
-                            </h2>
-                            <p className="text-muted-foreground text-sm mt-1">
-                              A Google Calendar window has opened with your availability details pre-filled.
-                              Review the details and click <strong>Save</strong> to confirm.
+                {/* Step: Waiting for Save */}
+                {availabilityStep === 'waiting-save' && (
+                  <div
+                    className={`bg-white rounded-xl shadow-2xl w-full max-w-md p-6 ${getSmartPositioning().modalClassName}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="space-y-4">
+                      {/* Header with icon */}
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                          <Calendar className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-semibold">
+                            Complete your availability in Google Calendar
+                          </h2>
+                          {pendingBlocks.length > 1 && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Adding block {currentBlockIndex + 1} of {pendingBlocks.length}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Single block - simple view */}
+                      {pendingBlocks.length <= 1 && (
+                        <>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                              <span>Waiting for you to save the event...</span>
                             </p>
                           </div>
-                        </div>
 
-                        {/* Status indicator */}
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-sm text-muted-foreground flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                            <span>Waiting for you to save the event...</span>
+                          <p className="text-xs text-muted-foreground">
+                            Don't see the popup? It may have been blocked by your browser.
                           </p>
-                        </div>
 
-                        {/* Help text */}
-                        <p className="text-xs text-muted-foreground">
-                          Don't see the popup? It may have been blocked by your browser.
-                        </p>
-                      </div>
+                          {/* Buttons for single block */}
+                          <div className="flex gap-3 pt-4 border-t">
+                            <Button
+                              variant="outline"
+                              onClick={() => setAvailabilityStep('set-availability')}
+                            >
+                              ← Back
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => {
+                                if (pendingBlocks.length > 0) {
+                                  const block = pendingBlocks[0];
+                                  const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                                  const positioning = getSmartPositioning();
+                                  openEventPopup(eventUrl, positioning.popupLeft);
+                                }
+                              }}
+                            >
+                              Reopen popup
+                            </Button>
+                          </div>
+                        </>
+                      )}
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-3 mt-6 pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          onClick={() => setAvailabilityStep('set-availability')}
-                        >
-                          ← Back
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            const blocks = buildAvailabilityBlocks();
-                            if (blocks.length > 0) {
-                              const block = blocks[0];
-                              const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                              const positioning = getSmartPositioning();
-                              openEventPopup(eventUrl, positioning.popupLeft);
-                            }
-                          }}
-                        >
-                          Reopen popup
-                        </Button>
-                      </div>
+                      {/* Multiple blocks - show list with per-block reopen */}
+                      {pendingBlocks.length > 1 && (
+                        <>
+                          <div className="space-y-2">
+                            {pendingBlocks.map((block, index) => {
+                              const isCompleted = addedBlocks.has(block.id);
+                              const isCurrent = index === currentBlockIndex;
+
+                              return (
+                                <div
+                                  key={block.id}
+                                  className={`p-3 rounded-lg ${
+                                    isCurrent ? 'bg-blue-50 border border-blue-200' :
+                                    isCompleted ? 'bg-green-50 border border-green-200' :
+                                    'bg-gray-50 border border-gray-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {isCompleted ? (
+                                      <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                                    ) : isCurrent ? (
+                                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin flex-shrink-0" />
+                                    ) : (
+                                      <Circle className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">
+                                        {block.id === 'morning' ? 'Morning' :
+                                         block.id === 'afternoon' ? 'Afternoon' :
+                                         'Block ' + (index + 1)}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                                      </p>
+                                    </div>
+
+                                    {/* Per-block status/action */}
+                                    {isCompleted ? (
+                                      <span className="text-xs text-green-600 font-medium">Added!</span>
+                                    ) : isCurrent ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                                          const positioning = getSmartPositioning();
+                                          openEventPopup(eventUrl, positioning.popupLeft);
+                                        }}
+                                      >
+                                        Reopen →
+                                      </Button>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Up next</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <p className="text-xs text-muted-foreground">
+                            Don't see the popup? Click "Reopen" on the current block.
+                          </p>
+
+                          {/* Just Back button for multi-block */}
+                          <div className="pt-4 border-t">
+                            <Button
+                              variant="outline"
+                              onClick={() => setAvailabilityStep('set-availability')}
+                            >
+                              ← Back
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  )}
+                  </div>
+                )}
 
                 </div>
               )}
