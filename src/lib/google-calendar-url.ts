@@ -145,7 +145,7 @@ export function getCalendarWeekViewUrl(date: Date = new Date()): string {
  * @param eventCreateUrl - URL for event creation form
  */
 export function openEventPopup(eventCreateUrl: string, customLeft?: number): void {
-  const width = 640;  // 10% wider than before
+  const width = 590;  // 10px wider than original 580
   const height = 700;
 
   // Use custom left position if provided, otherwise default to right side

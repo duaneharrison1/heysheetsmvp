@@ -662,7 +662,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Smart positioning for modal and popup
   const getSmartPositioning = () => {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const popupWidth = 640;
+    const popupWidth = 590;  // 10px wider than original 580
     const modalWidth = 420;
     const minGap = 40;
 
@@ -2012,7 +2012,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                         }
                       </p>
 
-                    <div className="space-y-3">
+                      <div className="space-y-3">
                       {/* Weekly Option */}
                       <button
                         onClick={() => {
@@ -2062,24 +2062,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
-                {/* Step: Set Availability */}
-                {availabilityStep === 'set-availability' && (
-                  <div
-                    className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Close button */}
-                    <button
-                      onClick={() => setAvailabilityStep('success')}
-                      className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-                      aria-label="Close"
+                  {/* Step: Set Availability */}
+                  {availabilityStep === 'set-availability' && (
+                    <div
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <X className="h-5 w-5" />
-                    </button>
+                      {/* Close button */}
+                      <button
+                        onClick={() => setAvailabilityStep('success')}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        aria-label="Close"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
 
-                    <h2 className="text-xl font-semibold mb-4 pr-8">
-                      Set your availability
-                    </h2>
+                      <h2 className="text-xl font-semibold mb-4 pr-8">
+                        Set your availability
+                      </h2>
 
                     {/* Weekly Form */}
                     {selectedAvailabilityType === 'weekly' && (
@@ -2266,72 +2266,73 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
-                {/* Step: Waiting for Save */}
-                {availabilityStep === 'waiting-save' && (
-                  <div
-                    className={`bg-white rounded-xl shadow-2xl w-full max-w-md p-6 ${getSmartPositioning().modalClassName}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="space-y-4">
-                      {/* Header with icon */}
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                          <Calendar className="h-5 w-5 text-blue-600" />
+                  {/* Step: Waiting for Save */}
+                  {availabilityStep === 'waiting-save' && (
+                    <div
+                      className={`bg-white rounded-xl shadow-2xl w-full max-w-md p-6 ${getSmartPositioning().modalClassName}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="space-y-4">
+                        {/* Header with icon */}
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                            <Calendar className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h2 className="text-lg font-semibold">
+                              Complete your availability in Google Calendar
+                            </h2>
+                            <p className="text-muted-foreground text-sm mt-1">
+                              A Google Calendar window has opened with your availability details pre-filled.
+                              Review the details and click <strong>Save</strong> to confirm.
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h2 className="text-lg font-semibold">
-                            Complete your availability in Google Calendar
-                          </h2>
-                          <p className="text-muted-foreground text-sm mt-1">
-                            A Google Calendar window has opened with your availability details pre-filled.
-                            Review the details and click <strong>Save</strong> to confirm.
+
+                        {/* Status indicator */}
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-muted-foreground flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                            <span>Waiting for you to save the event...</span>
                           </p>
                         </div>
-                      </div>
 
-                      {/* Status indicator */}
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                          <span>Waiting for you to save the event...</span>
+                        {/* Help text */}
+                        <p className="text-xs text-muted-foreground">
+                          Don't see the popup? It may have been blocked by your browser.
                         </p>
                       </div>
 
-                      {/* Help text */}
-                      <p className="text-xs text-muted-foreground">
-                        Don't see the popup? It may have been blocked by your browser.
-                      </p>
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 mt-6 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => setAvailabilityStep('set-availability')}
+                        >
+                          ← Back
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            const blocks = buildAvailabilityBlocks();
+                            if (blocks.length > 0) {
+                              const block = blocks[0];
+                              const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                              const positioning = getSmartPositioning();
+                              openEventPopup(eventUrl, positioning.popupLeft);
+                            }
+                          }}
+                        >
+                          Reopen popup
+                        </Button>
+                      </div>
                     </div>
+                  )}
 
-                    {/* Action Buttons */}
-                    <div className="flex gap-3 mt-6 pt-4 border-t">
-                      <Button
-                        variant="outline"
-                        onClick={() => setAvailabilityStep('set-availability')}
-                      >
-                        ← Back
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="flex-1"
-                        onClick={() => {
-                          const blocks = buildAvailabilityBlocks();
-                          if (blocks.length > 0) {
-                            const block = blocks[0];
-                            const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                            const positioning = getSmartPositioning();
-                            openEventPopup(eventUrl, positioning.popupLeft);
-                          }
-                        }}
-                      >
-                        Reopen popup
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
