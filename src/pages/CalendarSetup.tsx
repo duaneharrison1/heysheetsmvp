@@ -45,14 +45,12 @@ import {
 import {
   AvailabilityBlock,
   generateEventCreateUrl,
-  getCalendarWeekViewUrl,
   openEventPopup,
   generateTimeOptions,
   formatDaysForDisplay,
   formatTimeForDisplay,
   checkForNewEvents
 } from '@/lib/google-calendar-url';
-import { format } from 'date-fns';
 
 export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [store, setStore] = useState<any>(null);
@@ -473,6 +471,32 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     return blocks;
   };
 
+  // Generate Google Calendar embed URL with smart date
+  const getCalendarEmbedUrl = (calendarId: string, startDate?: Date) => {
+    const formatDateForUrl = (d: Date) => d.toISOString().split('T')[0].replace(/-/g, '');
+
+    // Default to today if no date provided
+    const start = startDate || new Date();
+
+    // Get end date (7 days later for week view)
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+
+    const params = new URLSearchParams({
+      src: calendarId,
+      mode: 'WEEK',
+      showTitle: '0',
+      showNav: '1',
+      showPrint: '0',
+      showTabs: '0',
+      showCalendars: '0',
+      ctz: 'Asia/Hong_Kong',
+      dates: `${formatDateForUrl(start)}/${formatDateForUrl(end)}`
+    });
+
+    return `https://calendar.google.com/calendar/embed?${params.toString()}`;
+  };
+
   // Stop polling
   const stopPolling = () => {
     if (pollingIntervalRef.current) {
@@ -521,56 +545,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       stopPolling();
       setPollingStatus('timeout');
     }, 120000);
-  };
-
-  // Handle Add button click - Strategy A: Current implementation
-  const handleAddBlockClick = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
-    // Open calendar view FIRST (will be behind)
-    window.open(calendarViewUrl, '_blank');
-
-    // Open event popup SECOND (will be on top)
-    openEventPopup(eventUrl);
-
-    // Start polling for this block
-    startPolling(block.id);
-  };
-
-  // Strategy B: Both in setTimeout(0)
-  const handleTestB = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
-    setTimeout(() => {
-      window.open(calendarViewUrl, '_blank');
-      openEventPopup(eventUrl);
-    }, 0);
-    startPolling(block.id);
-  };
-
-  // Strategy C: Reversed order (popup first, calendar second)
-  const handleTestC = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
-    openEventPopup(eventUrl);
-    window.open(calendarViewUrl, '_blank');
-    startPolling(block.id);
-  };
-
-  // Strategy D: Both via <a> links triggered programmatically
-  const handleTestD = (block: AvailabilityBlock, calendarViewUrl: string, eventUrl: string) => {
-    // Create temporary links and click them
-    const calendarLink = document.createElement('a');
-    calendarLink.href = calendarViewUrl;
-    calendarLink.target = '_blank';
-    calendarLink.rel = 'noopener noreferrer';
-    document.body.appendChild(calendarLink);
-    calendarLink.click();
-    document.body.removeChild(calendarLink);
-
-    const eventLink = document.createElement('a');
-    eventLink.href = eventUrl;
-    eventLink.target = '_blank';
-    eventLink.rel = 'noopener noreferrer';
-    document.body.appendChild(eventLink);
-    eventLink.click();
-    document.body.removeChild(eventLink);
-
-    startPolling(block.id);
   };
 
   // Cleanup polling on unmount
@@ -989,7 +963,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
       {/* Create Calendar Dialog - Inline to prevent re-creation on render */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className={createStep === 'add-blocks' ? 'max-w-4xl' : 'max-w-2xl'}>
           {/* STEP 1: Choice */}
           {createStep === 'choice' && (
             <>
@@ -1674,114 +1648,98 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
         {/* Step: Add Blocks to Calendar */}
         {createStep === 'add-blocks' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold">Add to Google Calendar</h2>
-              <p className="text-muted-foreground mt-1">
-                Your availability is ready to add to "{calendarName}" calendar.
-              </p>
-              <p className="text-muted-foreground mt-1">
-                Click Add, then click <strong>Save</strong> in Google Calendar.
-              </p>
-            </div>
+          <>
+            <DialogHeader>
+              <DialogTitle>Add Your Availability</DialogTitle>
+              <DialogDescription>
+                Click "Add" below, then save in Google Calendar. Your events will appear in the preview.
+              </DialogDescription>
+            </DialogHeader>
 
-            <div className="space-y-3">
-              {buildAvailabilityBlocks().map((block) => {
-                const isAdded = addedBlocks.has(block.id);
-                const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                const calendarViewUrl = getCalendarWeekViewUrl(
-                  block.specificDate || weeklyStartDate || new Date()
-                );
+            <div className="space-y-4 py-4">
+              {/* Block Cards - At TOP */}
+              <div className="space-y-2">
+                {buildAvailabilityBlocks().map((block) => {
+                  const isAdded = addedBlocks.has(block.id);
+                  const eventUrl = generateEventCreateUrl(block, createdCalendarId);
 
-                return (
-                  <div
-                    key={block.id}
-                    className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2 font-medium">
-                        {block.id === 'morning' && '☀️'}
-                        {block.id === 'afternoon' && '🌤️'}
-                        {block.id === 'main' && '📅'}
-                        {block.id === 'specific' && '📌'}
-                        {' '}
-                        {block.id === 'morning' ? 'Morning' :
-                         block.id === 'afternoon' ? 'Afternoon' :
-                         block.title}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {block.isRecurring
-                          ? `Every ${formatDaysForDisplay(block.days)}`
-                          : block.specificDate?.toLocaleDateString()
-                        }
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                      </p>
-                      {block.isRecurring && block.specificDate && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Starting from {format(block.specificDate, 'PPP')}
+                  return (
+                    <div
+                      key={block.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-gray-50"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 font-medium text-sm">
+                          {block.id === 'morning' && '☀️ Morning'}
+                          {block.id === 'afternoon' && '🌤️ Afternoon'}
+                          {block.id === 'main' && '📅 Available'}
+                          {block.id === 'specific' && '📌 Available'}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {block.isRecurring
+                            ? `Every ${formatDaysForDisplay(block.days)}`
+                            : block.specificDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                          }
+                          {' • '}
+                          {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
                         </p>
-                      )}
-                    </div>
+                        {block.isRecurring && block.specificDate && (
+                          <p className="text-xs text-muted-foreground">
+                            Starting {block.specificDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
 
-                    <div className="flex flex-col items-end gap-2">
-                      {isAdded ? (
-                        <span className="text-green-600 font-medium flex items-center gap-1">
-                          <CheckCircle className="h-4 w-4" /> Added
-                        </span>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
-                            className="inline-flex items-center gap-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                      <div className="flex items-center gap-2">
+                        {isAdded ? (
+                          <span className="text-green-600 font-medium text-sm flex items-center gap-1">
+                            <CheckCircle className="h-4 w-4" />
+                            Added!
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              openEventPopup(eventUrl);
+                              startPolling(block.id);
+                            }}
                           >
                             Add →
-                          </button>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleAddBlockClick(block, calendarViewUrl, eventUrl)}
-                              className="h-6 w-6 p-0 text-xs"
-                              title="Strategy A: Current (calendar first, popup second)"
-                            >
-                              A
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleTestB(block, calendarViewUrl, eventUrl)}
-                              className="h-6 w-6 p-0 text-xs"
-                              title="Strategy B: Both in setTimeout(0)"
-                            >
-                              B
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleTestC(block, calendarViewUrl, eventUrl)}
-                              className="h-6 w-6 p-0 text-xs"
-                              title="Strategy C: Reversed (popup first, calendar second)"
-                            >
-                              C
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleTestD(block, calendarViewUrl, eventUrl)}
-                              className="h-6 w-6 p-0 text-xs"
-                              title="Strategy D: Both via programmatic <a> clicks"
-                            >
-                              D
-                            </Button>
-                          </div>
-                        </>
-                      )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {/* Calendar Preview - Below cards */}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Preview {availabilityType === 'specific' && specificDate
+                    ? `(${specificDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`
+                    : weeklyStartDate
+                      ? `(week of ${weeklyStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
+                      : ''
+                  }:
+                </p>
+                <div className="rounded-lg border border-gray-200 overflow-hidden">
+                  <iframe
+                    src={getCalendarEmbedUrl(
+                      createdCalendarId,
+                      availabilityType === 'specific' ? specificDate : weeklyStartDate
+                    )}
+                    style={{ border: 0 }}
+                    width="100%"
+                    height="350"
+                    frameBorder="0"
+                    scrolling="no"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Use the arrows to navigate between weeks
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-between pt-4">
@@ -1789,142 +1747,108 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 variant="outline"
                 onClick={() => {
                   stopPolling();
-                  if (availabilityType === 'weekly') {
-                    setCreateStep('weekly-setup');
-                  } else {
-                    setCreateStep('specific-setup');
-                  }
+                  setCreateStep(availabilityType === 'weekly' ? 'weekly-setup' : 'specific-setup');
                 }}
               >
                 Back
               </Button>
-              <Button
-                onClick={() => {
-                  stopPolling();
-                  setCreateStep('congrats');
-                }}
-              >
+              <Button onClick={() => {
+                stopPolling();
+                setCreateStep('congrats');
+              }}>
                 Continue
               </Button>
             </div>
-          </div>
+          </>
         )}
 
         {/* Step: Congratulations */}
         {createStep === 'congrats' && (
-          <div className="space-y-6">
-            {addedBlocks.size > 0 ? (
-              // Events were detected
-              <>
-                <div className="text-center">
-                  <div className="text-4xl mb-4">🎉</div>
-                  <h2 className="text-xl font-semibold">Congratulations!</h2>
-                  <p className="text-muted-foreground mt-1">
-                    You've set up availability for "{calendarName}"!
-                  </p>
-                </div>
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                🎉 You're all set!
+              </DialogTitle>
+            </DialogHeader>
 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm font-medium text-foreground mb-2">
-                    Customers can now book your services during:
-                  </p>
-                  <div className="space-y-2">
-                    {buildAvailabilityBlocks().map((block) => (
-                      <div key={block.id} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="mt-0.5">
-                          {block.id === 'morning' && '☀️'}
-                          {block.id === 'afternoon' && '🌤️'}
-                          {block.id === 'main' && '📅'}
-                          {block.id === 'specific' && '📌'}
-                        </span>
-                        <div>
-                          <span>
-                            {block.isRecurring
-                              ? formatDaysForDisplay(block.days)
-                              : block.specificDate?.toLocaleDateString()
-                            }
-                            {' '}
-                            {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                          </span>
-                          {block.isRecurring && block.specificDate && (
-                            <p className="text-xs">Starting from {format(block.specificDate, 'PPP')}</p>
+            <div className="space-y-4 py-4">
+              {(() => {
+                const allBlocks = buildAvailabilityBlocks();
+                const detectedCount = allBlocks.filter(block => addedBlocks.has(block.id)).length;
+                const allDetected = detectedCount === allBlocks.length;
+
+                return (
+                  <>
+                    {allDetected ? (
+                      // All blocks were detected - show success with summary
+                      <>
+                        <Alert className="border-green-200 bg-green-50">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertDescription className="text-green-800">
+                            Your availability has been added to Google Calendar!
+                          </AlertDescription>
+                        </Alert>
+
+                        <div className="rounded-lg bg-muted/50 p-4">
+                          <p className="text-sm font-medium text-foreground mb-2">
+                            Your availability schedule:
+                          </p>
+                          <div className="space-y-1">
+                            {allBlocks.map((block) => (
+                              <div key={block.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span className="text-green-600">✓</span>
+                                <span>
+                                  {block.id === 'morning' && '☀️ Morning: '}
+                                  {block.id === 'afternoon' && '🌤️ Afternoon: '}
+                                  {block.id === 'main' && '📅 '}
+                                  {block.id === 'specific' && '📌 '}
+                                  {block.isRecurring
+                                    ? formatDaysForDisplay(block.days)
+                                    : block.specificDate?.toLocaleDateString()
+                                  }
+                                  {' '}
+                                  {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          {allBlocks.some(b => b.isRecurring && b.specificDate) && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Starting from {allBlocks.find(b => b.specificDate)?.specificDate?.toLocaleDateString()}
+                            </p>
                           )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              // No events detected
-              <>
-                <div className="text-center">
-                  <div className="text-4xl mb-4">📅</div>
-                  <h2 className="text-xl font-semibold">Calendar Created!</h2>
-                  <p className="text-muted-foreground mt-1">
-                    "{calendarName}" is ready for availability events.
-                  </p>
-                </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <p className="text-sm font-medium text-amber-800 mb-2">
-                    Don't forget to add your availability
-                  </p>
-                  <p className="text-sm text-amber-700">
-                    Go back and click "Add" to open Google Calendar and save your availability blocks.
-                    Or add events directly in Google Calendar anytime.
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm font-medium text-foreground mb-2">
-                    Your configured schedule:
-                  </p>
-                  <div className="space-y-2">
-                    {buildAvailabilityBlocks().map((block) => (
-                      <div key={block.id} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="mt-0.5">
-                          {block.id === 'morning' && '☀️'}
-                          {block.id === 'afternoon' && '🌤️'}
-                          {block.id === 'main' && '📅'}
-                          {block.id === 'specific' && '📌'}
-                        </span>
-                        <div>
-                          <span>
-                            {block.isRecurring
-                              ? formatDaysForDisplay(block.days)
-                              : block.specificDate?.toLocaleDateString()
-                            }
-                            {' '}
-                            {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                          </span>
-                          {block.isRecurring && block.specificDate && (
-                            <p className="text-xs">Starting from {format(block.specificDate, 'PPP')}</p>
-                          )}
+                        <div className="text-sm text-muted-foreground">
+                          <strong>Tip:</strong> Now you know how it works! You can add or change availability
+                          directly in Google Calendar anytime. Just select "<strong>{calendarName}</strong>" as the calendar.
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Now you know how it works!</strong> You can add or change availability
-                directly in Google Calendar anytime. Just select "{calendarName}" as the calendar.
-              </AlertDescription>
-            </Alert>
+                      </>
+                    ) : (
+                      // Not all detected - show simple reminder
+                      <Alert>
+                        <AlertDescription>
+                          <p className="mb-2">
+                            Don't forget to add your availability to Google Calendar!
+                          </p>
+                          <p className="text-muted-foreground">
+                            You can add or change availability directly in Google Calendar anytime.
+                            Just select "<strong>{calendarName}</strong>" as the calendar when creating events.
+                          </p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
 
             <div className="flex justify-center pt-4">
-              <Button
-                onClick={resetCreateDialog}
-              >
+              <Button onClick={resetCreateDialog}>
                 Done
               </Button>
             </div>
-          </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
