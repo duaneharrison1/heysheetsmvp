@@ -19,39 +19,45 @@ const AdminUsers = () => {
       setLoading(false);
       return;
     }
-    loadUsers();
-  }, [isSuperAdmin, roleLoading]);
+    
+    let cancelled = false;
+    
+    const loadUsers = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data: usersData, error: usersError } = await supabase
+          .from('user_profiles')
+          .select('id, email, role, is_active, created_at')
+          .order('created_at', { ascending: false })
+          .limit(100);
 
-  const loadUsers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      const { data: usersData, error: usersError } = await supabase
-        .from('user_profiles')
-        .select('id, email, role, is_active, created_at')
-        .order('created_at', { ascending: false })
-        .limit(100); // Smaller limit for faster queries
-
-      clearTimeout(timeout);
-
-      if (usersError) {
-        console.error('Supabase error:', usersError);
-        throw usersError;
+        if (usersError) {
+          console.error('Supabase error:', usersError);
+          throw usersError;
+        }
+        
+        if (!cancelled) {
+          setUsers(usersData || []);
+        }
+      } catch (err: any) {
+        console.error('Failed to load users:', err);
+        if (!cancelled) {
+          setError(err?.message || 'Failed to load users. Please try again.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-      setUsers(usersData || []);
-    } catch (err: any) {
-      console.error('Failed to load users:', err);
-      const message = err?.name === 'AbortError' 
-        ? 'Request timed out. Try refreshing.' 
-        : err?.message || 'Failed to load users. Please try again.';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    
+    loadUsers();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuperAdmin, roleLoading]);
 
   if (roleLoading || loading) {
     return (

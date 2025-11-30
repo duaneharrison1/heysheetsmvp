@@ -1,11 +1,10 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUserRole } from '@/hooks/useUserRole';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { H1, Lead } from '@/components/ui/heading';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +20,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
-  Link as LinkIcon,
   Copy,
   Pencil,
   Trash,
@@ -32,7 +30,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 
-interface AdminImage {
+interface ManageImage {
   id: string;
   name: string;
   url: string;
@@ -49,9 +47,9 @@ const PAGE_SIZE = 20;
 type SortField = 'name' | 'created_at';
 type SortDirection = 'asc' | 'desc';
 
-const AdminImages = () => {
+const ManageImages = () => {
   const { loading: roleLoading } = useUserRole();
-  const [images, setImages] = useState<AdminImage[]>([]);
+  const [images, setImages] = useState<ManageImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,11 +63,8 @@ const AdminImages = () => {
 
   // Upload modal
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [uploadTab, setUploadTab] = useState<'file' | 'url'>('file');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState('');
-  const [imageName, setImageName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -86,36 +81,49 @@ const AdminImages = () => {
   // Hover preview state (fixed, so it doesn't affect table scrollbars)
   const [preview, setPreview] = useState<{ url: string; x: number; y: number; visible: boolean }>({ url: '', x: 0, y: 0, visible: false });
 
-  // Load images function
-  const loadImages = useCallback(async (field: SortField, direction: SortDirection) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      // RLS handles authorization - super_admins and store owners can access
-      const { data, error: queryError } = await supabase
-        .from('admin_images')
-        .select('*')
-        .order(field, { ascending: direction === 'asc' });
-
-      if (queryError) {
-        // RLS will return error if user doesn't have access
-        throw queryError;
-      }
-      setImages(data || []);
-    } catch (err: any) {
-      console.error('Failed to load images:', err);
-      setError(err?.message || 'Failed to load images');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   // Load data when role loading completes or sort changes
   useEffect(() => {
     if (roleLoading) return;
-    loadImages(sortField, sortDirection);
-  }, [roleLoading, sortField, sortDirection, loadImages]);
+    
+    let cancelled = false;
+    
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // RLS handles authorization - super_admins and store owners can access
+        const { data, error: queryError } = await supabase
+          .from('admin_images')
+          .select('*')
+          .order(sortField, { ascending: sortDirection === 'asc' });
+
+        if (queryError) {
+          // RLS will return error if user doesn't have access
+          throw queryError;
+        }
+        
+        if (!cancelled) {
+          setImages(data || []);
+        }
+      } catch (err: any) {
+        console.error('Failed to load images:', err);
+        if (!cancelled) {
+          setError(err?.message || 'Failed to load images');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [roleLoading, sortField, sortDirection]);
 
   // Client-side search filtering
   const filteredImages = useMemo(() => {
@@ -161,9 +169,6 @@ const AdminImages = () => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      if (!imageName) {
-        setImageName(file.name.replace(/\.[^/.]+$/, ''));
-      }
     }
   };
 
@@ -177,7 +182,7 @@ const AdminImages = () => {
 
       const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
 
-      if (uploadTab === 'file' && selectedFile) {
+      if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
 
@@ -193,33 +198,13 @@ const AdminImages = () => {
         if (!response.ok) throw new Error(result.error || 'Upload failed');
 
         setImages((prev) => [result.data, ...prev]);
-      } else if (uploadTab === 'url' && imageUrl) {
-        const response = await fetch(`${supabaseUrl}/functions/v1/upload-image`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            operation: 'url',
-            imageUrl,
-            name: imageName || 'Image from URL',
-          }),
-        });
-
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Upload failed');
-
-        setImages((prev) => [result.data, ...prev]);
       } else {
-        throw new Error('Please select a file or enter a URL');
+        throw new Error('Please select a file to upload');
       }
 
       // Reset and close modal
       setUploadModalOpen(false);
       setSelectedFile(null);
-      setImageUrl('');
-      setImageName('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) {
       console.error('Upload error:', err);
@@ -241,7 +226,7 @@ const AdminImages = () => {
   };
 
   // Rename handlers
-  const startRename = (image: AdminImage) => {
+  const startRename = (image: ManageImage) => {
     setEditingId(image.id);
     setEditingName(image.name);
   };
@@ -627,67 +612,29 @@ const AdminImages = () => {
           <DialogHeader>
             <DialogTitle>Upload Image</DialogTitle>
             <DialogDescription>
-              Upload an image from your computer or provide a URL
+              Upload an image from your computer
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={uploadTab} onValueChange={(v) => setUploadTab(v as 'file' | 'url')}>
-            <TabsList className="w-full">
-              <TabsTrigger value="file" className="flex-1">
-                <Upload className="h-4 w-4 mr-2" />
-                File Upload
-              </TabsTrigger>
-              <TabsTrigger value="url" className="flex-1">
-                <LinkIcon className="h-4 w-4 mr-2" />
-                From URL
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="file" className="mt-4 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">
-                  Select Image
-                </label>
-                <Input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="cursor-pointer"
-                />
-                {selectedFile && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
-                  </p>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="url" className="mt-4 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">
-                  Image URL
-                </label>
-                <Input
-                  type="url"
-                  placeholder="https://example.com/image.png"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">
-                  Name (optional)
-                </label>
-                <Input
-                  type="text"
-                  placeholder="My Image"
-                  value={imageName}
-                  onChange={(e) => setImageName(e.target.value)}
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Select Image
+              </label>
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="cursor-pointer"
+              />
+              {selectedFile && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                </p>
+              )}
+            </div>
+          </div>
 
           {uploadError && (
             <p className="text-sm text-red-600 mt-2">{uploadError}</p>
@@ -699,8 +646,6 @@ const AdminImages = () => {
               onClick={() => {
                 setUploadModalOpen(false);
                 setSelectedFile(null);
-                setImageUrl('');
-                setImageName('');
                 setUploadError(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
@@ -747,4 +692,4 @@ const AdminImages = () => {
   );
 };
 
-export default AdminImages;
+export default ManageImages;

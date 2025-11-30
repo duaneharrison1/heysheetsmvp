@@ -22,52 +22,61 @@ const AdminStores = () => {
       setLoading(false);
       return;
     }
+    
+    let cancelled = false;
+    
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Fetch stores
+        const { data: storesData, error: storesError } = await supabase
+          .from('stores')
+          .select('id, name, type, is_active, user_id, created_at')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (storesError && storesError.code !== 'PGRST116') {
+          console.error('Stores query error:', storesError);
+          throw storesError;
+        }
+        
+        if (!cancelled) {
+          setStores(storesData || []);
+        }
+
+        // Fetch users separately
+        const { data: usersData, error: usersError } = await supabase
+          .from('user_profiles')
+          .select('id, email')
+          .limit(1000);
+
+        if (usersError) {
+          console.error('Users query error:', usersError);
+          throw usersError;
+        }
+        
+        if (!cancelled) {
+          setUsers(usersData || []);
+        }
+      } catch (err: any) {
+        console.error('Failed to load data:', err);
+        if (!cancelled) {
+          setError(err?.message || 'Failed to load data. Please try again.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    
     loadData();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [isSuperAdmin, roleLoading]);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      // Fetch stores
-      const { data: storesData, error: storesError } = await supabase
-        .from('stores')
-        .select('id, name, type, is_active, user_id, created_at')
-        .order('created_at', { ascending: false })
-        .limit(100); // Smaller limit
-
-      clearTimeout(timeout);
-
-      if (storesError && storesError.code !== 'PGRST116') {
-        console.error('Stores query error:', storesError);
-        throw storesError;
-      }
-      setStores(storesData || []);
-
-      // Fetch users separately
-      const { data: usersData, error: usersError } = await supabase
-        .from('user_profiles')
-        .select('id, email')
-        .limit(1000);
-
-      if (usersError) {
-        console.error('Users query error:', usersError);
-        throw usersError;
-      }
-      setUsers(usersData || []);
-    } catch (err: any) {
-      console.error('Failed to load data:', err);
-      const message = err?.name === 'AbortError' 
-        ? 'Request timed out. Try refreshing.' 
-        : err?.message || 'Failed to load data. Please try again.';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getOwnerEmail = (userId: string) => {
     return users.find(u => u.id === userId)?.email || userId;

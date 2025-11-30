@@ -4,101 +4,157 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { H1, Lead } from '@/components/ui/heading'
+import { Loader2 } from 'lucide-react'
+import { useUserRole } from '@/hooks/useUserRole'
 import { loadTestResults } from '../lib/storage'
 import type { TestRunSummary } from '../lib/types'
 
 export function QAResultsPage() {
+  const { isSuperAdmin, loading: roleLoading } = useUserRole()
   const [results, setResults] = useState<TestRunSummary[]>([])
   const [selectedResult, setSelectedResult] = useState<TestRunSummary | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Wait for role check to complete
+    if (roleLoading) return
+    
+    // Only load if user is super admin
+    if (!isSuperAdmin) {
+      setLoading(false)
+      return
+    }
+    
+    let cancelled = false
+
     async function load() {
       try {
         const { results: loaded } = await loadTestResults()
-        setResults(loaded.sort((a, b) => b.timestamp - a.timestamp))
+        if (!cancelled) {
+          setResults(loaded.sort((a, b) => b.timestamp - a.timestamp))
+        }
       } catch (error) {
         console.error('Failed to load results:', error)
       } finally {
-        setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
     load()
-  }, [])
+    
+    return () => {
+      cancelled = true
+    }
+  }, [roleLoading, isSuperAdmin])
+
+  // Show loading while checking role
+  if (roleLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  // Access denied for non-super admins
+  if (!isSuperAdmin) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <H1>Access Denied</H1>
+          <Lead>You don't have permission to access this page</Lead>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Only super administrators can access QA test results.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8">
-        <div className="text-center">Loading test results...</div>
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>QA Test Results History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {results.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              No test results yet. Run a test to see results here.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Scenario</TableHead>
-                  <TableHead>Result</TableHead>
-                  <TableHead>Quality</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {results.map(result => (
-                  <TableRow key={result.testRunId}>
-                    <TableCell>
-                      {new Date(result.timestamp).toLocaleString()}
-                    </TableCell>
-                    <TableCell>{result.scenarioName}</TableCell>
-                    <TableCell>
-                      <Badge variant={result.overallPassed ? 'default' : 'destructive'}>
-                        {result.overallPassed ? '✅ PASS' : '❌ FAIL'}
-                      </Badge>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {result.passedSteps}/{result.totalSteps} steps
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {result.avgQualityScore}/100
-                    </TableCell>
-                    <TableCell>
-                      {(result.duration / 1000).toFixed(1)}s
-                    </TableCell>
-                    <TableCell>
-                      ${result.totalCost.toFixed(4)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedResult(result)}
-                      >
-                        View Details
-                      </Button>
-                    </TableCell>
+    <div className="space-y-6">
+      <div>
+        <H1>QA Test Results</H1>
+        <Lead>View and analyze AI response quality test results</Lead>
+      </div>
+
+      <div className="max-w-5xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Test Results History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {results.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                No test results yet. Run a test to see results here.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Scenario</TableHead>
+                    <TableHead>Result</TableHead>
+                    <TableHead>Quality</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {results.map(result => (
+                    <TableRow key={result.testRunId}>
+                      <TableCell>
+                        {new Date(result.timestamp).toLocaleString()}
+                      </TableCell>
+                      <TableCell>{result.scenarioName}</TableCell>
+                      <TableCell>
+                        <Badge variant={result.overallPassed ? 'default' : 'destructive'}>
+                          {result.overallPassed ? '✅ PASS' : '❌ FAIL'}
+                        </Badge>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {result.passedSteps}/{result.totalSteps} steps
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {result.avgQualityScore}/100
+                      </TableCell>
+                      <TableCell>
+                        {(result.duration / 1000).toFixed(1)}s
+                      </TableCell>
+                      <TableCell>
+                        ${result.totalCost.toFixed(4)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedResult(result)}
+                        >
+                          View Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Details Dialog */}
       <Dialog open={!!selectedResult} onOpenChange={() => setSelectedResult(null)}>

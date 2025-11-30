@@ -29,28 +29,63 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user?.id) {
-      loadStores(user.id);
+    // Wait for user context to be available
+    if (!user?.id) {
+      // Keep loading true while waiting for user
+      return;
     }
-  }, [user]);
+    
+    let cancelled = false;
+    
+    const loadUserStores = async () => {
+      try {
+        setLoading(true);
+        const res = await supabase
+          .from('stores')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }) as unknown as { data: any[] | null; error: any };
 
-  const loadStores = async (userId: string) => {
+        const { data, error } = res;
+
+        if (error) {
+          console.error('Error loading stores:', error);
+          toast.error('Failed to load stores');
+        }
+
+        if (!cancelled) {
+          setStores(data || []);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadUserStores();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Helper to reload stores after creation
+  const reloadStores = async () => {
+    if (!user?.id) return;
     try {
       setLoading(true);
-      // cast to any to avoid strict generated DB types causing 'never' errors in editor
       const res = await supabase
         .from('stores')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false }) as unknown as { data: any[] | null; error: any };
 
       const { data, error } = res;
-
       if (error) {
         console.error('Error loading stores:', error);
         toast.error('Failed to load stores');
       }
-
       setStores(data || []);
     } finally {
       setLoading(false);
@@ -86,7 +121,7 @@ const Dashboard = () => {
         toast.success(`Store created`);
         setOpenDialog(false);
         setStoreName('');
-        await loadStores(user.id);
+        await reloadStores();
       }
     } finally {
       setCreating(false);

@@ -13,6 +13,7 @@ import StoreSettings from "./pages/StoreSettings";
 import ChatComponentsShowcase from "./pages/ChatComponents";
 import Account from "./pages/Account";
 import Billing from './pages/Billing';
+import ManageImages from './pages/Images';
 import Help from './pages/Help';
 import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
@@ -42,15 +43,19 @@ const App = () => (
           {/* Protected Routes with Sidebar Layout */}
           <Route path="/dashboard" element={<SidebarLayout><Dashboard /></SidebarLayout>} />
           <Route path="/settings/:storeId" element={<SidebarLayout><StoreSettings /></SidebarLayout>} />
-          {/* removed /profile route (no profile page) */}
+
+          {/* Store Admin (store owner) */}
           <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
           <Route path="/billing" element={<SidebarLayout><Billing /></SidebarLayout>} />
+          <Route path="/images" element={<SidebarLayout><ManageImages /></SidebarLayout>} />
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
+
+          {/* Super Admin (platform admin) */}
           <Route path="/admin/users" element={<SidebarLayout><AdminUsers /></SidebarLayout>} />
           <Route path="/admin/stores" element={<SidebarLayout><AdminStores /></SidebarLayout>} />
           <Route path="/admin/feedback" element={<SidebarLayout><AdminFeedback /></SidebarLayout>} />
           <Route path="/admin/support" element={<SidebarLayout><AdminSupportTickets /></SidebarLayout>} />
-          <Route path="/qa-results" element={<SidebarLayout><QAResultsPage /></SidebarLayout>} />
+          <Route path="/admin/qa-results" element={<SidebarLayout><QAResultsPage /></SidebarLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
