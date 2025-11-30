@@ -130,6 +130,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Get session for API calls
   const [session, setSession] = useState<any>(null);
 
+  // Tip visibility
+  const [showTip, setShowTip] = useState(true);
+
+  // Track if this is first availability (for dynamic title)
+  const [isFirstAvailability, setIsFirstAvailability] = useState(true);
+
   // Time options for dropdowns
   const timeOptions = generateTimeOptions();
 
@@ -575,6 +581,9 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           setPollingStatus('found');
           setAddedBlocks(prev => new Set([...prev, blockId]));
 
+          // No longer first time
+          setIsFirstAvailability(false);
+
           // Calculate smart view based on the event that was just added
           const eventStartHour = parseTimeToHour(startTime);
           const eventEndHour = parseTimeToHour(endTime);
@@ -648,6 +657,31 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setBreakEndTime('13:00');
     setSpecificDate(undefined);
     setAvailabilityStep('choose-type');
+  };
+
+  // Smart positioning for modal and popup
+  const getSmartPositioning = () => {
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const popupWidth = 590;  // 10px wider than original 580
+    const modalWidth = 420;
+    const minGap = 40;
+
+    const totalNeeded = modalWidth + minGap + popupWidth;
+    const canFitSideBySide = viewportWidth >= totalNeeded;
+
+    if (canFitSideBySide) {
+      return {
+        modalClassName: 'ml-8 mr-auto',
+        popupLeft: viewportWidth - popupWidth - 20,
+        sideBySide: true
+      };
+    } else {
+      return {
+        modalClassName: 'mx-auto',
+        popupLeft: Math.max(20, viewportWidth - popupWidth - 20),
+        sideBySide: false
+      };
+    }
   };
 
   // Reset dialog state
@@ -1850,96 +1884,135 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           {/* Top Header Bar */}
           <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
             <h1 className="text-lg font-semibold truncate">{calendarName}</h1>
-            <Button onClick={() => {
-              setCreateDialogOpen(false);
-              setCreateStep('choice');
-              resetCreateDialog();
-            }}>
-              Done ✓
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateDialogOpen(false);
+                setCreateStep('choice');
+                resetCreateDialog();
+              }}
+            >
+              Done
             </Button>
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative flex flex-col">
 
-            {/* Calendar Embed - Full width, no border */}
-            <iframe
-              key={calendarKey}
-              src={getCalendarEmbedUrl(
-                createdCalendarId,
-                selectedAvailabilityType === 'specific' ? specificDate : weeklyStartDate,
-                calendarViewMode
-              )}
-              className="w-full h-full"
-              style={{ border: 'none' }}
-              frameBorder="0"
-            />
-
-            {/* Floating Controls - Only show in success state */}
+            {/* Gap area for floating controls - only in success state */}
             {availabilityStep === 'success' && (
-              <>
-                {/* Top-left: Add Availability Button */}
-                <div className="absolute top-4 left-4">
-                  <Button
-                    onClick={handleAddAnother}
-                    className="shadow-lg"
-                  >
-                    + Add Availability
-                  </Button>
-                </div>
+              <div
+                className="flex justify-between items-center px-4 py-2"
+                style={{ backgroundColor: '#f8f9fa' }}
+              >
+                {/* Left: Add Availability */}
+                <Button
+                  size="sm"
+                  onClick={handleAddAnother}
+                >
+                  + Add Availability
+                </Button>
 
-                {/* Top-right: View Mode Dropdown */}
-                <div className="absolute top-4 right-4">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="shadow-lg">
-                        {calendarViewMode === 'WEEK' && 'Week'}
-                        {calendarViewMode === 'MONTH' && 'Month'}
-                        {calendarViewMode === 'AGENDA' && 'Agenda'}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
-                        Week
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
-                        Month
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
-                        Agenda
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                {/* Right: View Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      {calendarViewMode === 'WEEK' && 'Week'}
+                      {calendarViewMode === 'MONTH' && 'Month'}
+                      {calendarViewMode === 'AGENDA' && 'Agenda'}
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
+                      Week
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
+                      Month
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
+                      Agenda
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
 
-                {/* Bottom Tip */}
-                <div className="absolute bottom-4 left-4 right-4">
-                  <div className="bg-white/90 backdrop-blur rounded-lg px-4 py-3 shadow-lg border">
-                    <p className="text-sm text-muted-foreground">
+            {/* Calendar Embed */}
+            <div className="flex-1 relative">
+              <iframe
+                key={calendarKey}
+                src={getCalendarEmbedUrl(
+                  createdCalendarId,
+                  selectedAvailabilityType === 'specific' ? specificDate : weeklyStartDate,
+                  calendarViewMode
+                )}
+                className="w-full h-full"
+                style={{ border: 'none' }}
+                frameBorder="0"
+              />
+
+              {/* Bottom Tip - only in success state */}
+              {availabilityStep === 'success' && showTip && (
+                <div className="absolute bottom-4 right-4 max-w-sm z-10">
+                  <div className="bg-white/95 backdrop-blur rounded-lg px-4 py-3 shadow-lg border relative">
+                    <button
+                      onClick={() => setShowTip(false)}
+                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
+                      aria-label="Dismiss tip"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <p className="text-sm text-muted-foreground pr-6">
                       💡 You can also add availability directly in Google Calendar.
                       Create an event and select "<strong>{calendarName}</strong>" as the calendar.
                     </p>
                   </div>
                 </div>
-              </>
-            )}
+              )}
 
-            {/* Modal Overlay for Steps */}
-            {availabilityStep !== 'success' && (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
+              {/* Modal Overlay - Only show when there's actual modal content */}
+              {(availabilityStep === 'choose-type' ||
+                availabilityStep === 'set-availability' ||
+                availabilityStep === 'waiting-save') && (
+                <div
+                  className="absolute inset-0 bg-black/50 flex items-center justify-center p-4"
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget && availabilityStep === 'choose-type') {
+                      setAvailabilityStep('success');
+                    }
+                  }}
+                >
 
-                {/* Step: Choose Type */}
-                {availabilityStep === 'choose-type' && (
-                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                    <h2 className="text-xl font-semibold mb-2">
-                      Let's add your first availability block
-                    </h2>
-                    <p className="text-muted-foreground mb-6">
-                      This tells customers when your services are open to book.
-                    </p>
+                  {/* Step: Choose Type */}
+                  {availabilityStep === 'choose-type' && (
+                    <div
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Close button */}
+                      <button
+                        onClick={() => setAvailabilityStep('success')}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        aria-label="Close"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
 
-                    <div className="space-y-3">
+                      <h2 className="text-xl font-semibold mb-2 pr-8">
+                        {isFirstAvailability
+                          ? "Let's add your first availability block"
+                          : "Add availability"
+                        }
+                      </h2>
+                      <p className="text-muted-foreground mb-6">
+                        {isFirstAvailability
+                          ? "This tells customers when your services are open to book."
+                          : "Add another time block when customers can book."
+                        }
+                      </p>
+
+                      <div className="space-y-3">
                       {/* Weekly Option */}
                       <button
                         onClick={() => {
@@ -1989,12 +2062,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
-                {/* Step: Set Availability */}
-                {availabilityStep === 'set-availability' && (
-                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                    <h2 className="text-xl font-semibold mb-4">
-                      Set your availability
-                    </h2>
+                  {/* Step: Set Availability */}
+                  {availabilityStep === 'set-availability' && (
+                    <div
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Close button */}
+                      <button
+                        onClick={() => setAvailabilityStep('success')}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        aria-label="Close"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+
+                      <h2 className="text-xl font-semibold mb-4 pr-8">
+                        Set your availability
+                      </h2>
 
                     {/* Weekly Form */}
                     {selectedAvailabilityType === 'weekly' && (
@@ -2168,7 +2253,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           if (blocks.length > 0) {
                             const block = blocks[0];
                             const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                            openEventPopup(eventUrl);
+                            const positioning = getSmartPositioning();
+                            openEventPopup(eventUrl, positioning.popupLeft);
                             startPolling(block.id);
                             setAvailabilityStep('waiting-save');
                           }
@@ -2180,36 +2266,73 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
-                {/* Step: Waiting for Save */}
-                {availabilityStep === 'waiting-save' && (
-                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-center">
-                    <div className="text-4xl mb-4">👉</div>
-                    <h2 className="text-xl font-semibold mb-2">
-                      A popup has appeared with your availability block prefilled
-                    </h2>
-                    <p className="text-muted-foreground mb-6">
-                      Just click <strong>Save</strong> in the popup to add it!
-                    </p>
+                  {/* Step: Waiting for Save */}
+                  {availabilityStep === 'waiting-save' && (
+                    <div
+                      className={`bg-white rounded-xl shadow-2xl w-full max-w-md p-6 ${getSmartPositioning().modalClassName}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="space-y-4">
+                        {/* Header with icon */}
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                            <Calendar className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h2 className="text-lg font-semibold">
+                              Complete your availability in Google Calendar
+                            </h2>
+                            <p className="text-muted-foreground text-sm mt-1">
+                              A Google Calendar window has opened with your availability details pre-filled.
+                              Review the details and click <strong>Save</strong> to confirm.
+                            </p>
+                          </div>
+                        </div>
 
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Waiting for you to save...</span>
+                        {/* Status indicator */}
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-sm text-muted-foreground flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                            <span>Waiting for you to save the event...</span>
+                          </p>
+                        </div>
+
+                        {/* Help text */}
+                        <p className="text-xs text-muted-foreground">
+                          Don't see the popup? It may have been blocked by your browser.
+                        </p>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 mt-6 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => setAvailabilityStep('set-availability')}
+                        >
+                          ← Back
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            const blocks = buildAvailabilityBlocks();
+                            if (blocks.length > 0) {
+                              const block = blocks[0];
+                              const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                              const positioning = getSmartPositioning();
+                              openEventPopup(eventUrl, positioning.popupLeft);
+                            }
+                          }}
+                        >
+                          Reopen popup
+                        </Button>
+                      </div>
                     </div>
+                  )}
 
-                    <div className="mt-6 pt-4 border-t">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setAvailabilityStep('set-availability')}
-                      >
-                        ← Go back
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
