@@ -111,6 +111,9 @@ export interface FunctionResult {
   data?: any;
   error?: string;
   message?: string;
+  // If true, the orchestrator should bypass the LLM responder and
+  // use `message` as a deterministic response (e.g., for critical actions).
+  skipResponder?: boolean;
   needs_clarification?: boolean;
   // Flag indicating we're waiting for user input (e.g., form submission)
   // This is NOT an error - just means we need more info from the user
@@ -136,6 +139,9 @@ export interface ChatCompletionRequest {
   messages: Message[];
   storeId: string;
   model?: string; // optional model override from frontend
+  // Optional runtime/debug flag to perform a raw LLM call and bypass
+  // the orchestrator's chatbot logic. Useful for QA or simple queries.
+  simpleMode?: boolean;
 }
 
 /**
