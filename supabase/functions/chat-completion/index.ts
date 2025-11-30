@@ -463,6 +463,10 @@ function findActualTabName(
   expectedTab: string,
   detectedSchema: Record<string, any>
 ): string | null {
+  if (!detectedSchema || typeof detectedSchema !== 'object') {
+    console.warn('[findActualTabName] Invalid or missing detectedSchema:', detectedSchema);
+    return null;
+  }
   const expectedLower = expectedTab.toLowerCase();
 
   // Try exact match first

@@ -4,8 +4,8 @@ import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // Simple accordion using <details> for accessibility
-const Accordion = ({ children }: { children?: React.ReactNode }) => {
-  return <div>{children}</div>
+const Accordion = ({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) => {
+  return <div className={cn(className)} {...props}>{children}</div>
 }
 
 const AccordionItem = React.forwardRef<HTMLDetailsElement, React.HTMLAttributes<HTMLDetailsElement>>(({ className, children, ...props }, ref) => (

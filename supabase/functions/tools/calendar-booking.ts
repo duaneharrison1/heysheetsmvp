@@ -63,6 +63,11 @@ async function loadSheetTab(
  * Find actual tab name (fuzzy match)
  */
 function findActualTabName(target: string, schema: any): string | null {
+  if (!schema || typeof schema !== 'object') {
+    console.warn('[findActualTabName] Invalid or missing schema:', schema);
+    return null;
+  }
+
   const targetLower = target.toLowerCase();
   const tabNames = Object.keys(schema);
 
