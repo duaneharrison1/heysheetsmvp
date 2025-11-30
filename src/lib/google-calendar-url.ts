@@ -144,17 +144,18 @@ export function getCalendarWeekViewUrl(date: Date = new Date()): string {
  *
  * @param eventCreateUrl - URL for event creation form
  */
-export function openEventPopup(eventCreateUrl: string): void {
-  const width = 580;
+export function openEventPopup(eventCreateUrl: string, customLeft?: number): void {
+  const width = 640;  // 10% wider than before
   const height = 700;
 
-  // Position on RIGHT side of screen (50% from left + small margin)
-  const left = Math.round(window.screen.width / 2) + 20;
+  // Use custom left position if provided, otherwise default to right side
+  const screenWidth = window.screen.width;
+  const left = customLeft ?? Math.max(20, screenWidth - width - 20);
   const top = Math.max(0, (window.screen.height - height) / 2);
 
   window.open(
     eventCreateUrl,
-    'google_calendar_event',
+    'gcal_event',
     `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
   );
 }
