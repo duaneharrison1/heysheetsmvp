@@ -20,7 +20,7 @@ import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
 // Test scenarios modal - shown when debug panel is open
-import { ScenariosModal } from "@/components/qa/ScenariosModal";
+import { ScenariosModal } from "@/qa/components/ScenariosModal";
 // Test runner for executing QA scenarios
 import { TestRunner } from "@/qa/lib/test-runner";
 import type { TestScenario, GoalBasedTurnResult, TestStepResult } from "@/qa/lib/types";

@@ -204,11 +204,13 @@ const ChatComponentsShowcase: React.FC = () => {
 									<div className="text-xs text-muted-foreground mb-2">
 										Products Carousel
 									</div>
-									<ChatMessage
-										message={sampleMessageProducts}
-										storeLogo={''}
-										onActionClick={(a, d) => console.log('action', a, d)}
-									/>
+																	<ChatMessage
+																				message={sampleMessageProducts}
+																				storeLogo={''}
+																				storeId={''}
+																				conversationHistory={[]}
+																				onActionClick={(a, d) => console.log('action', a, d)}
+																		/>
 								</div>
 								<div className="border-l-2 border-muted pl-3">
 									<div className="text-xs text-muted-foreground mb-2">
@@ -226,6 +228,8 @@ const ChatComponentsShowcase: React.FC = () => {
 									<ChatMessage
 										message={sampleMessageHours}
 										storeLogo={''}
+										storeId={''}
+										conversationHistory={[]}
 										onActionClick={(a, d) => console.log('action', a, d)}
 									/>
 								</div>
@@ -236,6 +240,8 @@ const ChatComponentsShowcase: React.FC = () => {
 									<ChatMessage
 										message={sampleMessageBookings}
 										storeLogo={''}
+										storeId={''}
+										conversationHistory={[]}
 										onActionClick={(a, d) => console.log('action', a, d)}
 									/>
 								</div>
@@ -246,6 +252,8 @@ const ChatComponentsShowcase: React.FC = () => {
 									<ChatMessage
 										message={sampleMessageQuick}
 										storeLogo={''}
+										storeId={''}
+										conversationHistory={[]}
 										onActionClick={(a, d) => console.log('action', a, d)}
 									/>
 								</div>
