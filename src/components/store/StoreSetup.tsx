@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { FileText, ExternalLink, Copy, CheckCircle, XCircle, Loader2, MessageCircle } from 'lucide-react';
+import { FileText, ExternalLink, Copy, CheckCircle, XCircle, Loader2, MessageCircle, Download, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 import { GOOGLE_SHEETS, extractSheetId, buildSheetsEditUrl } from '@/config/constants';
 
@@ -17,9 +17,45 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
   const [result, setResult] = useState<any>(null);
   const [existingSheet, setExistingSheet] = useState<any>(null);
   const [isChangingSheet, setIsChangingSheet] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Store URL for chatbot
   const storeUrl = `${window.location.origin}/store/${storeId}`;
+
+  // Generate QR code using canvas
+  const generateQRCode = useCallback(async (url: string) => {
+    // Use a simple QR code generation approach via an API
+    // This uses the QR Server API which is free and doesn't require installation
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}&format=png`;
+    setQrCodeDataUrl(qrApiUrl);
+  }, []);
+
+  // Generate QR code on mount
+  useEffect(() => {
+    generateQRCode(storeUrl);
+  }, [storeUrl, generateQRCode]);
+
+  // Download QR code
+  const handleDownloadQRCode = async () => {
+    if (!qrCodeDataUrl) return;
+    
+    try {
+      const response = await fetch(qrCodeDataUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `store-${storeId}-qrcode.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('QR code downloaded!');
+    } catch (err) {
+      toast.error('Failed to download QR code');
+    }
+  };
 
   // Load existing sheet connection on mount
   useEffect(() => {
@@ -368,7 +404,7 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
   return (
     <div className="space-y-6">
       {/* Store URL Card - Always visible */}
-      <Card>
+      <Card id="chatbot">
         <CardHeader>
           <div className="flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
@@ -380,36 +416,80 @@ const StoreSetup = ({ storeId, onComplete }: { storeId: string; onComplete?: (co
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <h3 className="font-semibold text-sm">Chatbot URL</h3>
-          <div className="flex gap-2">
-            <Input
-              value={storeUrl}
-              readOnly
-              className="font-mono text-sm flex-1"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleOpenStore}
-              title="Open chatbot in new tab"
-            >
-              <ExternalLink className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleCopyStoreUrl}
-              title="Copy URL"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <h3 className="font-semibold text-sm">Chatbot URL</h3>
+            <div className="flex gap-2">
+              <Input
+                value={storeUrl}
+                readOnly
+                className="font-mono text-sm flex-1"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleOpenStore}
+                title="Open chatbot in new tab"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleCopyStoreUrl}
+                title="Copy URL"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* QR Code Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <QrCode className="h-4 w-4 text-muted-foreground" />
+              <h3 className="font-semibold text-sm">QR Code</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Share this QR code so customers can quickly access your chatbot
+            </p>
+            <div className="flex items-start gap-4">
+              {qrCodeDataUrl ? (
+                <div className="border rounded-lg p-3 bg-white">
+                  <img 
+                    src={qrCodeDataUrl} 
+                    alt="Store QR Code" 
+                    className="w-32 h-32"
+                  />
+                </div>
+              ) : (
+                <div className="border rounded-lg p-3 bg-muted w-32 h-32 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadQRCode}
+                  disabled={!qrCodeDataUrl}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PNG
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Print it, share it on social media, or add it to your marketing materials
+                </p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Sheet Connection Card */}
-      <Card>
+      <Card id="google-sheet">
         <CardHeader>
           <div className="flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
