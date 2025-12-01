@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, ChevronDown, Circle } from 'lucide-react';
+import { Calendar, CheckCircle, AlertCircle, Loader2, ExternalLink, Copy, Info, Link as LinkIcon, X, MoreVertical, ChevronDown, Circle, Pencil, Trash2, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getCalendarEmbedLink, getCalendarEditLink, getCalendarViewLink } from '@/lib/calendar-links';
 import {
@@ -44,12 +44,10 @@ import {
 } from '@/lib/calendar-data';
 import {
   AvailabilityBlock,
-  generateEventCreateUrl,
-  openEventPopup,
+  generateRRule,
   generateTimeOptions,
   formatDaysForDisplay,
   formatTimeForDisplay,
-  checkForNewEvents,
   getCalendarEmbedUrl,
   getSmartCalendarView,
   parseTimeToHour
@@ -99,14 +97,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [specificDate, setSpecificDate] = useState<Date | undefined>();
   const [isOngoing, setIsOngoing] = useState(true);
   const [endRecurrenceDate, setEndRecurrenceDate] = useState<Date | undefined>();
-  const [addedBlocks, setAddedBlocks] = useState<Set<string>>(new Set());
+  // Direct API creation state
+  const [isCreatingAvailability, setIsCreatingAvailability] = useState(false);
 
-  // Polling state
-  const [pollingBlockId, setPollingBlockId] = useState<string | null>(null);
-  const [pollStartTime, setPollStartTime] = useState<string | null>(null);
-  const [pollingStatus, setPollingStatus] = useState<'idle' | 'polling' | 'found' | 'timeout'>('idle');
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Edit guide flow state
+  const [editGuideStep, setEditGuideStep] = useState<'idle' | 'waiting-click' | 'clicked'>('idle');
+  const editGuideCleanupRef = useRef<(() => void) | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Weekly start date
   const [weeklyStartDate, setWeeklyStartDate] = useState<Date>(() => new Date());
@@ -117,8 +114,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // View mode for calendar embed
   const [calendarViewMode, setCalendarViewMode] = useState<'WEEK' | 'MONTH' | 'AGENDA'>('WEEK');
 
-  // Current step in the add availability flow
-  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'waiting-save' | 'success'>('choose-type');
+  // Current step in the add availability flow (simplified - no waiting-save)
+  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'success'>('choose-type');
 
   // Track which availability type was selected (for form step)
   const [selectedAvailabilityType, setSelectedAvailabilityType] = useState<'weekly' | 'specific' | null>(null);
@@ -135,12 +132,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Track if this is first availability (for dynamic title)
   const [isFirstAvailability, setIsFirstAvailability] = useState(true);
-
-  // Multi-block support (for breaks)
-  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
-  const [pendingBlocks, setPendingBlocks] = useState<AvailabilityBlock[]>([]);
-  // Ref to access pendingBlocks in polling callback (avoids stale closure)
-  const pendingBlocksRef = useRef<AvailabilityBlock[]>([]);
 
   // Time options for dropdowns
   const timeOptions = generateTimeOptions();
@@ -557,127 +548,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     return blocks;
   };
 
-  // Stop polling
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-    if (pollingTimeoutRef.current) {
-      clearTimeout(pollingTimeoutRef.current);
-      pollingTimeoutRef.current = null;
-    }
-  };
-
-  // Start polling for new events
-  const startPolling = async (blockId: string) => {
-    console.log('[startPolling] Called with blockId:', blockId);
-    console.log('[startPolling] Calendar ID:', createdCalendarId);
-
-    if (!createdCalendarId) {
-      console.warn('[startPolling] No calendar ID yet, cannot poll');
-      return;
-    }
-
-    const startTime = new Date().toISOString();
-    setPollStartTime(startTime);
-    setPollingBlockId(blockId);
-    setPollingStatus('polling');
-
-    // Clear any existing polling
-    stopPolling();
-
-    // Poll every 2 seconds (faster feedback)
-    pollingIntervalRef.current = setInterval(async () => {
-      console.log('[Polling] Checking for event...');
-      console.log('[Polling] calendarId:', createdCalendarId, 'sinceTime:', startTime);
-
-      try {
-        const result = await checkForNewEvents(
-          createdCalendarId,
-          startTime,
-          storeId,
-          supabase
-        );
-
-        console.log('[Polling] Response:', result);
-
-        if (result.found) {
-          // Success! Event detected
-          stopPolling();
-          setPollingStatus('found');
-          setAddedBlocks(prev => new Set([...prev, blockId]));
-
-          // Force calendar iframe to reload by changing key
-          setCalendarKey(prev => prev + 1);
-
-          // Check if there are more blocks to add (multi-block support)
-          // Use ref to avoid stale closure issue
-          const blocksToProcess = pendingBlocksRef.current;
-          const nextIndex = currentBlockIndex + 1;
-
-          console.log('[Polling Success] currentBlockIndex:', currentBlockIndex);
-          console.log('[Polling Success] nextIndex:', nextIndex);
-          console.log('[Polling Success] blocksToProcess.length:', blocksToProcess.length);
-          console.log('[Polling Success] blocksToProcess:', blocksToProcess);
-
-          if (nextIndex < blocksToProcess.length) {
-            // More blocks - stay on waiting-save
-            console.log('[Polling Success] More blocks to add, staying on waiting-save');
-            setCurrentBlockIndex(nextIndex);
-
-            // Small delay before opening next popup for better UX
-            setTimeout(() => {
-              const nextBlock = blocksToProcess[nextIndex];
-              console.log('[Polling Success] Opening popup for next block:', nextBlock);
-              const eventUrl = generateEventCreateUrl(nextBlock, createdCalendarId);
-              const positioning = getSmartPositioning();
-              openEventPopup(eventUrl, positioning.popupLeft);
-              startPolling(nextBlock.id);
-            }, 500);
-          } else {
-            // All blocks added - go to success
-            console.log('[Polling Success] All blocks done, going to success');
-            setIsFirstAvailability(false);
-            setPendingBlocks([]);
-            pendingBlocksRef.current = [];
-            setCurrentBlockIndex(0);
-
-            // Calculate smart view based on the event that was just added
-            const eventStartHour = parseTimeToHour(startTime);
-            const eventEndHour = parseTimeToHour(endTime);
-            const eventDate = selectedAvailabilityType === 'specific'
-              ? specificDate
-              : weeklyStartDate || new Date();
-
-            if (eventDate) {
-              const smartView = getSmartCalendarView(eventStartHour, eventEndHour, eventDate);
-              setCalendarViewMode(smartView.mode);
-            }
-
-            // Move to success step
-            setAvailabilityStep('success');
-          }
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 2000);
-
-    // Timeout after 2 minutes
-    pollingTimeoutRef.current = setTimeout(() => {
-      stopPolling();
-      setPollingStatus('timeout');
-    }, 120000);
-  };
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      stopPolling();
-    };
-  }, []);
-
   // Reset availability state
   const resetAvailabilityState = () => {
     setAvailabilityType(null);
@@ -690,17 +560,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setSpecificDate(undefined);
     setIsOngoing(true);
     setEndRecurrenceDate(undefined);
-    setAddedBlocks(new Set());
     setWeeklyStartDate(new Date());
     // Reset new flow state
     setSelectedAvailabilityType(null);
     setAvailabilityStep('choose-type');
     setCalendarViewMode('WEEK');
-    // Cleanup polling
-    stopPolling();
-    setPollingBlockId(null);
-    setPollStartTime(null);
-    setPollingStatus('idle');
   };
 
   // Handle "Add Another" from success state
@@ -713,13 +577,154 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setBreakStartTime('12:00');
     setBreakEndTime('13:00');
     setSpecificDate(undefined);
-    setPendingBlocks([]);
-    pendingBlocksRef.current = [];
-    setCurrentBlockIndex(0);
     setAvailabilityStep('choose-type');
   };
 
-  // Smart positioning for modal and popup
+  // Direct API creation - creates availability events without popup/polling
+  const createAvailabilityDirect = async () => {
+    const blocks = buildAvailabilityBlocks();
+
+    if (blocks.length === 0) {
+      toast({
+        title: 'Configuration required',
+        description: 'Please configure your availability times',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!createdCalendarId) {
+      toast({
+        title: 'Please wait',
+        description: 'Calendar is still being created. Please wait a moment.',
+      });
+      return;
+    }
+
+    setIsCreatingAvailability(true);
+
+    try {
+      // Convert blocks to API format with ISO datetime strings
+      const apiBlocks = blocks.map(block => {
+        // Get the date to use for the event
+        const eventDate = block.specificDate || weeklyStartDate || new Date();
+
+        // Parse start and end times
+        const [startHour, startMin] = block.startTime.split(':').map(Number);
+        const [endHour, endMin] = block.endTime.split(':').map(Number);
+
+        // Create start datetime
+        const startDateTime = new Date(eventDate);
+        startDateTime.setHours(startHour, startMin, 0, 0);
+
+        // Create end datetime
+        const endDateTime = new Date(eventDate);
+        endDateTime.setHours(endHour, endMin, 0, 0);
+
+        // Build the block for API
+        const apiBlock: any = {
+          title: 'Available',
+          startDateTime: startDateTime.toISOString(),
+          endDateTime: endDateTime.toISOString(),
+          timeZone: 'Asia/Hong_Kong',
+        };
+
+        // Add recurrence if this is a weekly block
+        if (block.isRecurring && block.days && block.days.length > 0) {
+          apiBlock.recurrence = generateRRule(block.days, block.endDate);
+        }
+
+        return apiBlock;
+      });
+
+      console.log('[createAvailabilityDirect] Sending blocks:', apiBlocks);
+
+      const response = await supabase.functions.invoke('link-calendar', {
+        body: {
+          action: 'create-availability',
+          calendarId: createdCalendarId,
+          blocks: apiBlocks,
+          storeId: storeId,
+        },
+      });
+
+      console.log('[createAvailabilityDirect] Response:', response);
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to create availability');
+      }
+
+      if (response.data?.success) {
+        toast({
+          title: blocks.length > 1 ? `${blocks.length} availability blocks added!` : 'Availability added!',
+          description: 'Your calendar has been updated.',
+        });
+
+        // Refresh the calendar embed
+        setCalendarKey(prev => prev + 1);
+        setIsFirstAvailability(false);
+
+        // Calculate smart view based on the event
+        const eventStartHour = parseTimeToHour(startTime);
+        const eventEndHour = parseTimeToHour(endTime);
+        const eventDate = selectedAvailabilityType === 'specific' ? specificDate : weeklyStartDate || new Date();
+
+        if (eventDate) {
+          const smartView = getSmartCalendarView(eventStartHour, eventEndHour, eventDate);
+          setCalendarViewMode(smartView.mode);
+        }
+
+        setAvailabilityStep('success');
+      } else {
+        throw new Error(response.data?.error || 'Failed to create availability');
+      }
+    } catch (error: any) {
+      console.error('[createAvailabilityDirect] Error:', error);
+      toast({
+        title: 'Failed to add availability',
+        description: error.message || 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreatingAvailability(false);
+    }
+  };
+
+  // Edit guide - start listening for iframe clicks using blur detection
+  const startEditGuideListener = () => {
+    // Force focus on parent window
+    window.focus();
+
+    const handleBlur = () => {
+      setTimeout(() => {
+        if (document.activeElement === iframeRef.current) {
+          // User clicked inside the calendar iframe!
+          setEditGuideStep('clicked');
+          window.removeEventListener('blur', handleBlur);
+          // Return focus to parent so we can detect again if needed
+          window.focus();
+        }
+      }, 0);
+    };
+
+    window.addEventListener('blur', handleBlur);
+
+    // Store cleanup function
+    editGuideCleanupRef.current = () => {
+      window.removeEventListener('blur', handleBlur);
+    };
+  };
+
+  // Cleanup edit guide listener on unmount or step change
+  useEffect(() => {
+    return () => {
+      if (editGuideCleanupRef.current) {
+        editGuideCleanupRef.current();
+      }
+    };
+  }, []);
+
+  // Smart positioning for modal
   const getSmartPositioning = () => {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
     const popupWidth = 605;  // 15px wider
@@ -1001,7 +1006,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                                   setIsFirstAvailability(false);   // Not first time
                                 }}
                               >
-                                View/Add Schedule
+                                Manage Schedule
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => window.open(
@@ -1944,6 +1949,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             {/* Calendar Embed Container */}
             <div className="flex-1 relative">
               <iframe
+                ref={iframeRef}
                 key={calendarKey}
                 src={getCalendarEmbedUrl(
                   createdCalendarId,
@@ -1986,6 +1992,20 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                {/* Edit Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white shadow-sm"
+                  onClick={() => {
+                    setEditGuideStep('waiting-click');
+                    startEditGuideListener();
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+
                 {/* Add Availability Button */}
                 <Button
                   size="sm"
@@ -1993,9 +2013,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   onClick={() => {
                     console.log('[Add Availability Button] Clicked');
                     setSelectedAvailabilityType(null);
-                    setPendingBlocks([]);
-                    pendingBlocksRef.current = [];
-                    setCurrentBlockIndex(0);
                     setAvailabilityStep('choose-type');
                   }}
                 >
@@ -2015,8 +2032,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       <X className="h-4 w-4" />
                     </button>
                     <p className="text-sm text-muted-foreground pr-6">
-                      💡 To add availability, create an event in Google Calendar and select "<strong>{calendarName}</strong>" as the calendar.
-                      You can also edit or delete existing blocks there.
+                      💡 You can also add availability directly in Google Calendar. In the event details, select "<strong>{calendarName}</strong>" as the calendar. To edit or delete, click any block above.
                     </p>
                   </div>
                 </div>
@@ -2024,8 +2040,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Modal Overlay - covers entire screen including header */}
             {(availabilityStep === 'choose-type' ||
-              availabilityStep === 'set-availability' ||
-              availabilityStep === 'waiting-save') && (
+              availabilityStep === 'set-availability') && (
               <div
                 className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
                 onClick={(e) => {
@@ -2297,205 +2312,137 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       </Button>
                       <Button
                         className="flex-1"
-                        disabled={selectedAvailabilityType === 'specific' && !specificDate}
-                        onClick={() => {
-                          // Check if calendar ID is available (might still be creating)
-                          if (!createdCalendarId) {
-                            console.warn('[Add to Calendar] No calendar ID yet');
-                            toast({
-                              title: 'Please wait',
-                              description: 'Calendar is still being created. Please wait a moment.',
-                            });
-                            return;
-                          }
-
-                          // Build the availability blocks and open popup for first one
-                          console.log('[Add to Calendar] Button clicked');
-                          console.log('[Add to Calendar] selectedAvailabilityType:', selectedAvailabilityType);
-                          console.log('[Add to Calendar] availabilityType:', availabilityType);
-                          console.log('[Add to Calendar] createdCalendarId:', createdCalendarId);
-
-                          const blocks = buildAvailabilityBlocks();
-                          console.log('[Add to Calendar] blocks:', blocks);
-
-                          if (blocks.length === 0) {
-                            console.error('[Add to Calendar] No blocks built!');
-                            toast({
-                              title: 'Unable to create availability',
-                              description: 'Please check your settings and try again.',
-                              variant: 'destructive',
-                            });
-                            return;
-                          }
-
-                          setPendingBlocks(blocks);
-                          pendingBlocksRef.current = blocks;
-                          setCurrentBlockIndex(0);
-
-                          const block = blocks[0];
-                          const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                          console.log('[Add to Calendar] eventUrl:', eventUrl);
-
-                          const positioning = getSmartPositioning();
-                          console.log('[Add to Calendar] positioning:', positioning);
-
-                          openEventPopup(eventUrl, positioning.popupLeft);
-                          startPolling(block.id);
-                          setAvailabilityStep('waiting-save');
-                        }}
+                        disabled={(selectedAvailabilityType === 'specific' && !specificDate) || isCreatingAvailability}
+                        onClick={createAvailabilityDirect}
                       >
-                        Add to Calendar →
+                        {isCreatingAvailability ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Adding...
+                          </>
+                        ) : (
+                          'Add Availability'
+                        )}
                       </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step: Waiting for Save */}
-                {availabilityStep === 'waiting-save' && (
-                  <div
-                    className={`bg-white rounded-xl shadow-2xl w-full max-w-md p-6 ${getSmartPositioning().modalClassName}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="space-y-4">
-                      {/* Header with icon */}
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                          <Calendar className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h2 className="text-lg font-semibold">
-                            Add your availability in Google Calendar
-                          </h2>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {pendingBlocks.length > 1
-                              ? `Adding block ${currentBlockIndex + 1} of ${pendingBlocks.length}. Click Save in the popup, then close it.`
-                              : "A popup should have opened. Review the details, click Save, then close the popup."
-                            }
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Single block - simple view */}
-                      {pendingBlocks.length <= 1 && (
-                        <>
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <p className="text-sm text-muted-foreground flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                              <span>Waiting for you to save the event...</span>
-                            </p>
-                          </div>
-
-                          <p className="text-xs text-muted-foreground">
-                            Don't see the popup? It may have been blocked by your browser.
-                          </p>
-
-                          {/* Buttons for single block */}
-                          <div className="flex gap-3 pt-4 border-t">
-                            <Button
-                              variant="outline"
-                              onClick={() => setAvailabilityStep('set-availability')}
-                            >
-                              ← Back
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="flex-1"
-                              onClick={() => {
-                                if (pendingBlocks.length > 0) {
-                                  const block = pendingBlocks[0];
-                                  const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                                  const positioning = getSmartPositioning();
-                                  openEventPopup(eventUrl, positioning.popupLeft);
-                                }
-                              }}
-                            >
-                              Reopen popup
-                            </Button>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Multiple blocks - show list with per-block reopen */}
-                      {pendingBlocks.length > 1 && (
-                        <>
-                          <div className="space-y-2">
-                            {pendingBlocks.map((block, index) => {
-                              const isCompleted = addedBlocks.has(block.id);
-                              const isCurrent = index === currentBlockIndex;
-
-                              return (
-                                <div
-                                  key={block.id}
-                                  className={`p-3 rounded-lg ${
-                                    isCurrent ? 'bg-blue-50 border border-blue-200' :
-                                    isCompleted ? 'bg-green-50 border border-green-200' :
-                                    'bg-gray-50 border border-gray-200'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    {isCompleted ? (
-                                      <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                                    ) : isCurrent ? (
-                                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin flex-shrink-0" />
-                                    ) : (
-                                      <Circle className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium">
-                                        {block.id === 'morning' ? 'Morning' :
-                                         block.id === 'afternoon' ? 'Afternoon' :
-                                         'Block ' + (index + 1)}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {formatTimeForDisplay(block.startTime)} - {formatTimeForDisplay(block.endTime)}
-                                      </p>
-                                    </div>
-
-                                    {/* Per-block status/action */}
-                                    {isCompleted ? (
-                                      <span className="text-xs text-green-600 font-medium">Added!</span>
-                                    ) : isCurrent ? (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                                          const positioning = getSmartPositioning();
-                                          openEventPopup(eventUrl, positioning.popupLeft);
-                                        }}
-                                      >
-                                        Reopen →
-                                      </Button>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">Up next</span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          <p className="text-xs text-muted-foreground">
-                            Don't see the popup? Click "Reopen" on the current block.
-                          </p>
-
-                          {/* Just Back button for multi-block */}
-                          <div className="pt-4 border-t">
-                            <Button
-                              variant="outline"
-                              onClick={() => setAvailabilityStep('set-availability')}
-                            >
-                              ← Back
-                            </Button>
-                          </div>
-                        </>
-                      )}
                     </div>
                   </div>
                 )}
 
                 </div>
               )}
+
+            {/* Edit Guide Modal */}
+            {editGuideStep !== 'idle' && (
+              <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+                <div
+                  className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Close button */}
+                  <button
+                    onClick={() => {
+                      setEditGuideStep('idle');
+                      if (editGuideCleanupRef.current) {
+                        editGuideCleanupRef.current();
+                      }
+                    }}
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+
+                  {editGuideStep === 'waiting-click' && (
+                    <>
+                      <h2 className="text-xl font-semibold mb-4 pr-8">
+                        Edit your availability
+                      </h2>
+
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+                            1
+                          </div>
+                          <p className="text-muted-foreground pt-1">
+                            Click on any availability block in the calendar
+                          </p>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-lg p-3 flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            Waiting for you to click a block...
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setEditGuideStep('idle');
+                            if (editGuideCleanupRef.current) {
+                              editGuideCleanupRef.current();
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {editGuideStep === 'clicked' && (
+                    <>
+                      <h2 className="text-xl font-semibold mb-4 pr-8">
+                        Edit your availability
+                      </h2>
+
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <Check className="h-4 w-4 text-green-600" />
+                          </div>
+                          <p className="text-muted-foreground pt-1">
+                            You clicked on an availability block
+                          </p>
+                        </div>
+
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+                            2
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">
+                              Click <strong>"More details"</strong> on the popup card
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              This opens Google Calendar in a new tab
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+                            3
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">
+                              Use the <Pencil className="h-4 w-4 inline" /> edit or <Trash2 className="h-4 w-4 inline" /> delete icons
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 pt-4 border-t">
+                        <Button onClick={() => setEditGuideStep('idle')}>
+                          Done
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             </div>
           </div>
         </div>
