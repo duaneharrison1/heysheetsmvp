@@ -2,7 +2,7 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Clock, MapPin, ArrowRight, Plus, Settings as SettingsIcon } from "lucide-react";
+import { Clock, MapPin, ArrowRight, Plus, Settings as SettingsIcon, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export interface Store {
@@ -34,6 +34,10 @@ export function StoreCard({ store, create, onCreate }: StoreCardProps) {
 
   const handleManageClick = () => {
     navigate(`/settings/${store.id}`);
+  };
+
+  const handleAnalyticsClick = () => {
+    navigate(`/analytics/${store.id}`);
   };
 
   const handleViewClick = () => {
@@ -112,13 +116,22 @@ export function StoreCard({ store, create, onCreate }: StoreCardProps) {
           <ArrowRight className="w-4 h-4 ml-1" />
         </Button>
         <Button 
+          onClick={(e)=>{e.stopPropagation(); handleAnalyticsClick()}}
+          size="sm" 
+          variant="outline"
+          className="flex-none"
+          title="Analytics"
+        >
+          <BarChart3 className="h-4 w-4" />
+        </Button>
+        <Button 
           onClick={(e)=>{e.stopPropagation(); handleManageClick()}}
           size="sm" 
           variant="brand"
-          className="flex-1"
+          className="flex-none"
+          title="Settings"
         >
-          <SettingsIcon className="mr-2 h-4 w-4" />
-          Settings
+          <SettingsIcon className="h-4 w-4" />
         </Button>
       </CardFooter>
     </Card>

@@ -11,10 +11,12 @@ import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
 import { supabase } from "@/lib/supabase";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Task, TaskTrigger, TaskContent, TaskItem } from "@/components/ui/ai-task";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { 
   Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, 
   Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink, 
-  MessageCircle, ShoppingBag, Sparkles, CheckCircle2, Search, Database
+  MessageCircle, ShoppingBag, Sparkles, CheckCircle2, Search, Database, Info, X
 } from "lucide-react";
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
@@ -95,6 +97,10 @@ export default function StorePage() {
   const [showScenariosModal, setShowScenariosModal] = useState(false);
   // Test runner instance for executing QA scenarios
   const [testRunner] = useState(() => new TestRunner());
+  // Mobile responsiveness: track if store info sheet is open
+  const isMobile = useIsMobile();
+  const [showStoreInfoSheet, setShowStoreInfoSheet] = useState(false);
+  const [hasShownInitialSheet, setHasShownInitialSheet] = useState(false);
 
   // Initial quick actions shown when chat first loads
   const initialQuickActions = [
@@ -118,6 +124,14 @@ export default function StorePage() {
       checkAuth();
     }
   }, [storeId]);
+
+  // Show store info sheet initially on mobile when store loads
+  useEffect(() => {
+    if (isMobile && store && !hasShownInitialSheet && !loading) {
+      setShowStoreInfoSheet(true);
+      setHasShownInitialSheet(true);
+    }
+  }, [isMobile, store, hasShownInitialSheet, loading]);
 
   // Auto-progress through task steps when typing
   useEffect(() => {
@@ -564,6 +578,204 @@ export default function StorePage() {
 
   // (quick actions now provided via `initialQuickActions` + dynamic suggestions)
 
+  // Store info panel content - reused in both desktop sidebar and mobile sheet
+  const StoreInfoContent = () => (
+    <div className="p-6 space-y-6">
+      
+      {/* Store Header */}
+      <div className="text-center">
+        <Avatar className="w-20 h-20 mx-auto mb-4 ring-4 ring-background shadow-lg" variant="user">
+          <AvatarFallback className="avatar-fallback font-bold text-xl bg-primary text-primary-foreground">
+            {store.name.substring(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <h1 className="text-xl font-bold text-foreground mb-1">{store.name}</h1>
+        
+        {/* Category & Type Badges */}
+        <div className="flex items-center justify-center gap-2 mt-2">
+          {store.category && (
+            <Badge variant="secondary" className="text-xs">
+              <Tag className="w-3 h-3 mr-1" />
+              {store.category}
+            </Badge>
+          )}
+          {store.type && (
+            <Badge variant="outline" className="text-xs capitalize">
+              <StoreIcon className="w-3 h-3 mr-1" />
+              {store.type}
+            </Badge>
+          )}
+        </div>
+
+        {/* Open/Closed Status */}
+        {store.opening_hours && (
+          <div className="mt-3">
+            {(() => {
+              const status = getStoreStatus(store.opening_hours);
+              return (
+                <Badge 
+                  variant={status.isOpen ? "default" : "secondary"} 
+                  className={`text-xs ${status.isOpen ? 'bg-green-600 hover:bg-green-600' : 'bg-gray-500 hover:bg-gray-500 text-white'}`}
+                >
+                  <span className={`w-2 h-2 rounded-full mr-2 ${status.isOpen ? 'bg-green-300 animate-pulse' : 'bg-gray-300'}`} />
+                  {status.statusText}
+                </Badge>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+
+      <Separator className="bg-border" />
+
+      {/* Description / About */}
+      {store.description && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">About</h3>
+          <p className="text-sm text-foreground leading-relaxed">{store.description}</p>
+        </div>
+      )}
+
+      {/* Opening Hours */}
+      {store.opening_hours && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Hours</h3>
+          <div className="flex items-start gap-3 text-sm">
+            <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <span className="text-foreground">{store.opening_hours}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Contact Information */}
+      {(store.location || store.phone || store.email || store.website) && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Contact</h3>
+          <div className="space-y-3">
+            {store.location && (
+              <div className="flex items-start gap-3 text-sm">
+                <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <span className="text-foreground">{store.location}</span>
+              </div>
+            )}
+            
+            {store.phone && (
+              <div className="flex items-center gap-3 text-sm">
+                <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <a href={`tel:${store.phone}`} className="text-foreground hover:text-primary transition-colors">{store.phone}</a>
+              </div>
+            )}
+            
+            {store.email && (
+              <div className="flex items-center gap-3 text-sm">
+                <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <a href={`mailto:${store.email}`} className="text-foreground hover:text-primary transition-colors truncate">{store.email}</a>
+              </div>
+            )}
+            
+            {store.website && (
+              <div className="flex items-center gap-3 text-sm">
+                <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <a href={store.website} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-primary transition-colors flex items-center gap-1">
+                  Visit Website
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Social Links */}
+      {(store.instagram || store.twitter || store.facebook) && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Social</h3>
+          <div className="flex gap-2">
+            {store.instagram && (
+              <a 
+                href={`https://instagram.com/${store.instagram}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-lg bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 text-white hover:opacity-90 transition-opacity shadow-sm"
+                title="Instagram"
+              >
+                <Instagram className="w-4 h-4" />
+              </a>
+            )}
+            {store.twitter && (
+              <a 
+                href={`https://twitter.com/${store.twitter}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-lg bg-black text-white hover:opacity-90 transition-opacity shadow-sm"
+                title="X (Twitter)"
+              >
+                <Twitter className="w-4 h-4" />
+              </a>
+            )}
+            {store.facebook && (
+              <a 
+                href={`https://facebook.com/${store.facebook}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-lg bg-blue-600 text-white hover:opacity-90 transition-opacity shadow-sm"
+                title="Facebook"
+              >
+                <Facebook className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Services / What you can do */}
+      <div>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          <Sparkles className="w-3 h-3 inline mr-1" />
+          What I Can Help With
+        </h3>
+        <div className="space-y-2">
+          {(store.services && store.services.length > 0) ? (
+            store.services.map((service, index) => (
+              <div key={index} className="flex items-center gap-2 text-sm text-foreground">
+                <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                <span>{service}</span>
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <MessageCircle className="w-4 h-4 text-primary flex-shrink-0" />
+                <span>Answer questions about products</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <ShoppingBag className="w-4 h-4 text-primary flex-shrink-0" />
+                <span>Browse services & offerings</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+                <span>Check operating hours</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                <span>Get location & contact info</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Footer - Store Created Date */}
+      <div className="pt-4 border-t border-border">
+        <div className="text-xs text-muted-foreground flex items-center gap-2">
+          <Calendar className="w-3 h-3" />
+          <span>Active since {store.created_at ? new Date(store.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}</span>
+        </div>
+      </div>
+
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -606,222 +818,41 @@ export default function StorePage() {
         </div>
       )}
 
-  {/* Main Content: Two Column Layout */}
-    <div className="flex-1 flex w-full min-h-0">
-        {/* Store Profile Side Panel */}
-        <div className="w-96 flex-shrink-0 bg-card border-r border-border overflow-y-auto">
-          <div className="p-6 space-y-6">
-            
-            {/* Store Header */}
-            <div className="text-center">
-              <Avatar className="w-20 h-20 mx-auto mb-4 ring-4 ring-background shadow-lg" variant="user">
-                <AvatarFallback className="avatar-fallback font-bold text-xl bg-primary text-primary-foreground">
-                  {store.name.substring(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <h1 className="text-xl font-bold text-foreground mb-1">{store.name}</h1>
-              
-              {/* Category & Type Badges */}
-              <div className="flex items-center justify-center gap-2 mt-2">
-                {store.category && (
-                  <Badge variant="secondary" className="text-xs">
-                    <Tag className="w-3 h-3 mr-1" />
-                    {store.category}
-                  </Badge>
-                )}
-                {store.type && (
-                  <Badge variant="outline" className="text-xs capitalize">
-                    <StoreIcon className="w-3 h-3 mr-1" />
-                    {store.type}
-                  </Badge>
-                )}
-              </div>
-
-              {/* Open/Closed Status */}
-              {store.opening_hours && (
-                <div className="mt-3">
-                  {(() => {
-                    const status = getStoreStatus(store.opening_hours);
-                    return (
-                      <Badge 
-                        variant={status.isOpen ? "default" : "secondary"} 
-                        className={`text-xs ${status.isOpen ? 'bg-green-600 hover:bg-green-600' : 'bg-gray-500 hover:bg-gray-500 text-white'}`}
-                      >
-                        <span className={`w-2 h-2 rounded-full mr-2 ${status.isOpen ? 'bg-green-300 animate-pulse' : 'bg-gray-300'}`} />
-                        {status.statusText}
-                      </Badge>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-
-            <Separator className="bg-border" />
-
-            {/* Description / About */}
-            {store.description && (
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">About</h3>
-                <p className="text-sm text-foreground leading-relaxed">{store.description}</p>
-              </div>
-            )}
-
-            {/* Opening Hours */}
-            {store.opening_hours && (
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Hours</h3>
-                <div className="flex items-start gap-3 text-sm">
-                  <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <span className="text-foreground">{store.opening_hours}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Contact Information */}
-            {(store.location || store.phone || store.email || store.website) && (
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Contact</h3>
-                <div className="space-y-3">
-                  {store.location && (
-                    <div className="flex items-start gap-3 text-sm">
-                      <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                      <span className="text-foreground">{store.location}</span>
-                    </div>
-                  )}
-                  
-                  {store.phone && (
-                    <div className="flex items-center gap-3 text-sm">
-                      <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <a href={`tel:${store.phone}`} className="text-foreground hover:text-primary transition-colors">{store.phone}</a>
-                    </div>
-                  )}
-                  
-                  {store.email && (
-                    <div className="flex items-center gap-3 text-sm">
-                      <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <a href={`mailto:${store.email}`} className="text-foreground hover:text-primary transition-colors truncate">{store.email}</a>
-                    </div>
-                  )}
-                  
-                  {store.website && (
-                    <div className="flex items-center gap-3 text-sm">
-                      <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <a href={store.website} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-primary transition-colors flex items-center gap-1">
-                        Visit Website
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Social Links */}
-            {(store.instagram || store.twitter || store.facebook) && (
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Social</h3>
-                <div className="flex gap-2">
-                  {store.instagram && (
-                    <a 
-                      href={`https://instagram.com/${store.instagram}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="p-2.5 rounded-lg bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 text-white hover:opacity-90 transition-opacity shadow-sm"
-                      title="Instagram"
-                    >
-                      <Instagram className="w-4 h-4" />
-                    </a>
-                  )}
-                  {store.twitter && (
-                    <a 
-                      href={`https://twitter.com/${store.twitter}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="p-2.5 rounded-lg bg-black text-white hover:opacity-90 transition-opacity shadow-sm"
-                      title="X (Twitter)"
-                    >
-                      <Twitter className="w-4 h-4" />
-                    </a>
-                  )}
-                  {store.facebook && (
-                    <a 
-                      href={`https://facebook.com/${store.facebook}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="p-2.5 rounded-lg bg-blue-600 text-white hover:opacity-90 transition-opacity shadow-sm"
-                      title="Facebook"
-                    >
-                      <Facebook className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Services / What you can do */}
-            <div>
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                <Sparkles className="w-3 h-3 inline mr-1" />
-                What I Can Help With
-              </h3>
-              <div className="space-y-2">
-                {(store.services && store.services.length > 0) ? (
-                  store.services.map((service, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm text-foreground">
-                      <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
-                      <span>{service}</span>
-                    </div>
-                  ))
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 text-sm text-foreground">
-                      <MessageCircle className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span>Answer questions about products</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-foreground">
-                      <ShoppingBag className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span>Browse services & offerings</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-foreground">
-                      <Clock className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span>Check operating hours</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-foreground">
-                      <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-                      <span>Get location & contact info</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Footer - Store Created Date */}
-            <div className="pt-4 border-t border-border">
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <Calendar className="w-3 h-3" />
-                <span>Active since {store.created_at ? new Date(store.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}</span>
-              </div>
-            </div>
-
-          </div>
+      {/* Main Content: Responsive Layout */}
+      <div className="flex-1 flex w-full min-h-0">
+        {/* Store Profile Side Panel - Hidden on mobile, visible on md+ */}
+        <div className="hidden md:block w-96 flex-shrink-0 bg-card border-r border-border overflow-y-auto">
+          <StoreInfoContent />
         </div>
 
-  {/* Chat Section */}
-  <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
+        {/* Chat Section - Full width on mobile */}
+        <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
           {/* Chat header (bot profile) */}
-          <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
+          <div className="flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
             <Avatar className="w-10 h-10" variant="bot">
               <AvatarFallback className="avatar-fallback">
                 <Bot className="w-4 h-4" />
               </AvatarFallback>
             </Avatar>
-            <div>
+            <div className="flex-1 min-w-0">
               <H2 className="text-base">Store Assistant</H2>
-              <Lead>I am your virtual assistant — ask me anything about this store.</Lead>
+              <Lead className="truncate">I am your virtual assistant — ask me anything about this store.</Lead>
             </div>
+            {/* Mobile: Store info toggle button */}
+            {isMobile && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="flex-shrink-0"
+                onClick={() => setShowStoreInfoSheet(true)}
+              >
+                <Info className="w-4 h-4" />
+                <span className="sr-only">Store Info</span>
+              </Button>
+            )}
           </div>
 
-          <div className="flex-1 p-6 overflow-y-auto space-y-4">
+          <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}
@@ -868,7 +899,7 @@ export default function StorePage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+          <div className="p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
             {/* Suggestions area - shows follow-up prompts and test scenarios option */}
             {(currentSuggestions.length > 0 || isPanelOpen) && !isTyping && (
               <div className="mb-3">
@@ -919,6 +950,16 @@ export default function StorePage() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Store Info Sheet */}
+      <Sheet open={showStoreInfoSheet} onOpenChange={setShowStoreInfoSheet}>
+        <SheetContent side="left" className="w-full sm:max-w-md p-0 overflow-y-auto">
+          <SheetHeader className="px-6 pt-6 pb-0">
+            <SheetTitle className="sr-only">{store.name} - Store Information</SheetTitle>
+          </SheetHeader>
+          <StoreInfoContent />
+        </SheetContent>
+      </Sheet>
 
       {/* Test scenarios modal - for QA testing */}
       <ScenariosModal

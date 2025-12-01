@@ -144,17 +144,18 @@ export function getCalendarWeekViewUrl(date: Date = new Date()): string {
  *
  * @param eventCreateUrl - URL for event creation form
  */
-export function openEventPopup(eventCreateUrl: string): void {
-  const width = 580;
+export function openEventPopup(eventCreateUrl: string, customLeft?: number): void {
+  const width = 590;  // 10px wider than original 580
   const height = 700;
 
-  // Position on RIGHT side of screen (50% from left + small margin)
-  const left = Math.round(window.screen.width / 2) + 20;
+  // Use custom left position if provided, otherwise default to right side
+  const screenWidth = window.screen.width;
+  const left = customLeft ?? Math.max(20, screenWidth - width - 20);
   const top = Math.max(0, (window.screen.height - height) / 2);
 
   window.open(
     eventCreateUrl,
-    'google_calendar_event',
+    'gcal_event',
     `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
   );
 }
@@ -212,6 +213,107 @@ export function formatTimeForDisplay(time24: string): string {
   const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
   return `${displayHours}:${minutes} ${period}`;
 }
+
+// ============================================
+// Smart View Selection Helpers
+// ============================================
+
+export interface SmartViewResult {
+  mode: 'WEEK' | 'MONTH' | 'AGENDA';
+  startDate: Date;
+}
+
+/**
+ * Determines the best calendar view based on event time visibility
+ * If the event hours would be visible in WEEK view at current time, use WEEK
+ * Otherwise use MONTH view so user can at least see the event exists
+ */
+export function getSmartCalendarView(
+  eventStartHour: number,      // e.g., 9 for 9am
+  eventEndHour: number,        // e.g., 17 for 5pm
+  eventStartDate: Date,        // When the event/recurrence starts
+): SmartViewResult {
+
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // Check if event time is visible in current hour window
+  // Week view typically shows ~12 hour window, we use ±8 hours as safe margin
+  const hourDiffToStart = Math.abs(currentHour - eventStartHour);
+  const hourDiffToEnd = Math.abs(currentHour - eventEndHour);
+  const isTimeVisible = hourDiffToStart <= 8 || hourDiffToEnd <= 8;
+
+  if (isTimeVisible) {
+    // WEEK view, starting from event start date
+    return {
+      mode: 'WEEK',
+      startDate: eventStartDate
+    };
+  } else {
+    // MONTH view, starting from first of that month
+    const monthStart = new Date(eventStartDate.getFullYear(), eventStartDate.getMonth(), 1);
+    return {
+      mode: 'MONTH',
+      startDate: monthStart
+    };
+  }
+}
+
+/**
+ * Parse time string to hour number
+ * e.g., "09:00" -> 9, "17:30" -> 17
+ */
+export function parseTimeToHour(timeString: string): number {
+  const [hours] = timeString.split(':').map(Number);
+  return hours;
+}
+
+// ============================================
+// Calendar Embed URL
+// ============================================
+
+/**
+ * Generate Google Calendar embed URL with mode and date parameters
+ */
+export function getCalendarEmbedUrl(
+  calendarId: string,
+  startDate?: Date,
+  mode: 'WEEK' | 'MONTH' | 'AGENDA' = 'WEEK'
+): string {
+  const formatDateForUrl = (d: Date) => d.toISOString().split('T')[0].replace(/-/g, '');
+
+  // Default to today if no date provided
+  const start = startDate || new Date();
+
+  // Calculate end date based on mode
+  let end: Date;
+  if (mode === 'MONTH') {
+    // End of month
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  } else {
+    // End of week (7 days)
+    end = new Date(start);
+    end.setDate(end.getDate() + 6);
+  }
+
+  const params = new URLSearchParams({
+    src: calendarId,
+    mode: mode,
+    showTitle: '0',
+    showNav: '1',
+    showPrint: '0',
+    showTabs: '0',
+    showCalendars: '0',
+    ctz: 'Asia/Hong_Kong',
+    dates: `${formatDateForUrl(start)}/${formatDateForUrl(end)}`
+  });
+
+  return `https://calendar.google.com/calendar/embed?${params.toString()}`;
+}
+
+// ============================================
+// Event Polling
+// ============================================
 
 /**
  * Check for new events in a calendar since a given time

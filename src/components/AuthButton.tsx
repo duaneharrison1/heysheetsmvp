@@ -34,21 +34,17 @@ const AuthButton = () => {
   };
 
   const handleSignOut = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Sign out error:', error);
       }
-      // Force redirect even on error
-      navigate('/auth');
-      window.location.href = '/auth';
     } catch (err) {
       console.error('Sign out exception:', err);
-      window.location.href = '/auth';
-    } finally {
-      setLoading(false);
     }
+    // Always redirect with hard reload - this clears all state
+    window.location.href = '/auth';
   };
 
   if (user) {
