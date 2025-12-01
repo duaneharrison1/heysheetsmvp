@@ -127,7 +127,7 @@ export function StoreCard({ store, create, onCreate }: StoreCardProps) {
         <Button 
           onClick={(e)=>{e.stopPropagation(); handleManageClick()}}
           size="sm" 
-          variant="brand"
+          variant="outline"
           className="flex-none"
           title="Settings"
         >

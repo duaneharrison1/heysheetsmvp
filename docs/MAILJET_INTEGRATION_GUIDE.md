@@ -147,11 +147,14 @@ All requests require a Bearer token (either user access token or service role ke
 
 ## Automatic User Sync
 
-When a new user signs up:
-1. A record is created in `user_profiles` table
-2. The database trigger `trigger_sync_user_to_mailjet` fires
-3. The trigger calls the `mailjet` edge function with `operation: add_contact`
-4. The user is added to the default "HeySheets Users" contact list
+When a user signs in and accesses any protected page:
+1. The `SidebarLayout` component loads the user
+2. `syncCurrentUserToMailjet()` is called (non-blocking, runs in background)
+3. The function checks if the user was already synced this session (via sessionStorage)
+4. If not synced, it calls the `mailjet` edge function with `operation: add_contact`
+5. The user is added to the default contact list (idempotent - won't create duplicates)
+
+**Note:** The database trigger approach (`trigger_sync_user_to_mailjet`) requires `pg_net` extension and Vault configuration which may not be available on all Supabase plans. The application-layer sync is the primary mechanism.
 
 ### Manual Sync
 

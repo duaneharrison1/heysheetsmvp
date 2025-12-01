@@ -5,6 +5,9 @@
 
 import { supabase } from '@/lib/supabase';
 
+// Key to track if we've already synced this user in this session
+const MAILJET_SYNC_KEY = 'mailjet_user_synced';
+
 export interface MailjetContact {
   email: string;
   name?: string;
@@ -62,6 +65,62 @@ async function callMailjetFunction<T>(body: Record<string, any>): Promise<T> {
   }
 
   return data as T;
+}
+
+/**
+ * Sync the current user to Mailjet contact list
+ * Called automatically on login - only syncs once per session to avoid spam
+ * This handles the case where database triggers don't work (pg_net not enabled)
+ */
+export async function syncCurrentUserToMailjet(): Promise<void> {
+  try {
+    // Check if we've already synced in this session
+    const sessionSynced = sessionStorage.getItem(MAILJET_SYNC_KEY);
+    if (sessionSynced) {
+      return; // Already synced this session
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) {
+      return;
+    }
+
+    // Get user's name from metadata
+    const name = user.user_metadata?.full_name || 
+                 user.user_metadata?.name || 
+                 user.email.split('@')[0];
+
+    // Call add_contact - this is idempotent, won't create duplicates
+    const token = await getAuthToken();
+    
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mailjet`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          operation: 'add_contact',
+          email: user.email,
+          name: name,
+        }),
+      }
+    );
+
+    if (response.ok) {
+      // Mark as synced for this session
+      sessionStorage.setItem(MAILJET_SYNC_KEY, 'true');
+      console.log('[Mailjet] User synced to contact list');
+    } else {
+      const error = await response.json();
+      console.warn('[Mailjet] Failed to sync user:', error);
+    }
+  } catch (error) {
+    // Don't throw - this is a background operation that shouldn't block the UI
+    console.warn('[Mailjet] Error syncing user:', error);
+  }
 }
 
 /**

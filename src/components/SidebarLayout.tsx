@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
+import { syncCurrentUserToMailjet } from "@/lib/mailjet";
 import {
   Sidebar,
   SidebarContent as SidebarContentArea,
@@ -145,6 +146,9 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
         return;
       }
       setUser(user);
+
+      // Sync user to Mailjet contact list (runs once per session, non-blocking)
+      syncCurrentUserToMailjet();
 
       // Fetch the first store for this user to enable quick analytics link
       try {
