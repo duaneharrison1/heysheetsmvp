@@ -2062,7 +2062,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Modal Overlay - covers entire screen including header */}
             {(availabilityStep === 'choose-type' ||
-              availabilityStep === 'set-availability') && (
+              availabilityStep === 'set-availability' ||
+              availabilityStep === 'added') && (
               <div
                 className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
                 onClick={(e) => {
@@ -2394,8 +2395,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
               <div
                 className="absolute z-20 bg-white rounded-lg shadow-lg border p-4 max-w-xs cursor-move select-none"
                 style={{
-                  top: `${55 + editHelperPosition.y}px`,
-                  left: `${12 + editHelperPosition.x}px`
+                  top: `${65 + editHelperPosition.y}px`,
+                  left: `${22 + editHelperPosition.x}px`
                 }}
                 onMouseDown={handleDragStart}
               >
