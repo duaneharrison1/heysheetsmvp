@@ -557,6 +557,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Start polling for new events
   const startPolling = async (blockId: string) => {
+    console.log('[startPolling] Called with blockId:', blockId);
+    console.log('[startPolling] Calendar ID:', createdCalendarId);
+
+    if (!createdCalendarId) {
+      console.warn('[startPolling] No calendar ID yet, cannot poll');
+      return;
+    }
+
     const startTime = new Date().toISOString();
     setPollStartTime(startTime);
     setPollingBlockId(blockId);
@@ -567,6 +575,9 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
     // Poll every 2 seconds (faster feedback)
     pollingIntervalRef.current = setInterval(async () => {
+      console.log('[Polling] Checking for event...');
+      console.log('[Polling] calendarId:', createdCalendarId, 'sinceTime:', startTime);
+
       try {
         const result = await checkForNewEvents(
           createdCalendarId,
@@ -574,6 +585,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           storeId,
           supabase
         );
+
+        console.log('[Polling] Response:', result);
 
         if (result.found) {
           // Success! Event detected
@@ -952,10 +965,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="z-50">
                               <DropdownMenuItem
-                                onClick={() => window.open(
-                                  getCalendarEmbedLink(calendarId, { mode: 'WEEK' }),
-                                  '_blank'
-                                )}
+                                onClick={() => {
+                                  // Navigate to fullscreen calendar view
+                                  setCalendarName(calendarName);
+                                  setCreatedCalendarId(calendarId);
+                                  setCreateStep('add-blocks');
+                                  setAvailabilityStep('success');  // Show calendar with buttons
+                                  setIsFirstAvailability(false);   // Not first time
+                                }}
                               >
                                 View/Add Schedule
                               </DropdownMenuItem>
@@ -1897,13 +1914,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
           {/* Main Content Area */}
           <div className="flex-1 relative flex flex-col">
-
-            {/* 5px gap between header and calendar */}
-            <div
-              className="h-[5px] w-full"
-              style={{ backgroundColor: '#e8eaed' }}
-            />
-
             {/* Calendar Embed Container */}
             <div className="flex-1 relative">
               <iframe
@@ -1973,8 +1983,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       <X className="h-4 w-4" />
                     </button>
                     <p className="text-sm text-muted-foreground pr-6">
-                      💡 Manage availability directly in Google Calendar — add, edit, or delete
-                      events on the "<strong>{calendarName}</strong>" calendar.
+                      💡 To add availability, create an event in Google Calendar and select "<strong>{calendarName}</strong>" as the calendar.
+                      You can also edit or delete existing blocks there.
                     </p>
                   </div>
                 </div>
@@ -2257,8 +2267,21 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                         className="flex-1"
                         disabled={selectedAvailabilityType === 'specific' && !specificDate}
                         onClick={() => {
+                          // Check if calendar ID is available (might still be creating)
+                          if (!createdCalendarId) {
+                            console.warn('[Add to Calendar] No calendar ID yet');
+                            toast({
+                              title: 'Please wait',
+                              description: 'Calendar is still being created. Please wait a moment.',
+                            });
+                            return;
+                          }
+
                           // Build the availability blocks and open popup for first one
                           const blocks = buildAvailabilityBlocks();
+                          console.log('[Add to Calendar] blocks:', blocks);
+                          console.log('[Add to Calendar] calendarId:', createdCalendarId);
+
                           setPendingBlocks(blocks);
                           setCurrentBlockIndex(0);
 
@@ -2296,8 +2319,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           </h2>
                           <p className="text-sm text-muted-foreground mt-1">
                             {pendingBlocks.length > 1
-                              ? `Adding block ${currentBlockIndex + 1} of ${pendingBlocks.length}`
-                              : "A popup should have opened on the right. Check the details and click Save."
+                              ? `Adding block ${currentBlockIndex + 1} of ${pendingBlocks.length}. Click Save in the popup, then close it.`
+                              : "A popup should have opened. Review the details, click Save, then close the popup."
                             }
                           </p>
                         </div>
