@@ -139,6 +139,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Multi-block support (for breaks)
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [pendingBlocks, setPendingBlocks] = useState<AvailabilityBlock[]>([]);
+  // Ref to access pendingBlocks in polling callback (avoids stale closure)
+  const pendingBlocksRef = useRef<AvailabilityBlock[]>([]);
 
   // Time options for dropdowns
   const timeOptions = generateTimeOptions();
@@ -468,7 +470,18 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const buildAvailabilityBlocks = (): AvailabilityBlock[] => {
     const blocks: AvailabilityBlock[] = [];
 
-    if (availabilityType === 'weekly') {
+    // Use selectedAvailabilityType if available (new flow), fall back to availabilityType (legacy)
+    const effectiveType = selectedAvailabilityType || availabilityType;
+
+    console.log('[buildAvailabilityBlocks] selectedAvailabilityType:', selectedAvailabilityType);
+    console.log('[buildAvailabilityBlocks] availabilityType:', availabilityType);
+    console.log('[buildAvailabilityBlocks] effectiveType:', effectiveType);
+    console.log('[buildAvailabilityBlocks] startTime:', startTime);
+    console.log('[buildAvailabilityBlocks] endTime:', endTime);
+    console.log('[buildAvailabilityBlocks] hasBreak:', hasBreak);
+    console.log('[buildAvailabilityBlocks] availabilityDays:', availabilityDays);
+
+    if (effectiveType === 'weekly') {
       if (hasBreak) {
         // Morning block
         blocks.push({
@@ -506,7 +519,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           endDate: isOngoing ? undefined : endRecurrenceDate,
         });
       }
-    } else if (availabilityType === 'specific' && specificDate) {
+    } else if (effectiveType === 'specific' && specificDate) {
       // Handle break for specific date too
       if (hasBreak) {
         blocks.push({
@@ -540,6 +553,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       }
     }
 
+    console.log('[buildAvailabilityBlocks] Built blocks:', blocks);
     return blocks;
   };
 
@@ -598,14 +612,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           setCalendarKey(prev => prev + 1);
 
           // Check if there are more blocks to add (multi-block support)
+          // Use ref to avoid stale closure issue
+          const blocksToProcess = pendingBlocksRef.current;
           const nextIndex = currentBlockIndex + 1;
-          if (nextIndex < pendingBlocks.length) {
-            // Move to next block - stay on waiting-save
+
+          console.log('[Polling Success] currentBlockIndex:', currentBlockIndex);
+          console.log('[Polling Success] nextIndex:', nextIndex);
+          console.log('[Polling Success] blocksToProcess.length:', blocksToProcess.length);
+          console.log('[Polling Success] blocksToProcess:', blocksToProcess);
+
+          if (nextIndex < blocksToProcess.length) {
+            // More blocks - stay on waiting-save
+            console.log('[Polling Success] More blocks to add, staying on waiting-save');
             setCurrentBlockIndex(nextIndex);
 
             // Small delay before opening next popup for better UX
             setTimeout(() => {
-              const nextBlock = pendingBlocks[nextIndex];
+              const nextBlock = blocksToProcess[nextIndex];
+              console.log('[Polling Success] Opening popup for next block:', nextBlock);
               const eventUrl = generateEventCreateUrl(nextBlock, createdCalendarId);
               const positioning = getSmartPositioning();
               openEventPopup(eventUrl, positioning.popupLeft);
@@ -613,8 +637,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
             }, 500);
           } else {
             // All blocks added - go to success
+            console.log('[Polling Success] All blocks done, going to success');
             setIsFirstAvailability(false);
             setPendingBlocks([]);
+            pendingBlocksRef.current = [];
             setCurrentBlockIndex(0);
 
             // Calculate smart view based on the event that was just added
@@ -688,6 +714,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     setBreakEndTime('13:00');
     setSpecificDate(undefined);
     setPendingBlocks([]);
+    pendingBlocksRef.current = [];
     setCurrentBlockIndex(0);
     setAvailabilityStep('choose-type');
   };
@@ -1928,48 +1955,53 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 frameBorder="0"
               />
 
-              {/* Floating Controls - on same line as calendar nav */}
-              {availabilityStep === 'success' && (
-                <div
-                  className="absolute z-10 flex items-center gap-2"
-                  style={{
-                    top: '10px',
-                    right: '12px',
+              {/* Floating Controls - ALWAYS visible in fullscreen view */}
+              <div
+                className="absolute z-10 flex items-center gap-2"
+                style={{
+                  top: '10px',
+                  right: '12px',
+                }}
+              >
+                {/* View Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="bg-white shadow-sm">
+                      {calendarViewMode === 'WEEK' && 'Week'}
+                      {calendarViewMode === 'MONTH' && 'Month'}
+                      {calendarViewMode === 'AGENDA' && 'Agenda'}
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
+                      Week
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
+                      Month
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
+                      Agenda
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Add Availability Button */}
+                <Button
+                  size="sm"
+                  className="shadow-sm"
+                  onClick={() => {
+                    console.log('[Add Availability Button] Clicked');
+                    setSelectedAvailabilityType(null);
+                    setPendingBlocks([]);
+                    pendingBlocksRef.current = [];
+                    setCurrentBlockIndex(0);
+                    setAvailabilityStep('choose-type');
                   }}
                 >
-                  {/* View Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="bg-white shadow-sm">
-                        {calendarViewMode === 'WEEK' && 'Week'}
-                        {calendarViewMode === 'MONTH' && 'Month'}
-                        {calendarViewMode === 'AGENDA' && 'Agenda'}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setCalendarViewMode('WEEK')}>
-                        Week
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setCalendarViewMode('MONTH')}>
-                        Month
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setCalendarViewMode('AGENDA')}>
-                        Agenda
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Add Availability Button */}
-                  <Button
-                    size="sm"
-                    className="shadow-sm"
-                    onClick={handleAddAnother}
-                  >
-                    + Add Availability
-                  </Button>
-                </div>
-              )}
+                  + Add Availability
+                </Button>
+              </div>
 
               {/* Bottom Tip - only in success state */}
               {availabilityStep === 'success' && showTip && (
@@ -2006,7 +2038,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   {/* Step: Choose Type */}
                   {availabilityStep === 'choose-type' && (
                     <div
-                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
+                      className={`bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative ${getSmartPositioning().modalClassName}`}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Close button */}
@@ -2084,7 +2116,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   {/* Step: Set Availability */}
                   {availabilityStep === 'set-availability' && (
                     <div
-                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
+                      className={`bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative ${getSmartPositioning().modalClassName}`}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Close button */}
@@ -2278,21 +2310,38 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           }
 
                           // Build the availability blocks and open popup for first one
+                          console.log('[Add to Calendar] Button clicked');
+                          console.log('[Add to Calendar] selectedAvailabilityType:', selectedAvailabilityType);
+                          console.log('[Add to Calendar] availabilityType:', availabilityType);
+                          console.log('[Add to Calendar] createdCalendarId:', createdCalendarId);
+
                           const blocks = buildAvailabilityBlocks();
                           console.log('[Add to Calendar] blocks:', blocks);
-                          console.log('[Add to Calendar] calendarId:', createdCalendarId);
+
+                          if (blocks.length === 0) {
+                            console.error('[Add to Calendar] No blocks built!');
+                            toast({
+                              title: 'Unable to create availability',
+                              description: 'Please check your settings and try again.',
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
 
                           setPendingBlocks(blocks);
+                          pendingBlocksRef.current = blocks;
                           setCurrentBlockIndex(0);
 
-                          if (blocks.length > 0) {
-                            const block = blocks[0];
-                            const eventUrl = generateEventCreateUrl(block, createdCalendarId);
-                            const positioning = getSmartPositioning();
-                            openEventPopup(eventUrl, positioning.popupLeft);
-                            startPolling(block.id);
-                            setAvailabilityStep('waiting-save');
-                          }
+                          const block = blocks[0];
+                          const eventUrl = generateEventCreateUrl(block, createdCalendarId);
+                          console.log('[Add to Calendar] eventUrl:', eventUrl);
+
+                          const positioning = getSmartPositioning();
+                          console.log('[Add to Calendar] positioning:', positioning);
+
+                          openEventPopup(eventUrl, positioning.popupLeft);
+                          startPolling(block.id);
+                          setAvailabilityStep('waiting-save');
                         }}
                       >
                         Add to Calendar →
