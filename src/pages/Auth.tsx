@@ -123,11 +123,11 @@ const Auth = () => {
 
           <div className="mt-6 text-center text-xs text-muted-foreground">
             By signing in, you agree to our{' '}
-            <a href="#" className="text-primary hover:underline">
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
               Terms of Service
             </a>
             {' '}and{' '}
-            <a href="#" className="text-primary hover:underline">
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
               Privacy Policy
             </a>
           </div>
