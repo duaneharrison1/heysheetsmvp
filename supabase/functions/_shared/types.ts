@@ -158,3 +158,116 @@ export interface ChatCompletionResponse {
   // Optional debug metadata included in responses (frontend may ignore in production)
   debug?: any;
 }
+
+// ============================================================================
+// MAILJET TYPES
+// ============================================================================
+
+/**
+ * Mailjet contact
+ */
+export interface MailjetContact {
+  email: string;
+  name?: string;
+  isExcludedFromCampaigns?: boolean;
+}
+
+/**
+ * Mailjet contact list
+ */
+export interface MailjetContactList {
+  id: number;
+  name: string;
+  subscriberCount: number;
+  createdAt: string;
+}
+
+/**
+ * Mailjet add contact request
+ */
+export interface MailjetAddContactRequest {
+  operation: 'add_contact';
+  email: string;
+  name?: string;
+  listId?: number;
+}
+
+/**
+ * Mailjet list contacts request
+ */
+export interface MailjetListContactsRequest {
+  operation: 'list_contacts';
+  listId?: number;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Mailjet send email request
+ */
+export interface MailjetSendEmailRequest {
+  operation: 'send_email';
+  to: Array<{ email: string; name?: string }>;
+  subject: string;
+  htmlContent: string;
+  textContent?: string;
+  templateId?: number;
+  variables?: Record<string, string>;
+}
+
+/**
+ * Mailjet send campaign request
+ */
+export interface MailjetSendCampaignRequest {
+  operation: 'send_campaign';
+  listId: number;
+  subject: string;
+  htmlContent: string;
+  textContent?: string;
+  senderEmail?: string;
+  senderName?: string;
+}
+
+/**
+ * Mailjet get lists request
+ */
+export interface MailjetGetListsRequest {
+  operation: 'get_lists';
+}
+
+/**
+ * Mailjet create list request
+ */
+export interface MailjetCreateListRequest {
+  operation: 'create_list';
+  name: string;
+}
+
+/**
+ * Mailjet sync users request
+ */
+export interface MailjetSyncUsersRequest {
+  operation: 'sync_users';
+  listId?: number;
+}
+
+/**
+ * Mailjet get stats request
+ */
+export interface MailjetGetStatsRequest {
+  operation: 'get_stats';
+  listId?: number;
+}
+
+/**
+ * Union type for all Mailjet requests
+ */
+export type MailjetRequest =
+  | MailjetAddContactRequest
+  | MailjetListContactsRequest
+  | MailjetSendEmailRequest
+  | MailjetSendCampaignRequest
+  | MailjetGetListsRequest
+  | MailjetCreateListRequest
+  | MailjetSyncUsersRequest
+  | MailjetGetStatsRequest;

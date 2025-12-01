@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -8,14 +7,25 @@ import { LogIn, LogOut, Loader2 } from 'lucide-react';
 const AuthButton = () => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const navigate = useNavigate();
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    isMounted.current = true;
+    
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (isMounted.current) setUser(user);
     });
-    return () => subscription.unsubscribe();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isMounted.current) {
+        setUser(session?.user ?? null);
+      }
+    });
+    
+    return () => {
+      isMounted.current = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSignIn = async () => {
@@ -29,25 +39,30 @@ const AuthButton = () => {
     } catch (error) {
       toast.error('Sign in failed');
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
 
   const handleSignOut = async () => {
+    setLoading(true);
+    
+    // Create a timeout to force redirect if signOut takes too long
+    const timeoutId = setTimeout(() => {
+      console.warn('Sign out timeout - forcing redirect');
+      window.location.href = '/auth';
+    }, 3000);
+    
     try {
-      setLoading(true);
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Sign out error:', error);
-      }
-      // Force redirect even on error
-      navigate('/auth');
-      window.location.href = '/auth';
+      // Clear any cached data first
+      localStorage.removeItem('supabase.auth.token');
+      
+      await supabase.auth.signOut();
     } catch (err) {
-      console.error('Sign out exception:', err);
-      window.location.href = '/auth';
+      console.error('Sign out error:', err);
     } finally {
-      setLoading(false);
+      clearTimeout(timeoutId);
+      // Always redirect with hard page reload to clear all state
+      window.location.href = '/auth';
     }
   };
 

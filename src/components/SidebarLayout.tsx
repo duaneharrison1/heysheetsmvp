@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image, BarChart3 } from "lucide-react";
+import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image, BarChart3, Mail } from "lucide-react";
+import { useUserRole } from '@/hooks/useUserRole';
 // No sidebar tooltips needed; keep imports minimal
 
 // Create a context to share user data with child components
@@ -37,6 +38,7 @@ const adminNavItems = [
   { id: "admin-stores", label: "All Stores", href: "/admin/stores", icon: LayoutGrid },
   { id: "admin-feedback", label: "Chat Feedback", href: "/admin/feedback", icon: MessageSquare },
   { id: "admin-support", label: "Support Tickets", href: "/admin/support", icon: Ticket },
+  { id: "admin-emails", label: "Email Lists", href: "/admin/emails", icon: Mail },
   { id: "admin-qa", label: "QA Results", href: "/admin/qa-results", icon: LayoutGrid },
 ];
 
@@ -51,17 +53,27 @@ function UserProfileSection({ user }: { user: any }) {
   const [loading, setLoading] = useState(false);
 
   const handleSignOut = async () => {
+    if (loading) return; // Prevent double-clicks
     setLoading(true);
+    
+    // Create a timeout to force redirect if signOut takes too long
+    const timeoutId = setTimeout(() => {
+      console.warn('Sign out timeout - forcing redirect');
+      window.location.href = '/auth';
+    }, 3000);
+    
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Sign out error:', error);
-      }
+      // Clear any cached data first
+      localStorage.removeItem('supabase.auth.token');
+      
+      await supabase.auth.signOut();
     } catch (err) {
-      console.error('Sign out exception:', err);
+      console.error('Sign out error:', err);
+    } finally {
+      clearTimeout(timeoutId);
+      // Always redirect with hard page reload to clear all state
+      window.location.href = '/auth';
     }
-    // Always redirect with hard reload - this clears all state
-    window.location.href = '/auth';
   };
 
   const firstName = user?.user_metadata?.full_name
@@ -191,6 +203,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
 function SidebarWrapper({ user, location, firstStoreId }: { user: any; location: any; firstStoreId?: string | null }) {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { isSuperAdmin } = useUserRole();
 
   return (
     <Sidebar collapsible="icon">
@@ -237,30 +250,30 @@ function SidebarWrapper({ user, location, firstStoreId }: { user: any; location:
             );
           })}
           
-          {/* Admin Section */}
+          {/* Admin Section - only visible to super admins */}
+          {isSuperAdmin ? (
+            <>
               <div className="my-3 border-t border-border" />
               <div className="px-2 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider group-data-[collapsible=icon]:hidden">
                 Super Admin
               </div>
-          {adminNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.href;
-            
-            return (
-              <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                  asChild
-                  isActive={isActive}
-                >
-                  <Link to={item.href} className={isCollapsed ? 'flex items-center justify-center w-full' : 'flex items-center gap-3'}>
-                    <Icon className="h-4 w-4" />
+              {adminNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href;
+
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link to={item.href} className={isCollapsed ? 'flex items-center justify-center w-full' : 'flex items-center gap-3'}>
+                        <Icon className="h-4 w-4" />
                         <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-                
-              </SidebarMenuItem>
-            );
-          })}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </>
+          ) : null}
         </SidebarMenu>
       </SidebarContentArea>
 

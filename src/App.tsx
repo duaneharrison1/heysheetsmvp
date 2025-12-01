@@ -21,6 +21,7 @@ import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
 import AdminFeedback from './pages/AdminFeedback';
 import AdminSupportTickets from './pages/AdminSupportTickets';
+import AdminEmails from './pages/AdminEmails';
 import { DebugPanel } from "@/components/debug/DebugPanel";
 import { DebugToggle } from "@/components/debug/DebugToggle";
 import { QAResultsPage } from "@/qa/components/QAResultsPage";
@@ -60,6 +61,7 @@ const App = () => (
           <Route path="/admin/stores" element={<SidebarLayout><AdminStores /></SidebarLayout>} />
           <Route path="/admin/feedback" element={<SidebarLayout><AdminFeedback /></SidebarLayout>} />
           <Route path="/admin/support" element={<SidebarLayout><AdminSupportTickets /></SidebarLayout>} />
+          <Route path="/admin/emails" element={<SidebarLayout><AdminEmails /></SidebarLayout>} />
           <Route path="/admin/qa-results" element={<SidebarLayout><QAResultsPage /></SidebarLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
