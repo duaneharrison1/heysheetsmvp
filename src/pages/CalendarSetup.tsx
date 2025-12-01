@@ -115,7 +115,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [calendarViewMode, setCalendarViewMode] = useState<'WEEK' | 'MONTH' | 'AGENDA'>('WEEK');
 
   // Current step in the add availability flow (simplified - no waiting-save)
-  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'success'>('choose-type');
+  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'added' | 'success'>('choose-type');
 
   // Track which availability type was selected (for form step)
   const [selectedAvailabilityType, setSelectedAvailabilityType] = useState<'weekly' | 'specific' | null>(null);
@@ -674,7 +674,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           setCalendarViewMode(smartView.mode);
         }
 
-        setAvailabilityStep('success');
+        setAvailabilityStep('added');
       } else {
         throw new Error(response.data?.error || 'Failed to create availability');
       }
@@ -723,33 +723,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       }
     };
   }, []);
-
-  // Smart positioning for modal
-  const getSmartPositioning = () => {
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const popupWidth = 605;  // 15px wider
-    const modalWidth = 420;
-    const minGap = 20;  // Reduced from 40
-
-    const totalNeeded = modalWidth + minGap + popupWidth;
-    const canFitSideBySide = viewportWidth >= totalNeeded;
-
-    if (canFitSideBySide) {
-      // Position popup closer to modal
-      const popupLeft = modalWidth + minGap + 40;  // Tighter positioning
-      return {
-        modalClassName: 'ml-8 mr-auto',
-        popupLeft: Math.min(popupLeft, viewportWidth - popupWidth - 20),
-        sideBySide: true
-      };
-    } else {
-      return {
-        modalClassName: '',
-        popupLeft: Math.max(20, viewportWidth - popupWidth - 20),
-        sideBySide: false
-      };
-    }
-  };
 
   // Reset dialog state
   const resetCreateDialog = () => {
@@ -2053,7 +2026,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   {/* Step: Choose Type */}
                   {availabilityStep === 'choose-type' && (
                     <div
-                      className={`bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative ${getSmartPositioning().modalClassName}`}
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Close button */}
@@ -2131,7 +2104,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   {/* Step: Set Availability */}
                   {availabilityStep === 'set-availability' && (
                     <div
-                      className={`bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative ${getSmartPositioning().modalClassName}`}
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Close button */}
@@ -2328,116 +2301,95 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
+                  {/* Step: Added Success */}
+                  {availabilityStep === 'added' && (
+                    <div
+                      className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 relative text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="mb-4">
+                        <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                          <Check className="h-8 w-8 text-green-600" />
+                        </div>
+                      </div>
+                      <h2 className="text-xl font-semibold mb-2">Added!</h2>
+                      <p className="text-muted-foreground mb-6">
+                        Your availability has been added to the calendar.
+                      </p>
+                      <div className="flex gap-3 justify-center">
+                        <button
+                          onClick={() => setAvailabilityStep('choose-type')}
+                          className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Add More
+                        </button>
+                        <button
+                          onClick={() => setAvailabilityStep('success')}
+                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )}
 
-            {/* Edit Guide Modal */}
+            {/* Edit Guide - Floating Helper (no overlay) */}
             {editGuideStep !== 'idle' && (
-              <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-                <div
-                  className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Close button */}
-                  <button
-                    onClick={() => {
-                      setEditGuideStep('idle');
-                      if (editGuideCleanupRef.current) {
-                        editGuideCleanupRef.current();
-                      }
-                    }}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-
+              <div className="fixed bottom-6 right-6 z-[60] max-w-sm animate-in slide-in-from-bottom-4">
+                <div className="bg-white rounded-xl shadow-2xl border p-4">
                   {editGuideStep === 'waiting-click' && (
                     <>
-                      <h2 className="text-xl font-semibold mb-4 pr-8">
-                        Edit your availability
-                      </h2>
-
-                      <div className="space-y-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                            1
-                          </div>
-                          <p className="text-muted-foreground pt-1">
-                            Click on any availability block in the calendar
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Pencil className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Click any block to edit</p>
+                          <p className="text-sm text-muted-foreground">
+                            Select an availability block in the calendar
                           </p>
                         </div>
-
-                        <div className="bg-gray-50 rounded-lg p-3 flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            Waiting for you to click a block...
-                          </span>
-                        </div>
                       </div>
-
-                      <div className="mt-6 pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setEditGuideStep('idle');
-                            if (editGuideCleanupRef.current) {
-                              editGuideCleanupRef.current();
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 rounded-lg px-3 py-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Waiting for selection...
                       </div>
+                      <button
+                        onClick={() => {
+                          setEditGuideStep('idle');
+                          if (editGuideCleanupRef.current) {
+                            editGuideCleanupRef.current();
+                          }
+                        }}
+                        className="mt-3 text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
                     </>
                   )}
 
                   {editGuideStep === 'clicked' && (
                     <>
-                      <h2 className="text-xl font-semibold mb-4 pr-8">
-                        Edit your availability
-                      </h2>
-
-                      <div className="space-y-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <Check className="h-4 w-4 text-green-600" />
-                          </div>
-                          <p className="text-muted-foreground pt-1">
-                            You clicked on an availability block
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                          <Check className="h-4 w-4 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Event popup opened!</p>
+                          <p className="text-sm text-muted-foreground">
+                            Use the pencil icon ✏️ to edit, or trash 🗑️ to delete
                           </p>
                         </div>
-
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                            2
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">
-                              Click <strong>"More details"</strong> on the popup card
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              This opens Google Calendar in a new tab
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                            3
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">
-                              Use the <Pencil className="h-4 w-4 inline" /> edit or <Trash2 className="h-4 w-4 inline" /> delete icons
-                            </p>
-                          </div>
-                        </div>
                       </div>
-
-                      <div className="mt-6 pt-4 border-t">
-                        <Button onClick={() => setEditGuideStep('idle')}>
-                          Done
-                        </Button>
-                      </div>
+                      <button
+                        onClick={() => setEditGuideStep('idle')}
+                        className="w-full px-3 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90"
+                      >
+                        Got it
+                      </button>
                     </>
                   )}
                 </div>
