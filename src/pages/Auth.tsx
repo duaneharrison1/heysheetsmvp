@@ -9,8 +9,8 @@ const Auth = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate('/dashboard');
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) navigate('/');
     });
   }, [navigate]);
 

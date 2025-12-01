@@ -262,8 +262,10 @@ const Account = () => {
             if (!res.ok) throw new Error(result?.error || 'Deletion failed');
 
             toast({ title: 'Account deleted', description: 'Your account has been deleted.' });
-            await supabase.auth.signOut();
-            navigate('/auth');
+            // Use centralized sign-out helper to keep behavior consistent
+            // helper performs signOut and redirects to `/auth`.
+            const { signOutAndRedirect } = await import('@/lib/auth');
+            await signOutAndRedirect('/auth');
         } catch (err: any) {
             toast({ title: 'Error', description: err?.message ?? 'Could not delete account', variant: 'destructive' });
         } finally {

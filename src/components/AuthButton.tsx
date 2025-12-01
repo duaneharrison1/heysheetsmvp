@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { signOutAndRedirect } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { LogIn, LogOut, Loader2 } from 'lucide-react';
@@ -45,25 +46,7 @@ const AuthButton = () => {
 
   const handleSignOut = async () => {
     setLoading(true);
-    
-    // Create a timeout to force redirect if signOut takes too long
-    const timeoutId = setTimeout(() => {
-      console.warn('Sign out timeout - forcing redirect');
-      window.location.href = '/auth';
-    }, 3000);
-    
-    try {
-      // Clear any cached data first
-      localStorage.removeItem('supabase.auth.token');
-      
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error('Sign out error:', err);
-    } finally {
-      clearTimeout(timeoutId);
-      // Always redirect with hard page reload to clear all state
-      window.location.href = '/auth';
-    }
+    await signOutAndRedirect('/auth');
   };
 
   if (user) {

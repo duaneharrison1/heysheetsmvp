@@ -31,8 +31,8 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
         navigate('/dashboard', { replace: true });
       }
       setLoading(false);

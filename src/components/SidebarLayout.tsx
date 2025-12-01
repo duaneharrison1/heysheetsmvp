@@ -27,7 +27,7 @@ export const UserContext = React.createContext<any>(null);
 
 // Navigation items for Store Admin
 const navItems = [
-  { id: "stores", label: "My Stores", href: "/", icon: Store },
+  { id: "stores", label: "My Stores", href: "/dashboard", icon: Store },
   { id: "images", label: "Manage Images", href: "/images", icon: Image },
   { id: "account", label: "Settings", href: "/account", icon: UserCog },
   { id: "help", label: "Help & Support", href: "/help", icon: LifeBuoy },
@@ -61,7 +61,7 @@ function UserProfileSection({ user }: { user: any }) {
     const timeoutId = setTimeout(() => {
       console.warn('Sign out timeout - forcing redirect');
       window.location.href = '/auth';
-    }, 3000);
+    }, 2000);
     
     try {
       // Clear any cached data first
@@ -76,6 +76,7 @@ function UserProfileSection({ user }: { user: any }) {
       window.location.href = '/auth';
     }
   };
+
 
   const firstName = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(' ')[0]
@@ -236,8 +237,7 @@ function SidebarWrapper({ user, location, firstStoreId }: { user: any; location:
 
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.href || 
-                            (item.href === "/" && location.pathname === "/");
+            const isActive = location.pathname === item.href;
             
             return (
               <SidebarMenuItem key={item.id}>
