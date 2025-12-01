@@ -105,6 +105,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const editGuideCleanupRef = useRef<(() => void) | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Edit helper drag state
+  const [editHelperPosition, setEditHelperPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
+
   // Weekly start date
   const [weeklyStartDate, setWeeklyStartDate] = useState<Date>(() => new Date());
 
@@ -660,9 +665,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           description: 'Your calendar has been updated.',
         });
 
-        // Refresh the calendar embed
+        // Refresh calendar IMMEDIATELY (it loads behind the modal)
         setCalendarKey(prev => prev + 1);
-        setIsFirstAvailability(false);
 
         // Calculate smart view based on the event
         const eventStartHour = parseTimeToHour(startTime);
@@ -692,6 +696,9 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Edit guide - start listening for iframe clicks using blur detection
   const startEditGuideListener = () => {
+    // Reset helper position
+    setEditHelperPosition({ x: 0, y: 0 });
+
     // Force focus on parent window
     window.focus();
 
@@ -714,6 +721,43 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       window.removeEventListener('blur', handleBlur);
     };
   };
+
+  // Edit helper drag handlers
+  const handleDragStart = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: editHelperPosition.x,
+      y: editHelperPosition.y,
+      startX: e.clientX,
+      startY: e.clientY
+    };
+  };
+
+  const handleDrag = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const deltaX = e.clientX - dragStartRef.current.startX;
+    const deltaY = e.clientY - dragStartRef.current.startY;
+    setEditHelperPosition({
+      x: dragStartRef.current.x + deltaX,
+      y: dragStartRef.current.y + deltaY
+    });
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Drag event listeners
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleDrag);
+      window.addEventListener('mouseup', handleDragEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleDrag);
+        window.removeEventListener('mouseup', handleDragEnd);
+      };
+    }
+  }, [isDragging]);
 
   // Cleanup edit guide listener on unmount or step change
   useEffect(() => {
@@ -2324,7 +2368,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           Add More
                         </button>
                         <button
-                          onClick={() => setAvailabilityStep('success')}
+                          onClick={() => {
+                            // Calendar already refreshed, just close modal
+                            setIsFirstAvailability(false);
+                            setAvailabilityStep('success');
+                          }}
                           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                         >
                           Done
@@ -2336,63 +2384,95 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </div>
               )}
 
-            {/* Edit Guide - Floating Helper (no overlay) */}
+            {/* Edit Guide - Floating Helper (top-right, draggable) */}
             {editGuideStep !== 'idle' && (
-              <div className="fixed bottom-6 right-6 z-[60] max-w-sm animate-in slide-in-from-bottom-4">
-                <div className="bg-white rounded-xl shadow-2xl border p-4">
-                  {editGuideStep === 'waiting-click' && (
-                    <>
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Pencil className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">Click any block to edit</p>
-                          <p className="text-sm text-muted-foreground">
-                            Select an availability block in the calendar
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 rounded-lg px-3 py-2">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Waiting for selection...
-                      </div>
-                      <button
-                        onClick={() => {
-                          setEditGuideStep('idle');
-                          if (editGuideCleanupRef.current) {
-                            editGuideCleanupRef.current();
-                          }
-                        }}
-                        className="mt-3 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
+              <div
+                className="absolute z-20 bg-white rounded-lg shadow-lg border p-4 max-w-xs cursor-move select-none"
+                style={{
+                  top: `${55 + editHelperPosition.y}px`,
+                  right: `${12 - editHelperPosition.x}px`
+                }}
+                onMouseDown={handleDragStart}
+              >
+                {/* Close button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditGuideStep('idle');
+                    if (editGuideCleanupRef.current) {
+                      editGuideCleanupRef.current();
+                    }
+                  }}
+                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
 
-                  {editGuideStep === 'clicked' && (
-                    <>
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                          <Check className="h-4 w-4 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">Event popup opened!</p>
-                          <p className="text-sm text-muted-foreground">
-                            Use the pencil icon ✏️ to edit, or trash 🗑️ to delete
-                          </p>
-                        </div>
+                {editGuideStep === 'waiting-click' && (
+                  <div className="pr-6">
+                    <p className="font-medium mb-1">Edit availability</p>
+                    <p className="text-sm text-muted-foreground">
+                      Click on any availability block in the calendar.
+                    </p>
+                  </div>
+                )}
+
+                {editGuideStep === 'clicked' && (
+                  <div className="pr-6 space-y-3">
+                    {/* Step 1 - Keep showing this */}
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Check className="h-3 w-3 text-green-600" />
                       </div>
-                      <button
-                        onClick={() => setEditGuideStep('idle')}
-                        className="w-full px-3 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90"
-                      >
-                        Got it
-                      </button>
-                    </>
-                  )}
-                </div>
+                      <p className="text-sm text-muted-foreground">
+                        Click on any availability block in the calendar.
+                      </p>
+                    </div>
+
+                    {/* Step 2 - Added after click */}
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-xs font-medium text-blue-600">2</span>
+                      </div>
+                      <div className="text-sm">
+                        <p className="text-muted-foreground mb-2">
+                          When the event popup opens, click <strong>"More details"</strong>
+                        </p>
+
+                        {/* Visual showing what "More details" looks like */}
+                        <div className="bg-gray-50 border rounded p-2 mb-2">
+                          <div className="flex items-center gap-1 text-xs">
+                            <span className="text-gray-600">📅 Available</span>
+                          </div>
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-gray-500 text-xs">9:00 AM - 5:00 PM</span>
+                          </div>
+                          <div className="mt-2 pt-2 border-t">
+                            <span className="text-blue-600 text-xs font-medium underline cursor-pointer">
+                              More details
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-muted-foreground">
+                          Then use <Pencil className="h-3 w-3 inline mx-0.5" /> to edit or <Trash2 className="h-3 w-3 inline mx-0.5" /> to delete.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditGuideStep('idle');
+                      }}
+                    >
+                      Got it
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             </div>
