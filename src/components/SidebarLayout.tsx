@@ -48,27 +48,20 @@ interface SidebarLayoutProps {
 function UserProfileSection({ user }: { user: any }) {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
   const handleSignOut = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Sign out error:', error);
-        // Force redirect even on error - user wants to leave
       }
-      // Clear any cached state and redirect
-      navigate('/auth');
-      window.location.href = '/auth';
     } catch (err) {
       console.error('Sign out exception:', err);
-      // Force redirect even on exception
-      window.location.href = '/auth';
-    } finally {
-      setLoading(false);
     }
+    // Always redirect with hard reload - this clears all state
+    window.location.href = '/auth';
   };
 
   const firstName = user?.user_metadata?.full_name
