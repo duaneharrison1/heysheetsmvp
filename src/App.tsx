@@ -12,7 +12,6 @@ import StoreSettings from "./pages/StoreSettings";
 // Correct import for the chat components showcase page
 import ChatComponentsShowcase from "./pages/ChatComponents";
 import Account from "./pages/Account";
-import Billing from './pages/Billing';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import ManageImages from './pages/Images';
@@ -50,7 +49,6 @@ const App = () => (
 
           {/* Store Admin (store owner) */}
           <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
-          <Route path="/billing" element={<SidebarLayout><Billing /></SidebarLayout>} />
           <Route path="/images" element={<SidebarLayout><ManageImages /></SidebarLayout>} />
           
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Store, Users, UserCog, Receipt, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image } from "lucide-react";
+import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image } from "lucide-react";
 // No sidebar tooltips needed; keep imports minimal
 
 // Create a context to share user data with child components
@@ -26,9 +26,8 @@ export const UserContext = React.createContext<any>(null);
 // Navigation items for Store Admin
 const navItems = [
   { id: "stores", label: "My Stores", href: "/", icon: Store },
-  { id: "account", label: "Account Settings", href: "/account", icon: UserCog },
   { id: "images", label: "Manage Images", href: "/images", icon: Image },
-  { id: "billing", label: "Billing", href: "/billing", icon: Receipt },
+  { id: "account", label: "Settings", href: "/account", icon: UserCog },
   { id: "help", label: "Help & Support", href: "/help", icon: LifeBuoy },
 ];
 

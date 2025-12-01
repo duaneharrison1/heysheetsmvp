@@ -4,11 +4,12 @@ import StoreSetup from '@/components/store/StoreSetup';
 import CalendarSetup from './CalendarSetup';
 import { H1, Lead } from '@/components/ui/heading';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Trash, ToggleRight } from 'lucide-react';
+import { Loader2, Trash, ToggleRight, MessageCircle, FileText, Calendar } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+
+// Navigation items for secondary nav
+const navItems = [
+  { id: 'chatbot', label: 'Chatbot', icon: MessageCircle },
+  { id: 'google-sheet', label: 'Google Sheet', icon: FileText },
+  { id: 'calendar', label: 'Calendar', icon: Calendar },
+  { id: 'status', label: 'Store Status', icon: ToggleRight },
+  { id: 'danger', label: 'Danger Zone', icon: Trash },
+];
 
 const StoreSettings = () => {
   const { storeId } = useParams();
@@ -28,6 +38,43 @@ const StoreSettings = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [pendingStatusChange, setPendingStatusChange] = useState<boolean | null>(null);
+  const [activeSection, setActiveSection] = useState('chatbot');
+
+  // Handle scroll to update active section
+  useEffect(() => {
+    const handleScroll = () => {
+      const sections = navItems.map(item => ({
+        id: item.id,
+        element: document.getElementById(item.id),
+      }));
+
+      for (const section of sections) {
+        if (section.element) {
+          const rect = section.element.getBoundingClientRect();
+          if (rect.top <= 150 && rect.bottom >= 150) {
+            setActiveSection(section.id);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Handle nav item click
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      const offset = 100; // Account for header
+      const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({
+        top: elementPosition - offset,
+        behavior: 'smooth',
+      });
+    }
+  };
 
   useEffect(() => {
     if (!storeId) return;
@@ -104,69 +151,98 @@ const StoreSettings = () => {
         <Lead>Settings &amp; integration for <span className="font-medium">{store.name}</span></Lead>
       </div>
 
-      <div className="max-w-3xl mx-auto space-y-4">
-        <StoreSetup storeId={storeId} />
+      <div className="flex gap-8">
+        {/* Secondary Navigation Panel - Fixed */}
+        <aside className="hidden lg:block w-56 shrink-0">
+          <nav className="sticky top-24 space-y-1 border rounded-lg p-2">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  className={cn(
+                    'flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                    activeSection === item.id
+                      ? 'bg-secondary text-secondary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-        <CalendarSetup storeId={storeId} />
+        {/* Main Content */}
+        <div className="flex-1 max-w-3xl space-y-4">
+          <StoreSetup storeId={storeId} />
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
+          <div id="calendar">
+            <CalendarSetup storeId={storeId} />
+          </div>
+
+          <Card id="status">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+                    <ToggleRight className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle>Store Status</CardTitle>
+                    <CardDescription>Control whether this store is active or inactive</CardDescription>
+                  </div>
+                </div>
+                <Switch
+                  checked={store.is_active ?? true}
+                  disabled={updatingActive}
+                  onCheckedChange={(checked) => {
+                    setPendingStatusChange(checked);
+                    setStatusDialogOpen(true);
+                  }}
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                {store.is_active
+                  ? 'This store is currently active and appears on your dashboard.'
+                  : 'This store is currently inactive and hidden from your dashboard.'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card id="danger">
+            <CardHeader>
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
-                  <ToggleRight className="h-5 w-5" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+                  <Trash className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle>Store Status</CardTitle>
-                  <CardDescription>Control whether this store is active or inactive</CardDescription>
+                  <CardTitle>Danger zone</CardTitle>
+                  <CardDescription>Permanently delete this store and all its data.</CardDescription>
                 </div>
               </div>
-              <Switch
-                checked={store.is_active ?? true}
-                disabled={updatingActive}
-                onCheckedChange={(checked) => {
-                  setPendingStatusChange(checked);
-                  setStatusDialogOpen(true);
-                }}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              {store.is_active
-                ? 'This store is currently active and appears on your dashboard.'
-                : 'This store is currently inactive and hidden from your dashboard.'}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
-                <Trash className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle>Danger zone</CardTitle>
-                <CardDescription>Permanently delete this store and all its data.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Deleting this store is irreversible. All settings, data, and associated information will be removed permanently.
-            </p>
-          </CardContent>
-          <CardFooter className="flex justify-end">
-            <Button
-              variant="destructive"
-              disabled={deleting}
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              {deleting ? 'Deleting...' : 'Delete store'}
-            </Button>
-          </CardFooter>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Deleting this store is irreversible. All settings, data, and associated information will be removed permanently.
+              </p>
+            </CardContent>
+            <CardFooter className="flex justify-end">
+              <Button
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => setDeleteDialogOpen(true)}
+              >
+                {deleting ? 'Deleting...' : 'Delete store'}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
       </div>
 
       {/* Status Change Confirmation Dialog */}
