@@ -587,16 +587,22 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           // Check if there are more blocks to add (multi-block support)
           const nextIndex = currentBlockIndex + 1;
           if (nextIndex < pendingBlocks.length) {
-            // Move to next block
+            // Move to next block - stay on waiting-save
             setCurrentBlockIndex(nextIndex);
-            const nextBlock = pendingBlocks[nextIndex];
-            const eventUrl = generateEventCreateUrl(nextBlock, createdCalendarId);
-            const positioning = getSmartPositioning();
-            openEventPopup(eventUrl, positioning.popupLeft);
-            startPolling(nextBlock.id);
+
+            // Small delay before opening next popup for better UX
+            setTimeout(() => {
+              const nextBlock = pendingBlocks[nextIndex];
+              const eventUrl = generateEventCreateUrl(nextBlock, createdCalendarId);
+              const positioning = getSmartPositioning();
+              openEventPopup(eventUrl, positioning.popupLeft);
+              startPolling(nextBlock.id);
+            }, 500);
           } else {
             // All blocks added - go to success
             setIsFirstAvailability(false);
+            setPendingBlocks([]);
+            setCurrentBlockIndex(0);
 
             // Calculate smart view based on the event that was just added
             const eventStartHour = parseTimeToHour(startTime);
@@ -676,7 +682,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Smart positioning for modal and popup
   const getSmartPositioning = () => {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const popupWidth = 590;  // 10px wider than original 580
+    const popupWidth = 605;  // 15px wider
     const modalWidth = 420;
     const minGap = 20;  // Reduced from 40
 
@@ -951,7 +957,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                                   '_blank'
                                 )}
                               >
-                                View Schedule
+                                View/Add Schedule
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => window.open(
@@ -1088,8 +1094,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       </CardContent>
 
       {/* Create Calendar Dialog - Inline to prevent re-creation on render */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className={createStep === 'add-blocks' ? 'max-w-4xl' : 'max-w-2xl'}>
+      <Dialog open={createDialogOpen && createStep !== 'add-blocks'} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="max-w-2xl">
           {/* STEP 1: Choice */}
           {createStep === 'choice' && (
             <>
@@ -1780,9 +1786,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           </div>
         )}
 
-        {/* Step: Add Blocks - renders nothing in Dialog, handled by portal below */}
-        {createStep === 'add-blocks' && null}
-
         {/* Step: Congratulations */}
         {createStep === 'congrats' && (
           <>
@@ -1895,10 +1898,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           {/* Main Content Area */}
           <div className="flex-1 relative flex flex-col">
 
-            {/* 10px gap between header and calendar */}
+            {/* 5px gap between header and calendar */}
             <div
-              className="h-[10px] w-full"
-              style={{ backgroundColor: '#f1f3f4' }}
+              className="h-[5px] w-full"
+              style={{ backgroundColor: '#e8eaed' }}
             />
 
             {/* Calendar Embed Container */}
@@ -1921,7 +1924,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   className="absolute z-10 flex items-center gap-2"
                   style={{
                     top: '10px',
-                    right: '50px',
+                    right: '12px',
                   }}
                 >
                   {/* View Dropdown */}
@@ -1960,7 +1963,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
               {/* Bottom Tip - only in success state */}
               {availabilityStep === 'success' && showTip && (
-                <div className="absolute bottom-4 right-4 max-w-sm z-10">
+                <div className="absolute bottom-4 right-4 max-w-md z-10">
                   <div className="bg-white/95 backdrop-blur rounded-lg px-4 py-3 shadow-lg border relative">
                     <button
                       onClick={() => setShowTip(false)}
@@ -1970,8 +1973,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       <X className="h-4 w-4" />
                     </button>
                     <p className="text-sm text-muted-foreground pr-6">
-                      💡 You can also add availability directly in Google Calendar.
-                      Create an event and select "<strong>{calendarName}</strong>" as the calendar.
+                      💡 Manage availability directly in Google Calendar — add, edit, or delete
+                      events on the "<strong>{calendarName}</strong>" calendar.
                     </p>
                   </div>
                 </div>
@@ -2289,13 +2292,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                         </div>
                         <div>
                           <h2 className="text-lg font-semibold">
-                            Complete your availability in Google Calendar
+                            Add your availability in Google Calendar
                           </h2>
-                          {pendingBlocks.length > 1 && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Adding block {currentBlockIndex + 1} of {pendingBlocks.length}
-                            </p>
-                          )}
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {pendingBlocks.length > 1
+                              ? `Adding block ${currentBlockIndex + 1} of ${pendingBlocks.length}`
+                              : "A popup should have opened on the right. Check the details and click Save."
+                            }
+                          </p>
                         </div>
                       </div>
 
