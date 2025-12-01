@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image } from "lucide-react";
+import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image, BarChart3 } from "lucide-react";
 // No sidebar tooltips needed; keep imports minimal
 
 // Create a context to share user data with child components
@@ -116,6 +116,7 @@ function UserProfileSection({ user }: { user: any }) {
 
 export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const [user, setUser] = useState<any>(null);
+  const [firstStoreId, setFirstStoreId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
@@ -132,6 +133,22 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
         return;
       }
       setUser(user);
+
+      // Fetch the first store for this user to enable quick analytics link
+      try {
+        const { data: storesData, error: storesError } = await supabase
+          .from('stores')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1);
+
+        if (!storesError && Array.isArray(storesData) && storesData.length > 0) {
+          setFirstStoreId(storesData[0].id);
+        }
+      } catch (err) {
+        // ignore store load errors here; analytics link will be hidden
+        console.error('Error loading user stores for sidebar analytics link:', err);
+      }
     } catch (error) {
       console.error('Error loading user:', error);
       navigate('/auth');
@@ -152,7 +169,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
   return (
     <UserContext.Provider value={user}>
       <SidebarProvider>
-        <SidebarWrapper user={user} location={location} />
+        <SidebarWrapper user={user} location={location} firstStoreId={firstStoreId} />
         <SidebarInset>
           {/* Header with sidebar trigger and page title */}
           <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
@@ -171,7 +188,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
 }
 
 // Sidebar content component that can use useSidebar hook
-function SidebarWrapper({ user, location }: { user: any; location: any }) {
+function SidebarWrapper({ user, location, firstStoreId }: { user: any; location: any; firstStoreId?: string | null }) {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
@@ -187,8 +204,19 @@ function SidebarWrapper({ user, location }: { user: any; location: any }) {
         </div>
       </SidebarHeader>
 
-      <SidebarContentArea className="pt-3 px-4">
+        <SidebarContentArea className="pt-3 px-4">
         <SidebarMenu>
+          {firstStoreId ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={location.pathname.startsWith(`/analytics/${firstStoreId}`)}>
+                <Link to={`/analytics/${firstStoreId}`} className={isCollapsed ? 'flex items-center justify-center w-full' : 'flex items-center gap-3'}>
+                  <BarChart3 className="h-4 w-4" />
+                  <span className="group-data-[collapsible=icon]:hidden">Analytics</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.href || 

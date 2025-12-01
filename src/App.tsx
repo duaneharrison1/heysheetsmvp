@@ -16,6 +16,7 @@ import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import ManageImages from './pages/Images';
 import Help from './pages/Help';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminStores from './pages/AdminStores';
 import AdminFeedback from './pages/AdminFeedback';
@@ -46,6 +47,7 @@ const App = () => (
           {/* Protected Routes with Sidebar Layout */}
           <Route path="/dashboard" element={<SidebarLayout><Dashboard /></SidebarLayout>} />
           <Route path="/settings/:storeId" element={<SidebarLayout><StoreSettings /></SidebarLayout>} />
+          <Route path="/analytics/:storeId" element={<SidebarLayout><AnalyticsDashboard /></SidebarLayout>} />
 
           {/* Store Admin (store owner) */}
           <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
