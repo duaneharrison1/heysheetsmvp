@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { listCalendars, updateEventProperties, listEvents, createCalendar, shareCalendar } from '../_shared/google-calendar.ts';
+import { listCalendars, updateEventProperties, listEvents, createCalendar, shareCalendar, createEvent } from '../_shared/google-calendar.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -437,7 +437,89 @@ serve(async (req) => {
       }
     }
 
-    throw new Error('Invalid action. Use: list, link, unlink, create, or check-events');
+    // ACTION: Create availability events directly via API
+    if (action === 'create-availability') {
+      const { blocks } = body;
+
+      if (!calendarId) {
+        return new Response(
+          JSON.stringify({ error: 'calendarId is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'blocks array is required and must not be empty' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('=== CREATE AVAILABILITY ===');
+      console.log('Calendar ID:', calendarId);
+      console.log('Blocks count:', blocks.length);
+      console.log('Blocks:', JSON.stringify(blocks, null, 2));
+
+      const createdEvents = [];
+
+      for (const block of blocks) {
+        try {
+          const eventData: any = {
+            summary: block.title || 'Available',
+            description: 'Availability block created by HeySheets',
+            start: {
+              dateTime: block.startDateTime,
+              timeZone: block.timeZone || 'Asia/Hong_Kong',
+            },
+            end: {
+              dateTime: block.endDateTime,
+              timeZone: block.timeZone || 'Asia/Hong_Kong',
+            },
+          };
+
+          // Add recurrence if provided
+          if (block.recurrence) {
+            eventData.recurrence = [block.recurrence];
+          }
+
+          console.log('Creating event:', JSON.stringify(eventData, null, 2));
+
+          const event = await createEvent(calendarId, eventData, 'none');
+
+          console.log('✅ Event created:', event.id);
+
+          createdEvents.push({
+            id: event.id,
+            summary: event.summary,
+            start: event.start,
+            end: event.end,
+          });
+        } catch (eventError: any) {
+          console.error('Error creating event:', eventError);
+          return new Response(
+            JSON.stringify({
+              error: 'Failed to create event',
+              details: eventError.message,
+              blockIndex: createdEvents.length,
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      console.log('✅ All events created:', createdEvents.length);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          events: createdEvents,
+          count: createdEvents.length,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    throw new Error('Invalid action. Use: list, link, unlink, create, check-events, or create-availability');
 
   } catch (error) {
     console.error('Link calendar error:', error);
