@@ -587,7 +587,12 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Direct API creation - creates availability events without popup/polling
   const createAvailabilityDirect = async () => {
+    console.log('[createAvailabilityDirect] Called');
+    console.log('[createAvailabilityDirect] createdCalendarId:', createdCalendarId);
+    console.log('[createAvailabilityDirect] selectedAvailabilityType:', selectedAvailabilityType);
+
     const blocks = buildAvailabilityBlocks();
+    console.log('[createAvailabilityDirect] blocks:', blocks);
 
     if (blocks.length === 0) {
       toast({
@@ -2384,13 +2389,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                 </div>
               )}
 
-            {/* Edit Guide - Floating Helper (top-right, draggable) */}
+            {/* Edit Guide - Floating Helper (top-left, draggable) */}
             {editGuideStep !== 'idle' && (
               <div
                 className="absolute z-20 bg-white rounded-lg shadow-lg border p-4 max-w-xs cursor-move select-none"
                 style={{
                   top: `${55 + editHelperPosition.y}px`,
-                  right: `${12 - editHelperPosition.x}px`
+                  left: `${12 + editHelperPosition.x}px`
                 }}
                 onMouseDown={handleDragStart}
               >
@@ -2412,50 +2417,37 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   <div className="pr-6">
                     <p className="font-medium mb-1">Edit availability</p>
                     <p className="text-sm text-muted-foreground">
-                      Click on any availability block in the calendar.
+                      Click any availability block in the calendar.
                     </p>
                   </div>
                 )}
 
                 {editGuideStep === 'clicked' && (
                   <div className="pr-6 space-y-3">
-                    {/* Step 1 - Keep showing this */}
+                    {/* Step 1 - completed */}
                     <div className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                         <Check className="h-3 w-3 text-green-600" />
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Click on any availability block in the calendar.
+                      <p className="text-sm text-muted-foreground line-through">
+                        Click any availability block
                       </p>
                     </div>
 
-                    {/* Step 2 - Added after click */}
+                    {/* Step 2 - current */}
                     <div className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-xs font-medium text-blue-600">2</span>
+                      <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-white">2</span>
                       </div>
-                      <div className="text-sm">
-                        <p className="text-muted-foreground mb-2">
-                          When the event popup opens, click <strong>"More details"</strong>
+                      <div className="text-sm space-y-2">
+                        <p>
+                          In the popup, click <strong>"More details"</strong>
                         </p>
-
-                        {/* Visual showing what "More details" looks like */}
-                        <div className="bg-gray-50 border rounded p-2 mb-2">
-                          <div className="flex items-center gap-1 text-xs">
-                            <span className="text-gray-600">📅 Available</span>
-                          </div>
-                          <div className="flex items-center gap-1 mt-1">
-                            <span className="text-gray-500 text-xs">9:00 AM - 5:00 PM</span>
-                          </div>
-                          <div className="mt-2 pt-2 border-t">
-                            <span className="text-blue-600 text-xs font-medium underline cursor-pointer">
-                              More details
-                            </span>
-                          </div>
-                        </div>
-
                         <p className="text-muted-foreground">
-                          Then use <Pencil className="h-3 w-3 inline mx-0.5" /> to edit or <Trash2 className="h-3 w-3 inline mx-0.5" /> to delete.
+                          This opens Google Calendar in a new tab.
+                        </p>
+                        <p className="text-muted-foreground">
+                          Use <Pencil className="h-3 w-3 inline mx-0.5" /> to edit or <Trash2 className="h-3 w-3 inline mx-0.5" /> to delete.
                         </p>
                       </div>
                     </div>
@@ -2463,7 +2455,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full mt-2"
+                      className="w-full"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditGuideStep('idle');
