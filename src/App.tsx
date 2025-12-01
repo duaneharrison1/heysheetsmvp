@@ -13,6 +13,8 @@ import StoreSettings from "./pages/StoreSettings";
 import ChatComponentsShowcase from "./pages/ChatComponents";
 import Account from "./pages/Account";
 import Billing from './pages/Billing';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 import ManageImages from './pages/Images';
 import Help from './pages/Help';
 import AdminUsers from './pages/AdminUsers';
@@ -36,6 +38,8 @@ const App = () => (
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/components" element={<ChatComponentsShowcase />} />
           <Route path="/store/:storeId" element={<StorePage />} />
@@ -48,6 +52,7 @@ const App = () => (
           <Route path="/account" element={<SidebarLayout><Account /></SidebarLayout>} />
           <Route path="/billing" element={<SidebarLayout><Billing /></SidebarLayout>} />
           <Route path="/images" element={<SidebarLayout><ManageImages /></SidebarLayout>} />
+          
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
 
           {/* Super Admin (platform admin) */}
