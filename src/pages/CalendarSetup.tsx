@@ -70,6 +70,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [calendarName, setCalendarName] = useState('');
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [createdCalendarId, setCreatedCalendarId] = useState('');
+  const createdCalendarIdRef = useRef('');  // Ref to access latest value in async functions
   const [creatingCalendar, setCreatingCalendar] = useState(false);
 
   // Event data state
@@ -102,6 +103,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   // Added modal can be in loading, success, or error state
   const [addedModalStatus, setAddedModalStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [addedModalError, setAddedModalError] = useState<string | null>(null);
+  // Custom loading message for different states (e.g., waiting for calendar vs adding availability)
+  const [loadingMessage, setLoadingMessage] = useState<string>('Adding availability...');
 
   // Edit guide flow state
   const [editGuideStep, setEditGuideStep] = useState<'idle' | 'waiting-click' | 'clicked'>('idle');
@@ -154,6 +157,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       setSession(session);
     });
   }, []);
+
+  // Keep ref in sync with state for async access
+  useEffect(() => {
+    createdCalendarIdRef.current = createdCalendarId;
+  }, [createdCalendarId]);
 
   // Load schedule slots when calendar mappings change
   useEffect(() => {
@@ -602,15 +610,42 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     // IMMEDIATELY go to 'added' step in LOADING state
     setAddedModalStatus('loading');
     setAddedModalError(null);
+    setLoadingMessage('Adding availability...');
     setAvailabilityStep('added');
 
     try {
-      // Check calendar ID - if not ready, show error on modal
-      if (!createdCalendarId) {
-        setAddedModalStatus('error');
-        setAddedModalError('Calendar is still being created. Please wait and try again.');
-        setIsCreatingAvailability(false);
-        return;
+      // Wait for calendar to be ready (with retry logic using ref for latest value)
+      let calendarId = createdCalendarIdRef.current;
+      if (!calendarId) {
+        console.log('[createAvailabilityDirect] Calendar not ready, waiting...');
+        setLoadingMessage('Setting up your calendar...');
+
+        const maxRetries = 15;
+        const delayMs = 1000;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          console.log(`[createAvailabilityDirect] Waiting for calendar, attempt ${attempt}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+
+          // Check ref for latest calendar ID value (state updates reflected in ref via useEffect)
+          if (createdCalendarIdRef.current) {
+            calendarId = createdCalendarIdRef.current;
+            console.log(`[createAvailabilityDirect] Calendar ready: ${calendarId}`);
+            break;
+          }
+        }
+
+        // If still no calendar ID after all retries
+        if (!calendarId) {
+          console.error('[createAvailabilityDirect] Calendar not ready after timeout');
+          setAddedModalStatus('error');
+          setAddedModalError('Calendar setup is taking longer than expected. Please try again in a moment.');
+          setIsCreatingAvailability(false);
+          return;
+        }
+
+        // Update loading message now that calendar is ready
+        setLoadingMessage('Adding availability...');
       }
 
       // Convert blocks to API format with ISO datetime strings
@@ -663,7 +698,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       const response = await supabase.functions.invoke('link-calendar', {
         body: {
           action: 'create-availability',
-          calendarId: createdCalendarId,
+          calendarId: calendarId,  // Use local variable (waited for if needed)
           blocks: apiBlocks,
           storeId: storeId,
         },
@@ -2378,7 +2413,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                               <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
                             </div>
                           </div>
-                          <h2 className="text-xl font-semibold mb-2">Adding availability...</h2>
+                          <h2 className="text-xl font-semibold mb-2">{loadingMessage}</h2>
                           <p className="text-muted-foreground">
                             Please wait while we update your calendar.
                           </p>
