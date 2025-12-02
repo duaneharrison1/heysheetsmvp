@@ -102,6 +102,11 @@ export interface FunctionContext {
   store?: StoreConfig;
   requestId?: string; // For correlation across edge functions
   lastUserMessage?: string; // For parsing form data from messages
+  storeData?: {  // Pre-loaded data from cache to avoid refetching in handlers
+    services?: any[];
+    products?: any[];
+    hours?: any[];
+  };
 }
 
 /**
