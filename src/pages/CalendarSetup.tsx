@@ -99,6 +99,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [endRecurrenceDate, setEndRecurrenceDate] = useState<Date | undefined>();
   // Direct API creation state
   const [isCreatingAvailability, setIsCreatingAvailability] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   // Edit guide flow state
   const [editGuideStep, setEditGuideStep] = useState<'idle' | 'waiting-click' | 'clicked'>('idle');
@@ -587,41 +588,49 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Direct API creation - creates availability events without popup/polling
   const createAvailabilityDirect = async () => {
-    console.log('[createAvailabilityDirect] Called');
+    // === GUARD: Prevent double-click ===
+    if (isCreatingAvailability) {
+      console.log('[createAvailabilityDirect] Already in progress, ignoring');
+      return;
+    }
+
+    console.log('[createAvailabilityDirect] === START ===');
     console.log('[createAvailabilityDirect] createdCalendarId:', createdCalendarId);
     console.log('[createAvailabilityDirect] selectedAvailabilityType:', selectedAvailabilityType);
+    console.log('[createAvailabilityDirect] State values - startTime:', startTime, 'endTime:', endTime);
+    console.log('[createAvailabilityDirect] State values - breakStartTime:', breakStartTime, 'breakEndTime:', breakEndTime);
+    console.log('[createAvailabilityDirect] State values - hasBreak:', hasBreak);
 
-    const blocks = buildAvailabilityBlocks();
-    console.log('[createAvailabilityDirect] blocks:', blocks);
-
-    if (blocks.length === 0) {
-      toast({
-        title: 'Configuration required',
-        description: 'Please configure your availability times',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!createdCalendarId) {
-      toast({
-        title: 'Please wait',
-        description: 'Calendar is still being created. Please wait a moment.',
-      });
-      return;
-    }
-
+    // === LOADING STATE: Start ===
+    setAddError(null);  // Clear previous error
     setIsCreatingAvailability(true);
 
     try {
+      const blocks = buildAvailabilityBlocks();
+      console.log('[createAvailabilityDirect] Built blocks:', blocks);
+
+      if (blocks.length === 0) {
+        setAddError('Please configure your availability times');
+        return;
+      }
+
+      if (!createdCalendarId) {
+        setAddError('Calendar is still being created. Please wait a moment.');
+        return;
+      }
+
       // Convert blocks to API format with ISO datetime strings
-      const apiBlocks = blocks.map(block => {
+      const apiBlocks = blocks.map((block, index) => {
         // Get the date to use for the event
         const eventDate = block.specificDate || weeklyStartDate || new Date();
 
         // Parse start and end times
         const [startHour, startMin] = block.startTime.split(':').map(Number);
         const [endHour, endMin] = block.endTime.split(':').map(Number);
+
+        console.log(`[createAvailabilityDirect] Block ${index} (${block.id}):`);
+        console.log(`  - Raw times: ${block.startTime} → ${block.endTime}`);
+        console.log(`  - Parsed: ${startHour}:${startMin} → ${endHour}:${endMin}`);
 
         // Create start datetime
         const startDateTime = new Date(eventDate);
@@ -630,6 +639,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         // Create end datetime
         const endDateTime = new Date(eventDate);
         endDateTime.setHours(endHour, endMin, 0, 0);
+
+        // Validate: end must be after start
+        if (endDateTime <= startDateTime) {
+          console.error(`[createAvailabilityDirect] Block ${index}: Invalid time range! End (${endDateTime.toISOString()}) <= Start (${startDateTime.toISOString()})`);
+          throw new Error(`Invalid time range for ${block.id} block: end time must be after start time`);
+        }
+
+        console.log(`  - ISO: ${startDateTime.toISOString()} → ${endDateTime.toISOString()}`);
 
         // Build the block for API
         const apiBlock: any = {
@@ -647,7 +664,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         return apiBlock;
       });
 
-      console.log('[createAvailabilityDirect] Sending blocks:', apiBlocks);
+      console.log('[createAvailabilityDirect] Sending API request...');
 
       const response = await supabase.functions.invoke('link-calendar', {
         body: {
@@ -661,10 +678,13 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       console.log('[createAvailabilityDirect] Response:', response);
 
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to create availability');
+        console.error('[createAvailabilityDirect] Response error:', response.error);
+        setAddError(response.error.message || 'Failed to add availability. Please try again.');
+        return;
       }
 
       if (response.data?.success) {
+        console.log('[createAvailabilityDirect] Success!');
         toast({
           title: blocks.length > 1 ? `${blocks.length} availability blocks added!` : 'Availability added!',
           description: 'Your calendar has been updated.',
@@ -685,17 +705,15 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
         setAvailabilityStep('added');
       } else {
-        throw new Error(response.data?.error || 'Failed to create availability');
+        console.error('[createAvailabilityDirect] API error:', response.data?.error);
+        setAddError(response.data?.error || 'Failed to add availability. Please try again.');
       }
     } catch (error: any) {
-      console.error('[createAvailabilityDirect] Error:', error);
-      toast({
-        title: 'Failed to add availability',
-        description: error.message || 'Something went wrong. Please try again.',
-        variant: 'destructive',
-      });
+      console.error('[createAvailabilityDirect] Exception:', error);
+      setAddError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setIsCreatingAvailability(false);
+      console.log('[createAvailabilityDirect] === END ===');
     }
   };
 
@@ -2034,6 +2052,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   className="shadow-sm"
                   onClick={() => {
                     console.log('[Add Availability Button] Clicked');
+                    setIsCreatingAvailability(false);  // Reset in case stuck
+                    setAddError(null);                 // Clear any old error
                     setSelectedAvailabilityType(null);
                     setAvailabilityStep('choose-type');
                   }}
@@ -2325,11 +2345,24 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       </div>
                     )}
 
+                    {/* Error Message */}
+                    {addError && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
+                        <div className="flex items-center gap-2 text-red-700">
+                          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                          <p className="text-sm">{addError}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Action Buttons */}
                     <div className="flex gap-3 mt-6">
                       <Button
                         variant="outline"
-                        onClick={() => setAvailabilityStep('choose-type')}
+                        onClick={() => {
+                          setAddError(null);
+                          setAvailabilityStep('choose-type');
+                        }}
                       >
                         Back
                       </Button>
@@ -2368,7 +2401,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       </p>
                       <div className="flex gap-3 justify-center">
                         <button
-                          onClick={() => setAvailabilityStep('choose-type')}
+                          onClick={() => {
+                            setAddError(null);  // Clear any old error
+                            setAvailabilityStep('choose-type');
+                          }}
                           className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                         >
                           Add More
