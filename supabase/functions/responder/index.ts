@@ -103,23 +103,32 @@ The suggestions should be:
 
 RESPOND WITH JSON ONLY:`;
 
-  // Call OpenRouter API
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://heysheets.com',
-      'X-Title': 'HeySheets MVP'
-    },
-    body: JSON.stringify({
-      // Use user-selected model or default to Grok for cost-effectiveness
-      model: model || 'x-ai/grok-4.1-fast',
-      messages: [{ role: 'user', content: responsePrompt }],
-      max_tokens: 600,
-      temperature: 0.7 // Higher temperature for more natural, varied responses
-    })
-  });
+  // Call OpenRouter API with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+  let response;
+  try {
+    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://heysheets.com',
+        'X-Title': 'HeySheets MVP'
+      },
+      body: JSON.stringify({
+        // Use user-selected model or default to Grok for cost-effectiveness
+        model: model || 'x-ai/grok-4.1-fast',
+        messages: [{ role: 'user', content: responsePrompt }],
+        max_tokens: 600,
+        temperature: 0.7 // Higher temperature for more natural, varied responses
+      }),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const error = await response.text();

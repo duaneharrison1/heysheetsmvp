@@ -208,22 +208,31 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
 
   // Call OpenRouter API with JSON object mode (more reliable than strict schema)
   // Strict json_schema mode can cause gibberish responses with OpenRouter
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://heysheets.com',
-      'X-Title': 'HeySheets MVP'
-    },
-    body: JSON.stringify({
-      model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
-      messages: [{ role: 'user', content: classificationPrompt }],
-      response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
-      temperature: 0.1, // Very low temp for consistency
-      max_tokens: 500 // Limit response size
-    })
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+  let response;
+  try {
+    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://heysheets.com',
+        'X-Title': 'HeySheets MVP'
+      },
+      body: JSON.stringify({
+        model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
+        messages: [{ role: 'user', content: classificationPrompt }],
+        response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
+        temperature: 0.1, // Very low temp for consistency
+        max_tokens: 500 // Limit response size
+      }),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const error = await response.text();
