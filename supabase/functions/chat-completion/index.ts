@@ -51,7 +51,7 @@ serve(async (req) => {
   try {
     // Parse request
     const body: ChatCompletionRequest = await req.json();
-    const { messages, storeId, model, simpleMode } = body;
+    const { messages, storeId, model, simpleMode, cachedData } = body as ChatCompletionRequest & { cachedData?: { services?: any[]; products?: any[]; hours?: any[] } };
 
     // 🆕 SIMPLE MODE: Just do a raw LLM call, no chatbot logic
     if (simpleMode) {
@@ -148,11 +148,25 @@ serve(async (req) => {
     });
 
     // Pre-load store data for classification context (using detected schema)
+    // Use cached data from client if available (avoids refetching)
     let storeData: StoreData = {
       services: [],
       products: [],
       hours: []
     };
+
+    // Check if client passed cached data
+    const hasCachedServices = cachedData?.services && cachedData.services.length > 0;
+    const hasCachedProducts = cachedData?.products && cachedData.products.length > 0;
+    const hasCachedHours = cachedData?.hours && cachedData.hours.length > 0;
+
+    if (hasCachedServices || hasCachedProducts || hasCachedHours) {
+      log(requestId, '📦 Using client-provided cached data', {
+        services: cachedData?.services?.length || 0,
+        products: cachedData?.products?.length || 0,
+        hours: cachedData?.hours?.length || 0,
+      });
+    }
 
     try {
       const detectedSchema = storeConfig.detected_schema || {};
@@ -163,10 +177,14 @@ serve(async (req) => {
       const hoursTab = findActualTabName('hours', detectedSchema);
 
       // Load data in parallel using SERVICE_ROLE_KEY for authentication
+      // Skip loading if client provided valid cached data
       const [services, products, hours] = await Promise.all([
-        servicesTab ? loadTab(servicesTab, storeId, serviceRoleKey, requestId) : Promise.resolve([]),
-        productsTab ? loadTab(productsTab, storeId, serviceRoleKey, requestId) : Promise.resolve([]),
-        hoursTab ? loadTab(hoursTab, storeId, serviceRoleKey, requestId) : Promise.resolve([])
+        hasCachedServices ? Promise.resolve(cachedData!.services!) :
+          (servicesTab ? loadTab(servicesTab, storeId, serviceRoleKey, requestId) : Promise.resolve([])),
+        hasCachedProducts ? Promise.resolve(cachedData!.products!) :
+          (productsTab ? loadTab(productsTab, storeId, serviceRoleKey, requestId) : Promise.resolve([])),
+        hasCachedHours ? Promise.resolve(cachedData!.hours!) :
+          (hoursTab ? loadTab(hoursTab, storeId, serviceRoleKey, requestId) : Promise.resolve([]))
       ]);
 
       storeData = { services, products, hours };
