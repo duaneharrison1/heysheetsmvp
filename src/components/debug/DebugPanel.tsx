@@ -37,6 +37,10 @@ export function DebugPanel() {
     setEvaluatorModel,
     useNativeToolCalling,
     setUseNativeToolCalling,
+    architectureMode,
+    setArchitectureMode,
+    reasoningEnabled,
+    setReasoningEnabled,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -132,28 +136,68 @@ export function DebugPanel() {
           </div>
         )}
 
-        {/* Native Tool Calling Toggle (A/B Test) */}
-        <div className="mb-3">
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={useNativeToolCalling}
-              onChange={(e) => setUseNativeToolCalling(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-            />
-            <span className="text-xs text-gray-400 group-hover:text-gray-300">
-              Native Tool Calling
-              {useNativeToolCalling && (
-                <Badge className="ml-2 bg-blue-600 text-white text-xs py-0 px-1.5">
-                  TEST
-                </Badge>
-              )}
-            </span>
-          </label>
-          <p className="text-xs text-gray-500 mt-1 ml-6">
-            Use OpenAI-style native tool calling instead of custom classifier
-          </p>
-        </div>
+        {/* Architecture Options (collapsible) */}
+        <details className="mb-3">
+          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300 mb-2">
+            ⚙️ Architecture Options
+            <Badge className="ml-2 bg-gray-700 text-gray-300 text-xs py-0 px-1.5">
+              {architectureMode}
+            </Badge>
+          </summary>
+          <div className="ml-4 space-y-2">
+            {/* Architecture Mode */}
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Mode</label>
+              <select
+                value={architectureMode}
+                onChange={(e) => setArchitectureMode(e.target.value as any)}
+                className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
+              >
+                <option value="current">Current (no optimization)</option>
+                <option value="enhanced">Enhanced (slim + no pretty-print)</option>
+                <option value="lean">Lean (no classifier context)</option>
+                <option value="combined">Combined (native tool calling)</option>
+              </select>
+            </div>
+
+            {/* Reasoning Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={reasoningEnabled}
+                onChange={(e) => setReasoningEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+              />
+              <span className="text-xs text-gray-400 group-hover:text-gray-300">
+                Enable Reasoning Tokens
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 ml-6">
+              {reasoningEnabled ? 'Reasoning ON (more tokens, slower)' : 'Reasoning OFF (default, faster)'}
+            </p>
+
+            {/* Native Tool Calling Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={useNativeToolCalling}
+                onChange={(e) => setUseNativeToolCalling(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+              />
+              <span className="text-xs text-gray-400 group-hover:text-gray-300">
+                Native Tool Calling
+                {useNativeToolCalling && (
+                  <Badge className="ml-2 bg-blue-600 text-white text-xs py-0 px-1.5">
+                    TEST
+                  </Badge>
+                )}
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 ml-6">
+              Use OpenAI-style native tool calling instead of custom classifier
+            </p>
+          </div>
+        </details>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">

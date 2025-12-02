@@ -85,7 +85,11 @@ const ClassificationSchema = {
 export async function classifyIntent(
   messages: Message[],
   context?: { storeData?: StoreData },
-  model?: string
+  model?: string,
+  options?: {
+    reasoningEnabled?: boolean;
+    includeStoreData?: boolean;  // For lean mode: false = don't include store overview in prompt
+  }
 ): Promise<{ classification: Classification; usage: { input: number; output: number } }> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
@@ -102,9 +106,11 @@ export async function classifyIntent(
     .map(m => `${m.role}: ${m.content}`)
     .join('\n');
 
-  // Build store context
+  // Build store context (skip in lean mode to save tokens)
   let storeContext = '';
-  if (context?.storeData) {
+  const includeStoreData = options?.includeStoreData !== false; // Default to true
+
+  if (includeStoreData && context?.storeData) {
     const { services = [], products = [], hours = [] } = context.storeData;
 
     // Context windowing: Only include high-level overview
@@ -262,7 +268,9 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
         messages: [{ role: 'user', content: classificationPrompt }],
         response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
         temperature: 0.1, // Very low temp for consistency
-        max_tokens: 500 // Limit response size
+        max_tokens: 500, // Limit response size
+        // Disable reasoning unless explicitly enabled (saves tokens and time)
+        ...(options?.reasoningEnabled === false || options?.reasoningEnabled === undefined ? { reasoning: { enabled: false } } : {}),
       }),
       signal: controller.signal
     });

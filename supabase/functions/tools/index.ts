@@ -1170,7 +1170,9 @@ Return JSON only, no markdown:`;
         model: 'anthropic/claude-3.5-haiku',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 800,
-        temperature: 0.3
+        temperature: 0.3,
+        // Disable reasoning to save tokens and time
+        reasoning: { enabled: false },
       })
     });
 
