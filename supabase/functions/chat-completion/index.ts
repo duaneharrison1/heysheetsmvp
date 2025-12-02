@@ -77,7 +77,9 @@ serve(async (req) => {
           model: model || 'x-ai/grok-4.1-fast',
           messages: messages,
           temperature: 0.7,
-          max_tokens: 500
+          max_tokens: 500,
+          // Disable reasoning to save tokens and time
+          reasoning: { enabled: false },
         })
       });
 
@@ -196,7 +198,15 @@ serve(async (req) => {
     log(requestId, '🎯 Classifying intent...');
     const classifyStart = performance.now();
 
-    const { classification, usage: classifyUsage } = await classifyIntent(messages, { storeData }, model);
+    const { classification, usage: classifyUsage } = await classifyIntent(
+      messages,
+      { storeData },
+      model,
+      {
+        reasoningEnabled: false,  // Disable reasoning tokens
+        includeStoreData: true,   // Enhanced mode: include store overview (set to false for lean mode)
+      }
+    );
 
     const classifyDuration = performance.now() - classifyStart;
     log(requestId, `✅ Intent: ${classification.intent} (${classifyDuration.toFixed(0)}ms)`, {
@@ -352,6 +362,11 @@ serve(async (req) => {
       functionResult,
       storeConfig,
       model,  // Pass user-selected model to responder
+      {
+        architectureMode: 'enhanced',  // Use enhanced mode by default (slim results, no pretty-print, no reasoning)
+        reasoningEnabled: false,
+        functionName: classification.function_to_call || undefined,
+      }
     );
 
     const responseDuration = performance.now() - responseStart;

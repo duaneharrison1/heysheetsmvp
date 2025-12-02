@@ -1,4 +1,6 @@
 import { Classification, Message, FunctionResult, StoreConfig } from '../_shared/types.ts';
+import { slimForResponder } from '../_shared/slim.ts';
+import { ArchitectureMode, getArchitectureConfig } from '../_shared/architecture.ts';
 
 // ============================================================================
 // RESPONDER FUNCTION
@@ -11,12 +13,18 @@ export interface ResponderResult {
 }
 
 // Added model parameter to allow user selection of AI model
+// Added architecture options for optimization
 export async function generateResponse(
   messages: Message[],
   classification: Classification,
   functionResult?: FunctionResult,
   store?: StoreConfig,
-  model?: string  // User-selected model, defaults to Grok
+  model?: string,  // User-selected model, defaults to Grok
+  options?: {
+    architectureMode?: ArchitectureMode;
+    reasoningEnabled?: boolean;
+    functionName?: string;  // For slimming results
+  }
 ): Promise<ResponderResult> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
@@ -37,14 +45,28 @@ Store Type: ${store?.type || 'general'}
 ${store?.description ? `Description: ${store.description}` : ''}
 `;
 
+  // Get architecture config
+  const archConfig = getArchitectureConfig(options?.architectureMode || 'enhanced');
+
   // Build function result context
   let functionContext = '';
   if (functionResult) {
     if (functionResult.success) {
       // Handle both wrapped {success, data} and direct data formats
-      const resultData = functionResult.data || functionResult;
+      let resultData = functionResult.data || functionResult;
+
+      // Slim the data if not in 'current' mode (removes imageURL, tags, etc.)
+      if (archConfig.slimResults && options?.functionName) {
+        resultData = slimForResponder(options.functionName, resultData);
+      }
+
+      // Use compact JSON (no pretty-printing) unless in 'current' mode
+      const jsonString = archConfig.prettyPrint
+        ? JSON.stringify(resultData, null, 2)
+        : JSON.stringify(resultData);
+
       functionContext = `FUNCTION RESULT (Use this data in your response):
-${JSON.stringify(resultData, null, 2)}
+${jsonString}
 
 IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
     } else if (functionResult.needs_clarification) {
@@ -129,7 +151,11 @@ RESPOND WITH JSON ONLY:`;
         model: model || 'x-ai/grok-4.1-fast',
         messages: [{ role: 'user', content: responsePrompt }],
         max_tokens: 600,
-        temperature: 0.7 // Higher temperature for more natural, varied responses
+        temperature: 0.7, // Higher temperature for more natural, varied responses
+        // Disable reasoning unless explicitly enabled (saves tokens and time)
+        ...(!archConfig.reasoningEnabled && !options?.reasoningEnabled && {
+          reasoning: { enabled: false }
+        }),
       }),
       signal: controller.signal
     });

@@ -502,7 +502,9 @@ serve(async (req) => {
           tools: tools,
           tool_choice: 'auto',
           temperature: 0.3,
-          max_tokens: 1000
+          max_tokens: 1000,
+          // Disable reasoning to save tokens and time
+          reasoning: { enabled: false },
         })
       });
 

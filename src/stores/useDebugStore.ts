@@ -147,6 +147,10 @@ interface DebugStore {
   // A/B Testing: Native tool calling toggle
   useNativeToolCalling: boolean
 
+  // Architecture optimization settings
+  architectureMode: 'current' | 'enhanced' | 'lean' | 'combined'
+  reasoningEnabled: boolean
+
   addRequest: (request: DebugRequest) => void
   updateRequest: (id: string, updates: Partial<DebugRequest>) => void
   addMessage: (message: Message) => void
@@ -181,6 +185,10 @@ interface DebugStore {
 
   // A/B Testing: Native tool calling
   setUseNativeToolCalling: (enabled: boolean) => void
+
+  // Architecture optimization settings
+  setArchitectureMode: (mode: 'current' | 'enhanced' | 'lean' | 'combined') => void
+  setReasoningEnabled: (enabled: boolean) => void
 }
 
 export const useDebugStore = create<DebugStore>((set, get) => ({
@@ -204,6 +212,14 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   // A/B Testing: Native tool calling (persisted to localStorage)
   useNativeToolCalling: typeof localStorage !== 'undefined'
     ? localStorage.getItem('heysheets:useNativeToolCalling') === 'true'
+    : false,
+
+  // Architecture optimization settings (persisted to localStorage)
+  architectureMode: typeof localStorage !== 'undefined'
+    ? (localStorage.getItem('heysheets:architectureMode') as 'current' | 'enhanced' | 'lean' | 'combined') || 'enhanced'
+    : 'enhanced',
+  reasoningEnabled: typeof localStorage !== 'undefined'
+    ? localStorage.getItem('heysheets:reasoningEnabled') === 'true'
     : false,
 
   addRequest: (request) =>
@@ -409,6 +425,21 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     set({ useNativeToolCalling: enabled })
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('heysheets:useNativeToolCalling', enabled ? 'true' : 'false')
+    }
+  },
+
+  // Architecture optimization settings
+  setArchitectureMode: (mode) => {
+    set({ architectureMode: mode })
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('heysheets:architectureMode', mode)
+    }
+  },
+
+  setReasoningEnabled: (enabled) => {
+    set({ reasoningEnabled: enabled })
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('heysheets:reasoningEnabled', enabled ? 'true' : 'false')
     }
   },
 }))

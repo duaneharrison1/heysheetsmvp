@@ -101,7 +101,9 @@ Be generous with matches but prioritize the most relevant.`;
         model: 'anthropic/claude-3.5-haiku', // Faster, cheaper model for matching
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 500,
-        temperature: 0.3
+        temperature: 0.3,
+        // Disable reasoning to save tokens and time
+        reasoning: { enabled: false },
       })
     });
 
