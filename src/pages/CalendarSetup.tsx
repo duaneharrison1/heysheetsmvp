@@ -99,11 +99,19 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [endRecurrenceDate, setEndRecurrenceDate] = useState<Date | undefined>();
   // Direct API creation state
   const [isCreatingAvailability, setIsCreatingAvailability] = useState(false);
+  // Added modal can be in loading, success, or error state
+  const [addedModalStatus, setAddedModalStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [addedModalError, setAddedModalError] = useState<string | null>(null);
 
   // Edit guide flow state
   const [editGuideStep, setEditGuideStep] = useState<'idle' | 'waiting-click' | 'clicked'>('idle');
   const editGuideCleanupRef = useRef<(() => void) | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Edit helper drag state
+  const [editHelperPosition, setEditHelperPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
 
   // Weekly start date
   const [weeklyStartDate, setWeeklyStartDate] = useState<Date>(() => new Date());
@@ -115,7 +123,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [calendarViewMode, setCalendarViewMode] = useState<'WEEK' | 'MONTH' | 'AGENDA'>('WEEK');
 
   // Current step in the add availability flow (simplified - no waiting-save)
-  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'success'>('choose-type');
+  const [availabilityStep, setAvailabilityStep] = useState<'choose-type' | 'set-availability' | 'added' | 'success'>('choose-type');
 
   // Track which availability type was selected (for form step)
   const [selectedAvailabilityType, setSelectedAvailabilityType] = useState<'weekly' | 'specific' | null>(null);
@@ -511,37 +519,16 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         });
       }
     } else if (effectiveType === 'specific' && specificDate) {
-      // Handle break for specific date too
-      if (hasBreak) {
-        blocks.push({
-          id: 'morning',
-          title: 'Available',
-          days: [],
-          startTime: startTime,
-          endTime: breakStartTime,
-          isRecurring: false,
-          specificDate: specificDate,
-        });
-        blocks.push({
-          id: 'afternoon',
-          title: 'Available',
-          days: [],
-          startTime: breakEndTime,
-          endTime: endTime,
-          isRecurring: false,
-          specificDate: specificDate,
-        });
-      } else {
-        blocks.push({
-          id: 'specific',
-          title: 'Available',
-          days: [],
-          startTime: startTime,
-          endTime: endTime,
-          isRecurring: false,
-          specificDate: specificDate,
-        });
-      }
+      // Specific date/time - ALWAYS a single block (no break option)
+      blocks.push({
+        id: 'specific',
+        title: 'Available',
+        days: [],
+        startTime: startTime,
+        endTime: endTime,
+        isRecurring: false,
+        specificDate: specificDate,
+      });
     }
 
     console.log('[buildAvailabilityBlocks] Built blocks:', blocks);
@@ -582,9 +569,25 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
   // Direct API creation - creates availability events without popup/polling
   const createAvailabilityDirect = async () => {
+    // === GUARD: Prevent double-click ===
+    if (isCreatingAvailability) {
+      console.log('[createAvailabilityDirect] Already in progress, ignoring');
+      return;
+    }
+
+    console.log('[createAvailabilityDirect] === START ===');
+    console.log('[createAvailabilityDirect] createdCalendarId:', createdCalendarId);
+    console.log('[createAvailabilityDirect] selectedAvailabilityType:', selectedAvailabilityType);
+    console.log('[createAvailabilityDirect] State values - startTime:', startTime, 'endTime:', endTime);
+    console.log('[createAvailabilityDirect] State values - breakStartTime:', breakStartTime, 'breakEndTime:', breakEndTime);
+    console.log('[createAvailabilityDirect] State values - hasBreak:', hasBreak);
+
+    // Build blocks FIRST (before showing modal) to validate
     const blocks = buildAvailabilityBlocks();
+    console.log('[createAvailabilityDirect] Built blocks:', blocks);
 
     if (blocks.length === 0) {
+      // This is the only validation that stays on form - user needs to configure times
       toast({
         title: 'Configuration required',
         description: 'Please configure your availability times',
@@ -593,25 +596,33 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       return;
     }
 
-    if (!createdCalendarId) {
-      toast({
-        title: 'Please wait',
-        description: 'Calendar is still being created. Please wait a moment.',
-      });
-      return;
-    }
-
+    // === IMMEDIATELY show 'added' modal in LOADING state ===
     setIsCreatingAvailability(true);
+    setAddedModalStatus('loading');
+    setAddedModalError(null);
+    setAvailabilityStep('added');
 
     try {
+      // Check calendar ID - if not ready, show error on modal
+      if (!createdCalendarId) {
+        setAddedModalStatus('error');
+        setAddedModalError('Calendar is still being created. Please wait and try again.');
+        setIsCreatingAvailability(false);
+        return;
+      }
+
       // Convert blocks to API format with ISO datetime strings
-      const apiBlocks = blocks.map(block => {
+      const apiBlocks = blocks.map((block, index) => {
         // Get the date to use for the event
         const eventDate = block.specificDate || weeklyStartDate || new Date();
 
         // Parse start and end times
         const [startHour, startMin] = block.startTime.split(':').map(Number);
         const [endHour, endMin] = block.endTime.split(':').map(Number);
+
+        console.log(`[createAvailabilityDirect] Block ${index} (${block.id}):`);
+        console.log(`  - Raw times: ${block.startTime} → ${block.endTime}`);
+        console.log(`  - Parsed: ${startHour}:${startMin} → ${endHour}:${endMin}`);
 
         // Create start datetime
         const startDateTime = new Date(eventDate);
@@ -620,6 +631,14 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         // Create end datetime
         const endDateTime = new Date(eventDate);
         endDateTime.setHours(endHour, endMin, 0, 0);
+
+        // Validate: end must be after start
+        if (endDateTime <= startDateTime) {
+          console.error(`[createAvailabilityDirect] Block ${index}: Invalid time range! End (${endDateTime.toISOString()}) <= Start (${startDateTime.toISOString()})`);
+          throw new Error(`Invalid time range for ${block.id} block: end time must be after start time`);
+        }
+
+        console.log(`  - ISO: ${startDateTime.toISOString()} → ${endDateTime.toISOString()}`);
 
         // Build the block for API
         const apiBlock: any = {
@@ -637,7 +656,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         return apiBlock;
       });
 
-      console.log('[createAvailabilityDirect] Sending blocks:', apiBlocks);
+      console.log('[createAvailabilityDirect] Sending API request...');
 
       const response = await supabase.functions.invoke('link-calendar', {
         body: {
@@ -651,18 +670,17 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       console.log('[createAvailabilityDirect] Response:', response);
 
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to create availability');
+        console.error('[createAvailabilityDirect] Response error:', response.error);
+        setAddedModalStatus('error');
+        setAddedModalError(response.error.message || 'Failed to add availability. Please try again.');
+        return;
       }
 
       if (response.data?.success) {
-        toast({
-          title: blocks.length > 1 ? `${blocks.length} availability blocks added!` : 'Availability added!',
-          description: 'Your calendar has been updated.',
-        });
+        console.log('[createAvailabilityDirect] Success!');
 
-        // Refresh the calendar embed
+        // Refresh calendar (it loads behind the modal)
         setCalendarKey(prev => prev + 1);
-        setIsFirstAvailability(false);
 
         // Calculate smart view based on the event
         const eventStartHour = parseTimeToHour(startTime);
@@ -674,24 +692,28 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           setCalendarViewMode(smartView.mode);
         }
 
-        setAvailabilityStep('success');
+        // SUCCESS!
+        setAddedModalStatus('success');
       } else {
-        throw new Error(response.data?.error || 'Failed to create availability');
+        console.error('[createAvailabilityDirect] API error:', response.data?.error);
+        setAddedModalStatus('error');
+        setAddedModalError(response.data?.error || 'Failed to add availability. Please try again.');
       }
     } catch (error: any) {
-      console.error('[createAvailabilityDirect] Error:', error);
-      toast({
-        title: 'Failed to add availability',
-        description: error.message || 'Something went wrong. Please try again.',
-        variant: 'destructive',
-      });
+      console.error('[createAvailabilityDirect] Exception:', error);
+      setAddedModalStatus('error');
+      setAddedModalError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setIsCreatingAvailability(false);
+      console.log('[createAvailabilityDirect] === END ===');
     }
   };
 
   // Edit guide - start listening for iframe clicks using blur detection
   const startEditGuideListener = () => {
+    // Reset helper position
+    setEditHelperPosition({ x: 0, y: 0 });
+
     // Force focus on parent window
     window.focus();
 
@@ -715,6 +737,43 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     };
   };
 
+  // Edit helper drag handlers
+  const handleDragStart = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: editHelperPosition.x,
+      y: editHelperPosition.y,
+      startX: e.clientX,
+      startY: e.clientY
+    };
+  };
+
+  const handleDrag = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const deltaX = e.clientX - dragStartRef.current.startX;
+    const deltaY = e.clientY - dragStartRef.current.startY;
+    setEditHelperPosition({
+      x: dragStartRef.current.x + deltaX,
+      y: dragStartRef.current.y + deltaY
+    });
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Drag event listeners
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleDrag);
+      window.addEventListener('mouseup', handleDragEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleDrag);
+        window.removeEventListener('mouseup', handleDragEnd);
+      };
+    }
+  }, [isDragging]);
+
   // Cleanup edit guide listener on unmount or step change
   useEffect(() => {
     return () => {
@@ -723,33 +782,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
       }
     };
   }, []);
-
-  // Smart positioning for modal
-  const getSmartPositioning = () => {
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const popupWidth = 605;  // 15px wider
-    const modalWidth = 420;
-    const minGap = 20;  // Reduced from 40
-
-    const totalNeeded = modalWidth + minGap + popupWidth;
-    const canFitSideBySide = viewportWidth >= totalNeeded;
-
-    if (canFitSideBySide) {
-      // Position popup closer to modal
-      const popupLeft = modalWidth + minGap + 40;  // Tighter positioning
-      return {
-        modalClassName: 'ml-8 mr-auto',
-        popupLeft: Math.min(popupLeft, viewportWidth - popupWidth - 20),
-        sideBySide: true
-      };
-    } else {
-      return {
-        modalClassName: '',
-        popupLeft: Math.max(20, viewportWidth - popupWidth - 20),
-        sideBySide: false
-      };
-    }
-  };
 
   // Reset dialog state
   const resetCreateDialog = () => {
@@ -2012,6 +2044,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   className="shadow-sm"
                   onClick={() => {
                     console.log('[Add Availability Button] Clicked');
+                    setIsCreatingAvailability(false);  // Reset in case stuck
+                    setAddedModalError(null);          // Clear any old error
                     setSelectedAvailabilityType(null);
                     setAvailabilityStep('choose-type');
                   }}
@@ -2040,7 +2074,8 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
             {/* Modal Overlay - covers entire screen including header */}
             {(availabilityStep === 'choose-type' ||
-              availabilityStep === 'set-availability') && (
+              availabilityStep === 'set-availability' ||
+              availabilityStep === 'added') && (
               <div
                 className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"
                 onClick={(e) => {
@@ -2053,7 +2088,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   {/* Step: Choose Type */}
                   {availabilityStep === 'choose-type' && (
                     <div
-                      className={`bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative ${getSmartPositioning().modalClassName}`}
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Close button */}
@@ -2131,7 +2166,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   {/* Step: Set Availability */}
                   {availabilityStep === 'set-availability' && (
                     <div
-                      className={`bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative ${getSmartPositioning().modalClassName}`}
+                      className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* Close button */}
@@ -2328,119 +2363,176 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
+                  {/* Step: Added - Loading/Success/Error states */}
+                  {availabilityStep === 'added' && (
+                    <div
+                      className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 relative text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* LOADING state */}
+                      {addedModalStatus === 'loading' && (
+                        <>
+                          <div className="mb-4">
+                            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                              <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+                            </div>
+                          </div>
+                          <h2 className="text-xl font-semibold mb-2">Adding availability...</h2>
+                          <p className="text-muted-foreground">
+                            Please wait while we update your calendar.
+                          </p>
+                        </>
+                      )}
+
+                      {/* SUCCESS state */}
+                      {addedModalStatus === 'success' && (
+                        <>
+                          <div className="mb-4">
+                            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                              <Check className="h-8 w-8 text-green-600" />
+                            </div>
+                          </div>
+                          <h2 className="text-xl font-semibold mb-2">Added!</h2>
+                          <p className="text-muted-foreground mb-6">
+                            Your availability has been added to the calendar.
+                          </p>
+                          <div className="flex gap-3 justify-center">
+                            <button
+                              onClick={() => {
+                                setAddedModalError(null);
+                                setAvailabilityStep('choose-type');
+                              }}
+                              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Add More
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsFirstAvailability(false);
+                                setAvailabilityStep('success');
+                              }}
+                              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* ERROR state */}
+                      {addedModalStatus === 'error' && (
+                        <>
+                          <div className="mb-4">
+                            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                              <AlertCircle className="h-8 w-8 text-red-600" />
+                            </div>
+                          </div>
+                          <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
+                          <p className="text-muted-foreground mb-6">
+                            {addedModalError || 'Failed to add availability.'}
+                          </p>
+                          <div className="flex gap-3 justify-center">
+                            <button
+                              onClick={() => setAvailabilityStep('set-availability')}
+                              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Go Back
+                            </button>
+                            <button
+                              onClick={() => {
+                                // Retry: go back to form briefly then trigger create
+                                setAvailabilityStep('set-availability');
+                                setTimeout(() => createAvailabilityDirect(), 100);
+                              }}
+                              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                            >
+                              Try Again
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               )}
 
-            {/* Edit Guide Modal */}
+            {/* Edit Guide - Floating Helper (top-left, draggable) */}
             {editGuideStep !== 'idle' && (
-              <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-                <div
-                  className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative"
-                  onClick={(e) => e.stopPropagation()}
+              <div
+                className="absolute z-20 bg-white rounded-lg shadow-lg border p-4 max-w-xs cursor-move select-none"
+                style={{
+                  top: `${65 + editHelperPosition.y}px`,
+                  left: `${22 + editHelperPosition.x}px`
+                }}
+                onMouseDown={handleDragStart}
+              >
+                {/* Close button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditGuideStep('idle');
+                    if (editGuideCleanupRef.current) {
+                      editGuideCleanupRef.current();
+                    }
+                  }}
+                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
                 >
-                  {/* Close button */}
-                  <button
-                    onClick={() => {
-                      setEditGuideStep('idle');
-                      if (editGuideCleanupRef.current) {
-                        editGuideCleanupRef.current();
-                      }
-                    }}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
+                  <X className="h-4 w-4" />
+                </button>
 
-                  {editGuideStep === 'waiting-click' && (
-                    <>
-                      <h2 className="text-xl font-semibold mb-4 pr-8">
-                        Edit your availability
-                      </h2>
+                {editGuideStep === 'waiting-click' && (
+                  <div className="pr-6">
+                    <p className="font-medium mb-1">Edit availability</p>
+                    <p className="text-sm text-muted-foreground">
+                      Click any availability block in the calendar.
+                    </p>
+                  </div>
+                )}
 
-                      <div className="space-y-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                            1
-                          </div>
-                          <p className="text-muted-foreground pt-1">
-                            Click on any availability block in the calendar
-                          </p>
-                        </div>
-
-                        <div className="bg-gray-50 rounded-lg p-3 flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            Waiting for you to click a block...
-                          </span>
-                        </div>
+                {editGuideStep === 'clicked' && (
+                  <div className="pr-6 space-y-3">
+                    {/* Step 1 - completed */}
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <Check className="h-3 w-3 text-green-600" />
                       </div>
+                      <p className="text-sm text-muted-foreground line-through">
+                        Click any availability block
+                      </p>
+                    </div>
 
-                      <div className="mt-6 pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setEditGuideStep('idle');
-                            if (editGuideCleanupRef.current) {
-                              editGuideCleanupRef.current();
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
+                    {/* Step 2 - current */}
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-white">2</span>
                       </div>
-                    </>
-                  )}
-
-                  {editGuideStep === 'clicked' && (
-                    <>
-                      <h2 className="text-xl font-semibold mb-4 pr-8">
-                        Edit your availability
-                      </h2>
-
-                      <div className="space-y-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <Check className="h-4 w-4 text-green-600" />
-                          </div>
-                          <p className="text-muted-foreground pt-1">
-                            You clicked on an availability block
-                          </p>
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                            2
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">
-                              Click <strong>"More details"</strong> on the popup card
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              This opens Google Calendar in a new tab
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
-                            3
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">
-                              Use the <Pencil className="h-4 w-4 inline" /> edit or <Trash2 className="h-4 w-4 inline" /> delete icons
-                            </p>
-                          </div>
-                        </div>
+                      <div className="text-sm space-y-2">
+                        <p>
+                          In the popup, click <strong>"More details"</strong>
+                        </p>
+                        <p className="text-muted-foreground">
+                          This opens Google Calendar in a new tab.
+                        </p>
+                        <p className="text-muted-foreground">
+                          Use <Pencil className="h-3 w-3 inline mx-0.5" /> to edit or <Trash2 className="h-3 w-3 inline mx-0.5" /> to delete.
+                        </p>
                       </div>
+                    </div>
 
-                      <div className="mt-6 pt-4 border-t">
-                        <Button onClick={() => setEditGuideStep('idle')}>
-                          Done
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditGuideStep('idle');
+                      }}
+                    >
+                      Got it
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             </div>
