@@ -41,7 +41,7 @@ x8o8OU+8ereiJ2yVcCTggUU=
 -----END PRIVATE KEY-----`;
 // Simple cache
 const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour for longer session-based caching
 
 // Logging helper with request ID
 function log(requestId: string | null, message: string, data?: any) {
@@ -178,23 +178,21 @@ serve(async (req)=>{
           }
         });
       }
-      // Check cache (skip for bookings)
-      if (tabName.toLowerCase() !== 'bookings') {
-        const cacheKey = `${sheetId}:${tabName}`;
-        const cached = cache.get(cacheKey);
-        if (cached && Date.now() < cached.expiry) {
-          log(requestId, '💾 Cache hit:', cacheKey);
-          return new Response(JSON.stringify({
-            success: true,
-            data: cached.data
-          }), {
-            status: 200,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json'
-            }
-          });
-        }
+      // Check cache
+      const cacheKey = `${sheetId}:${tabName}`;
+      const cached = cache.get(cacheKey);
+      if (cached && Date.now() < cached.expiry) {
+        log(requestId, '💾 Cache hit:', cacheKey);
+        return new Response(JSON.stringify({
+          success: true,
+          data: cached.data
+        }), {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        });
       }
       // Access Google Sheet
       const auth = getServiceAuth();
@@ -244,13 +242,11 @@ serve(async (req)=>{
         return obj;
       });
       // Cache result
-      if (tabName.toLowerCase() !== 'bookings') {
-        const cacheKey = `${sheetId}:${tabName}`;
-        cache.set(cacheKey, {
-          data: result,
-          expiry: Date.now() + CACHE_TTL
-        });
-      }
+      const cacheKey = `${sheetId}:${tabName}`;
+      cache.set(cacheKey, {
+        data: result,
+        expiry: Date.now() + CACHE_TTL
+      });
       log(requestId, '✅ Read success:', `${result.length} rows from ${tabName}`);
       return new Response(JSON.stringify({
         success: true,

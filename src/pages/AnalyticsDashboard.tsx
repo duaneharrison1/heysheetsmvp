@@ -90,7 +90,7 @@ export default function AnalyticsDashboard() {
       let loadedServices: any[] = [];
       
       try {
-        const { data: storeData, error: storeError } = await supabase.from('stores').select('*').eq('id', selectedStoreId).eq('user_id', user.id).single();
+        const { data: storeData, error: storeError } = await supabase.from('stores').select('id, name, sheet_id, user_id').eq('id', selectedStoreId).eq('user_id', user.id).single();
         if (storeError) {
           console.error('Failed to load store', storeError);
           setLoading(false);
@@ -101,10 +101,25 @@ export default function AnalyticsDashboard() {
         setStore(storeData);
 
         if (storeData?.sheet_id) {
+          // Fetch both Bookings and Services in parallel with error handling
           try {
-            const { data } = await supabase.functions.invoke('google-sheet', { body: { operation: 'read', storeId: selectedStoreId, tabName: 'Bookings' } });
-            if (data?.success && data?.data) {
-              loadedBookings = data.data.map((r: any, i: number) => ({
+            const [bookingsRes, servicesRes] = await Promise.all([
+              supabase.functions.invoke('google-sheet', { body: { operation: 'read', storeId: selectedStoreId, tabName: 'Bookings' } }).catch(err => {
+                console.error('Error loading bookings:', err);
+                return { data: null };
+              }),
+              supabase.functions.invoke('google-sheet', { body: { operation: 'read', storeId: selectedStoreId, tabName: 'Services' } }).catch(err => {
+                console.error('Error loading services:', err);
+                return { data: null };
+              }),
+            ]);
+
+            // Check if request was cancelled before updating state
+            if (cancelled) return;
+
+            // Process bookings
+            if (bookingsRes?.data?.success && bookingsRes.data?.data) {
+              loadedBookings = bookingsRes.data.data.map((r: any, i: number) => ({
                 id: r.id || `b-${i}`,
                 service: r.Service || r.service || 'Unknown',
                 customer_name: r['Customer Name'] || r.customer_name || r.Name || 'Guest',
@@ -115,41 +130,36 @@ export default function AnalyticsDashboard() {
                 price: parseFloat(r.Price || r.price || '0'),
                 status: (r.Status || r.status || 'pending').toLowerCase(),
               }));
-              setBookings(loadedBookings);
-            } else {
-              loadedBookings = generateSampleBookings();
-              setBookings(loadedBookings);
             }
-          } catch (err) {
-            console.error('Error loading bookings', err);
-            loadedBookings = generateSampleBookings();
             setBookings(loadedBookings);
-          }
 
-          try {
-            const { data } = await supabase.functions.invoke('google-sheet', { body: { operation: 'read', storeId: selectedStoreId, tabName: 'Services' } });
-            if (data?.success && data?.data) {
-              loadedServices = data.data.map((r: any) => ({ name: r.Name || r.name || r.Service || 'Unknown', duration: parseInt(r.Duration || r.duration || '60', 10), price: parseFloat(r.Price || r.price || '0') }));
-              setServices(loadedServices);
-            } else {
-              loadedServices = generateSampleServices();
-              setServices(loadedServices);
+            // Process services
+            if (servicesRes?.data?.success && servicesRes.data?.data) {
+              loadedServices = servicesRes.data.data.map((r: any) => ({ name: r.Name || r.name || r.Service || 'Unknown', duration: parseInt(r.Duration || r.duration || '60', 10), price: parseFloat(r.Price || r.price || '0') }));
             }
-          } catch (err) {
-            console.error('Error loading services', err);
-            loadedServices = generateSampleServices();
+            setServices(loadedServices);
+          } catch (sheetErr) {
+            console.error('Error fetching sheet data:', sheetErr);
+            // Check if cancelled before updating state
+            if (cancelled) return;
+            loadedBookings = [];
+            loadedServices = [];
+            setBookings(loadedBookings);
             setServices(loadedServices);
           }
         } else {
-          loadedBookings = generateSampleBookings();
-          loadedServices = generateSampleServices();
+          // No sheet connected - show empty state
+          if (cancelled) return;
+          loadedBookings = [];
+          loadedServices = [];
           setBookings(loadedBookings);
           setServices(loadedServices);
         }
       } catch (err) {
         console.error('Error loading analytics', err);
-        loadedBookings = generateSampleBookings();
-        loadedServices = generateSampleServices();
+        // Show empty state on error instead of sample data
+        loadedBookings = [];
+        loadedServices = [];
         setBookings(loadedBookings);
         setServices(loadedServices);
       } finally {
@@ -171,38 +181,7 @@ export default function AnalyticsDashboard() {
     return () => { cancelled = true; };
   }, [selectedStoreId, user?.id, getCache, setCache, isCacheValid]);
 
-  // Sample data generators
-  function generateSampleBookings() {
-    const names = ['Haircut', 'Massage', 'Manicure', 'Facial'];
-    const statuses = ['completed', 'pending', 'cancelled'];
-    const out: any[] = [];
-    const now = new Date();
-    for (let i = 0; i < 50; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - Math.floor(Math.random() * 30));
-      out.push({
-        id: `s-${i}`,
-        service: names[Math.floor(Math.random() * names.length)],
-        customer_name: `Customer ${i}`,
-        customer_email: `cust${i}@example.com`,
-        date: d.toISOString().split('T')[0],
-        time: '10:00',
-        duration: [30, 45, 60, 90][Math.floor(Math.random() * 4)],
-        price: [25, 50, 75, 100][Math.floor(Math.random() * 4)],
-        status: statuses[Math.floor(Math.random() * statuses.length)]
-      });
-    }
-    return out;
-  }
 
-  function generateSampleServices() {
-    return [
-      { name: 'Haircut', duration: 45, price: 50 },
-      { name: 'Massage', duration: 60, price: 80 },
-      { name: 'Manicure', duration: 30, price: 35 },
-      { name: 'Facial', duration: 45, price: 65 },
-    ];
-  }
 
   // Filter bookings by date range
   const filteredBookings = useMemo(() => {

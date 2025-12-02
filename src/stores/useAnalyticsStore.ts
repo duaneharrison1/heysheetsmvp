@@ -16,7 +16,7 @@ interface AnalyticsStore {
   // Set cache for a store
   setCache: (storeId: string, data: Omit<AnalyticsCache, 'timestamp'>) => void;
   
-  // Check if cache is valid (less than 5 minutes old)
+  // Check if cache is valid (1 hour TTL for bookings, updated once per session)
   isCacheValid: (storeId: string) => boolean;
   
   // Clear cache for a store
@@ -48,8 +48,9 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   isCacheValid: (storeId: string) => {
     const cached = get().cache[storeId];
     if (!cached) return false;
-    const fiveMinutes = 5 * 60 * 1000;
-    return (new Date().getTime() - cached.timestamp.getTime()) < fiveMinutes;
+    // 1 hour TTL for booking data - updated once per session
+    const oneHour = 60 * 60 * 1000;
+    return (new Date().getTime() - cached.timestamp.getTime()) < oneHour;
   },
   
   clearCache: (storeId: string) => {
