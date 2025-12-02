@@ -99,7 +99,9 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
   const [endRecurrenceDate, setEndRecurrenceDate] = useState<Date | undefined>();
   // Direct API creation state
   const [isCreatingAvailability, setIsCreatingAvailability] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
+  // Added modal can be in loading, success, or error state
+  const [addedModalStatus, setAddedModalStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [addedModalError, setAddedModalError] = useState<string | null>(null);
 
   // Edit guide flow state
   const [editGuideStep, setEditGuideStep] = useState<'idle' | 'waiting-click' | 'clicked'>('idle');
@@ -517,37 +519,16 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
         });
       }
     } else if (effectiveType === 'specific' && specificDate) {
-      // Handle break for specific date too
-      if (hasBreak) {
-        blocks.push({
-          id: 'morning',
-          title: 'Available',
-          days: [],
-          startTime: startTime,
-          endTime: breakStartTime,
-          isRecurring: false,
-          specificDate: specificDate,
-        });
-        blocks.push({
-          id: 'afternoon',
-          title: 'Available',
-          days: [],
-          startTime: breakEndTime,
-          endTime: endTime,
-          isRecurring: false,
-          specificDate: specificDate,
-        });
-      } else {
-        blocks.push({
-          id: 'specific',
-          title: 'Available',
-          days: [],
-          startTime: startTime,
-          endTime: endTime,
-          isRecurring: false,
-          specificDate: specificDate,
-        });
-      }
+      // Specific date/time - ALWAYS a single block (no break option)
+      blocks.push({
+        id: 'specific',
+        title: 'Available',
+        days: [],
+        startTime: startTime,
+        endTime: endTime,
+        isRecurring: false,
+        specificDate: specificDate,
+      });
     }
 
     console.log('[buildAvailabilityBlocks] Built blocks:', blocks);
@@ -601,21 +582,34 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     console.log('[createAvailabilityDirect] State values - breakStartTime:', breakStartTime, 'breakEndTime:', breakEndTime);
     console.log('[createAvailabilityDirect] State values - hasBreak:', hasBreak);
 
-    // === LOADING STATE: Start ===
-    setAddError(null);  // Clear previous error
     setIsCreatingAvailability(true);
 
+    // Build blocks FIRST (before showing modal)
+    const blocks = buildAvailabilityBlocks();
+    console.log('[createAvailabilityDirect] Built blocks:', blocks);
+
+    // Only validation that stays on form - if no blocks configured
+    if (blocks.length === 0) {
+      toast({
+        title: 'Configuration required',
+        description: 'Please configure your availability times',
+        variant: 'destructive',
+      });
+      setIsCreatingAvailability(false);
+      return;
+    }
+
+    // IMMEDIATELY go to 'added' step in LOADING state
+    setAddedModalStatus('loading');
+    setAddedModalError(null);
+    setAvailabilityStep('added');
+
     try {
-      const blocks = buildAvailabilityBlocks();
-      console.log('[createAvailabilityDirect] Built blocks:', blocks);
-
-      if (blocks.length === 0) {
-        setAddError('Please configure your availability times');
-        return;
-      }
-
+      // Check calendar ID - if not ready, show error on modal
       if (!createdCalendarId) {
-        setAddError('Calendar is still being created. Please wait a moment.');
+        setAddedModalStatus('error');
+        setAddedModalError('Calendar is still being created. Please wait and try again.');
+        setIsCreatingAvailability(false);
         return;
       }
 
@@ -679,18 +673,15 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
 
       if (response.error) {
         console.error('[createAvailabilityDirect] Response error:', response.error);
-        setAddError(response.error.message || 'Failed to add availability. Please try again.');
+        setAddedModalStatus('error');
+        setAddedModalError(response.error.message || 'Failed to add availability. Please try again.');
         return;
       }
 
       if (response.data?.success) {
         console.log('[createAvailabilityDirect] Success!');
-        toast({
-          title: blocks.length > 1 ? `${blocks.length} availability blocks added!` : 'Availability added!',
-          description: 'Your calendar has been updated.',
-        });
 
-        // Refresh calendar IMMEDIATELY (it loads behind the modal)
+        // Refresh calendar (it loads behind the modal)
         setCalendarKey(prev => prev + 1);
 
         // Calculate smart view based on the event
@@ -703,14 +694,17 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
           setCalendarViewMode(smartView.mode);
         }
 
-        setAvailabilityStep('added');
+        // SUCCESS!
+        setAddedModalStatus('success');
       } else {
         console.error('[createAvailabilityDirect] API error:', response.data?.error);
-        setAddError(response.data?.error || 'Failed to add availability. Please try again.');
+        setAddedModalStatus('error');
+        setAddedModalError(response.data?.error || 'Failed to add availability. Please try again.');
       }
     } catch (error: any) {
       console.error('[createAvailabilityDirect] Exception:', error);
-      setAddError(error.message || 'An unexpected error occurred. Please try again.');
+      setAddedModalStatus('error');
+      setAddedModalError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setIsCreatingAvailability(false);
       console.log('[createAvailabilityDirect] === END ===');
@@ -2053,7 +2047,6 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   onClick={() => {
                     console.log('[Add Availability Button] Clicked');
                     setIsCreatingAvailability(false);  // Reset in case stuck
-                    setAddError(null);                 // Clear any old error
                     setSelectedAvailabilityType(null);
                     setAvailabilityStep('choose-type');
                   }}
@@ -2345,24 +2338,11 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                       </div>
                     )}
 
-                    {/* Error Message */}
-                    {addError && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
-                        <div className="flex items-center gap-2 text-red-700">
-                          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                          <p className="text-sm">{addError}</p>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Action Buttons */}
                     <div className="flex gap-3 mt-6">
                       <Button
                         variant="outline"
-                        onClick={() => {
-                          setAddError(null);
-                          setAvailabilityStep('choose-type');
-                        }}
+                        onClick={() => setAvailabilityStep('choose-type')}
                       >
                         Back
                       </Button>
@@ -2384,42 +2364,90 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   </div>
                 )}
 
-                  {/* Step: Added Success */}
+                  {/* Step: Added - Loading/Success/Error states */}
                   {availabilityStep === 'added' && (
                     <div
                       className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 relative text-center"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="mb-4">
-                        <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                          <Check className="h-8 w-8 text-green-600" />
-                        </div>
-                      </div>
-                      <h2 className="text-xl font-semibold mb-2">Added!</h2>
-                      <p className="text-muted-foreground mb-6">
-                        Your availability has been added to the calendar.
-                      </p>
-                      <div className="flex gap-3 justify-center">
-                        <button
-                          onClick={() => {
-                            setAddError(null);  // Clear any old error
-                            setAvailabilityStep('choose-type');
-                          }}
-                          className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Add More
-                        </button>
-                        <button
-                          onClick={() => {
-                            // Calendar already refreshed, just close modal
-                            setIsFirstAvailability(false);
-                            setAvailabilityStep('success');
-                          }}
-                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                        >
-                          Done
-                        </button>
-                      </div>
+                      {/* LOADING state */}
+                      {addedModalStatus === 'loading' && (
+                        <>
+                          <div className="mb-4">
+                            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                              <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+                            </div>
+                          </div>
+                          <h2 className="text-xl font-semibold mb-2">Adding availability...</h2>
+                          <p className="text-muted-foreground">
+                            Please wait while we update your calendar.
+                          </p>
+                        </>
+                      )}
+
+                      {/* SUCCESS state */}
+                      {addedModalStatus === 'success' && (
+                        <>
+                          <div className="mb-4">
+                            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                              <Check className="h-8 w-8 text-green-600" />
+                            </div>
+                          </div>
+                          <h2 className="text-xl font-semibold mb-2">Added!</h2>
+                          <p className="text-muted-foreground mb-6">
+                            Your availability has been added to the calendar.
+                          </p>
+                          <div className="flex gap-3 justify-center">
+                            <button
+                              onClick={() => setAvailabilityStep('choose-type')}
+                              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Add More
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsFirstAvailability(false);
+                                setAvailabilityStep('success');
+                              }}
+                              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* ERROR state */}
+                      {addedModalStatus === 'error' && (
+                        <>
+                          <div className="mb-4">
+                            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                              <AlertCircle className="h-8 w-8 text-red-600" />
+                            </div>
+                          </div>
+                          <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
+                          <p className="text-muted-foreground mb-6">
+                            {addedModalError || 'Failed to add availability.'}
+                          </p>
+                          <div className="flex gap-3 justify-center">
+                            <button
+                              onClick={() => setAvailabilityStep('set-availability')}
+                              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Go Back
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAvailabilityStep('set-availability');
+                                setTimeout(() => createAvailabilityDirect(), 100);
+                              }}
+                              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                            >
+                              Try Again
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
