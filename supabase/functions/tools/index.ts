@@ -129,11 +129,30 @@ async function getStoreInfo(
     }
   }
 
-  // Load data from tabs
+  // Load data from tabs - USE CACHED DATA FIRST if available
   const data: Record<string, any> = {};
 
   for (const [expectedTab, actualTab] of Object.entries(tabMapping)) {
+    // Check if we have this data cached in context.storeData
+    if (expectedTab === 'services' && context.storeData?.services && context.storeData.services.length > 0) {
+      console.log('[getStoreInfo] ✅ Using cached services from context:', context.storeData.services.length, 'items');
+      data[expectedTab] = context.storeData.services;
+      continue;
+    }
+    if (expectedTab === 'products' && context.storeData?.products && context.storeData.products.length > 0) {
+      console.log('[getStoreInfo] ✅ Using cached products from context:', context.storeData.products.length, 'items');
+      data[expectedTab] = context.storeData.products;
+      continue;
+    }
+    if (expectedTab === 'hours' && context.storeData?.hours && context.storeData.hours.length > 0) {
+      console.log('[getStoreInfo] ✅ Using cached hours from context:', context.storeData.hours.length, 'items');
+      data[expectedTab] = context.storeData.hours;
+      continue;
+    }
+
+    // Fallback: load from sheet
     try {
+      console.log(`[getStoreInfo] No cached ${expectedTab}, fetching from sheet...`);
       const tabData = await loadTabData(storeId, actualTab, authToken, context.requestId);
       data[expectedTab] = tabData;
     } catch (error) {
@@ -206,38 +225,48 @@ async function getServices(
   const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
-  // Find services tab using schema if available
-  const detectedSchema = store?.detected_schema || {};
-  let servicesTab = findActualTabName('services', detectedSchema);
+  // USE CACHED DATA FIRST if available in context
+  let services = context.storeData?.services;
 
-  // FALLBACK: If no schema or tab not found, try direct query with common names
-  if (!servicesTab) {
-    console.log('[getServices] No schema or tab not found, trying direct query');
-    const commonNames = ['Services', 'services', 'SERVICES', 'Service'];
-    for (const name of commonNames) {
-      try {
-        const testData = await loadTabData(storeId, name, authToken, context.requestId);
-        if (testData && testData.length >= 0) {
-          servicesTab = name;
-          console.log(`[getServices] Found services tab via direct query: ${name}`);
-          break;
+  if (services && services.length > 0) {
+    console.log('[getServices] ✅ Using cached services from context:', services.length, 'items');
+  } else {
+    // Fallback: fetch from Google Sheets if not in context
+    console.log('[getServices] No cached services, fetching from sheet...');
+
+    // Find services tab using schema if available
+    const detectedSchema = store?.detected_schema || {};
+    let servicesTab = findActualTabName('services', detectedSchema);
+
+    // FALLBACK: If no schema or tab not found, try direct query with common names
+    if (!servicesTab) {
+      console.log('[getServices] No schema or tab not found, trying direct query');
+      const commonNames = ['Services', 'services', 'SERVICES', 'Service'];
+      for (const name of commonNames) {
+        try {
+          const testData = await loadTabData(storeId, name, authToken, context.requestId);
+          if (testData && testData.length >= 0) {
+            servicesTab = name;
+            console.log(`[getServices] Found services tab via direct query: ${name}`);
+            break;
+          }
+        } catch (err) {
+          // Tab doesn't exist, continue trying
+          continue;
         }
-      } catch (err) {
-        // Tab doesn't exist, continue trying
-        continue;
       }
     }
-  }
 
-  if (!servicesTab) {
-    return {
-      success: false,
-      error: `Services data not available. Please ensure your sheet has a tab named "Services" (or reconnect your sheet to detect tabs).`
-    };
-  }
+    if (!servicesTab) {
+      return {
+        success: false,
+        error: `Services data not available. Please ensure your sheet has a tab named "Services" (or reconnect your sheet to detect tabs).`
+      };
+    }
 
-  // Load all services
-  let services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
+    // Load all services
+    services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
+  }
 
   // Apply category filter if specified
   if (category) {
@@ -299,37 +328,47 @@ async function getProducts(
   const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
 
-  // Find products tab using schema if available
-  const detectedSchema = store?.detected_schema || {};
-  let productsTab = findActualTabName('products', detectedSchema);
+  // USE CACHED DATA FIRST if available in context
+  let products = context.storeData?.products;
 
-  // FALLBACK: If no schema or tab not found, try direct query with common names
-  if (!productsTab) {
-    console.log('[getProducts] No schema or tab not found, trying direct query');
-    const commonNames = ['Products', 'products', 'PRODUCTS', 'Product', 'Inventory'];
-    for (const name of commonNames) {
-      try {
-        const testData = await loadTabData(storeId, name, authToken, context.requestId);
-        if (testData && testData.length >= 0) {
-          productsTab = name;
-          console.log(`[getProducts] Found products tab via direct query: ${name}`);
-          break;
+  if (products && products.length > 0) {
+    console.log('[getProducts] ✅ Using cached products from context:', products.length, 'items');
+  } else {
+    // Fallback: fetch from Google Sheets if not in context
+    console.log('[getProducts] No cached products, fetching from sheet...');
+
+    // Find products tab using schema if available
+    const detectedSchema = store?.detected_schema || {};
+    let productsTab = findActualTabName('products', detectedSchema);
+
+    // FALLBACK: If no schema or tab not found, try direct query with common names
+    if (!productsTab) {
+      console.log('[getProducts] No schema or tab not found, trying direct query');
+      const commonNames = ['Products', 'products', 'PRODUCTS', 'Product', 'Inventory'];
+      for (const name of commonNames) {
+        try {
+          const testData = await loadTabData(storeId, name, authToken, context.requestId);
+          if (testData && testData.length >= 0) {
+            productsTab = name;
+            console.log(`[getProducts] Found products tab via direct query: ${name}`);
+            break;
+          }
+        } catch (err) {
+          continue;
         }
-      } catch (err) {
-        continue;
       }
     }
-  }
 
-  if (!productsTab) {
-    return {
-      success: false,
-      error: 'Products data not available. Please ensure your sheet has a tab named "Products" (or reconnect your sheet to detect tabs).'
-    };
-  }
+    if (!productsTab) {
+      return {
+        success: false,
+        error: 'Products data not available. Please ensure your sheet has a tab named "Products" (or reconnect your sheet to detect tabs).'
+      };
+    }
 
-  // Load all products
-  let products = await loadTabData(storeId, productsTab, authToken, context.requestId);
+    // Load all products
+    products = await loadTabData(storeId, productsTab, authToken, context.requestId);
+  }
 
   // Apply category filter if specified
   if (category) {
@@ -760,31 +799,47 @@ async function getRecommendations(
     };
   }
 
-  // Load offerings based on type
+  // Load offerings based on type - USE CACHED DATA FIRST if available
   const detectedSchema = store?.detected_schema || {};
   let services: any[] = [];
   let products: any[] = [];
 
   // Load services if needed
   if (offering_type === 'services' || offering_type === 'both') {
-    const servicesTab = findActualTabName('services', detectedSchema);
-    if (servicesTab) {
-      try {
-        services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
-      } catch (err) {
-        console.error('[getRecommendations] Failed to load services:', err);
+    // USE CACHED DATA FIRST if available in context
+    if (context.storeData?.services && context.storeData.services.length > 0) {
+      console.log('[getRecommendations] ✅ Using cached services from context:', context.storeData.services.length, 'items');
+      services = context.storeData.services;
+    } else {
+      // Fallback: fetch from sheet
+      console.log('[getRecommendations] No cached services, fetching from sheet...');
+      const servicesTab = findActualTabName('services', detectedSchema);
+      if (servicesTab) {
+        try {
+          services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
+        } catch (err) {
+          console.error('[getRecommendations] Failed to load services:', err);
+        }
       }
     }
   }
 
   // Load products if needed
   if (offering_type === 'products' || offering_type === 'both') {
-    const productsTab = findActualTabName('products', detectedSchema);
-    if (productsTab) {
-      try {
-        products = await loadTabData(storeId, productsTab, authToken, context.requestId);
-      } catch (err) {
-        console.error('[getRecommendations] Failed to load products:', err);
+    // USE CACHED DATA FIRST if available in context
+    if (context.storeData?.products && context.storeData.products.length > 0) {
+      console.log('[getRecommendations] ✅ Using cached products from context:', context.storeData.products.length, 'items');
+      products = context.storeData.products;
+    } else {
+      // Fallback: fetch from sheet
+      console.log('[getRecommendations] No cached products, fetching from sheet...');
+      const productsTab = findActualTabName('products', detectedSchema);
+      if (productsTab) {
+        try {
+          products = await loadTabData(storeId, productsTab, authToken, context.requestId);
+        } catch (err) {
+          console.error('[getRecommendations] Failed to load products:', err);
+        }
       }
     }
   }

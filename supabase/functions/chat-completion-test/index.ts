@@ -462,6 +462,9 @@ serve(async (req) => {
 
     const storeData: StoreData = { services, products, hours };
 
+    // Add storeData to context for function handlers to use cached data
+    (context as any).storeData = storeData;
+
     // Build system prompt
     const systemPrompt = buildSystemPrompt(storeConfig, storeData);
 

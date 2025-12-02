@@ -224,7 +224,8 @@ serve(async (req) => {
           authToken: serviceRoleKey,  // Use SERVICE_ROLE_KEY for internal function calls
           store: storeConfig,
           requestId,  // Pass correlation ID for tracing
-          lastUserMessage  // Pass last message for form data parsing
+          lastUserMessage,  // Pass last message for form data parsing
+          storeData  // Pass pre-loaded data to avoid refetching in handlers
         }
       );
 
