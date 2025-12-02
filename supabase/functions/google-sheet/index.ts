@@ -241,8 +241,7 @@ serve(async (req)=>{
         }
         return obj;
       });
-      // Cache result
-      const cacheKey = `${sheetId}:${tabName}`;
+      // Cache result (cacheKey already defined above)
       cache.set(cacheKey, {
         data: result,
         expiry: Date.now() + CACHE_TTL
