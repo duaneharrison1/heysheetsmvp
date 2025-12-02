@@ -582,24 +582,22 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
     console.log('[createAvailabilityDirect] State values - breakStartTime:', breakStartTime, 'breakEndTime:', breakEndTime);
     console.log('[createAvailabilityDirect] State values - hasBreak:', hasBreak);
 
-    setIsCreatingAvailability(true);
-
-    // Build blocks FIRST (before showing modal)
+    // Build blocks FIRST (before showing modal) to validate
     const blocks = buildAvailabilityBlocks();
     console.log('[createAvailabilityDirect] Built blocks:', blocks);
 
-    // Only validation that stays on form - if no blocks configured
     if (blocks.length === 0) {
+      // This is the only validation that stays on form - user needs to configure times
       toast({
         title: 'Configuration required',
         description: 'Please configure your availability times',
         variant: 'destructive',
       });
-      setIsCreatingAvailability(false);
       return;
     }
 
-    // IMMEDIATELY go to 'added' step in LOADING state
+    // === IMMEDIATELY show 'added' modal in LOADING state ===
+    setIsCreatingAvailability(true);
     setAddedModalStatus('loading');
     setAddedModalError(null);
     setAvailabilityStep('added');
@@ -2047,6 +2045,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                   onClick={() => {
                     console.log('[Add Availability Button] Clicked');
                     setIsCreatingAvailability(false);  // Reset in case stuck
+                    setAddedModalError(null);          // Clear any old error
                     setSelectedAvailabilityType(null);
                     setAvailabilityStep('choose-type');
                   }}
@@ -2399,7 +2398,10 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                           </p>
                           <div className="flex gap-3 justify-center">
                             <button
-                              onClick={() => setAvailabilityStep('choose-type')}
+                              onClick={() => {
+                                setAddedModalError(null);
+                                setAvailabilityStep('choose-type');
+                              }}
                               className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                             >
                               Add More
@@ -2438,6 +2440,7 @@ export default function CalendarSetup({ storeId }: { storeId: string }) {
                             </button>
                             <button
                               onClick={() => {
+                                // Retry: go back to form briefly then trigger create
                                 setAvailabilityStep('set-availability');
                                 setTimeout(() => createAvailabilityDirect(), 100);
                               }}
