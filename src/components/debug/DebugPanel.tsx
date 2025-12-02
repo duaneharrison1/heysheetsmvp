@@ -35,6 +35,8 @@ export function DebugPanel() {
     currentTest,
     evaluatorModel,
     setEvaluatorModel,
+    useNativeToolCalling,
+    setUseNativeToolCalling,
   } = useDebugStore();
 
   const handleCopyForAI = (requestId: string) => {
@@ -129,6 +131,29 @@ export function DebugPanel() {
             </select>
           </div>
         )}
+
+        {/* Native Tool Calling Toggle (A/B Test) */}
+        <div className="mb-3">
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={useNativeToolCalling}
+              onChange={(e) => setUseNativeToolCalling(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+            />
+            <span className="text-xs text-gray-400 group-hover:text-gray-300">
+              Native Tool Calling
+              {useNativeToolCalling && (
+                <Badge className="ml-2 bg-blue-600 text-white text-xs py-0 px-1.5">
+                  TEST
+                </Badge>
+              )}
+            </span>
+          </label>
+          <p className="text-xs text-gray-500 mt-1 ml-6">
+            Use OpenAI-style native tool calling instead of custom classifier
+          </p>
+        </div>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">

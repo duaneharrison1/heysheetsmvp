@@ -13,14 +13,15 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Task, TaskTrigger, TaskContent, TaskItem } from "@/components/ui/ai-task";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { 
-  Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook, 
-  Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink, 
+import {
+  Send, Clock, Loader2, Bot, AlertCircle, Globe, Instagram, Twitter, Facebook,
+  Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink,
   MessageCircle, ShoppingBag, Sparkles, CheckCircle2, Search, Database, Info, X
 } from "lucide-react";
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
+import { precacheStoreData, getCachedStoreData, getCacheStats } from "@/lib/storeDataCache";
 // Test scenarios modal - shown when debug panel is open
 import { ScenariosModal } from "@/qa/components/ScenariosModal";
 // Test runner for executing QA scenarios
@@ -117,6 +118,8 @@ export default function StorePage() {
   const selectedModel = useDebugStore((state) => state.selectedModel);
   // Check if debug panel is open to show test scenarios option
   const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
+  // A/B Test: Native tool calling mode
+  const useNativeToolCalling = useDebugStore((state) => state.useNativeToolCalling);
 
   useEffect(() => {
     if (storeId) {
@@ -124,6 +127,39 @@ export default function StorePage() {
       checkAuth();
     }
   }, [storeId]);
+
+  // Precache store data when store loads (warm cache BEFORE user sends message)
+  useEffect(() => {
+    const warmCache = async () => {
+      if (!store?.id || !store?.sheet_id) return;
+
+      console.log('[StorePage] Warming cache for store:', store.id);
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        const cached = await precacheStoreData(store.id, supabaseUrl, anonKey);
+
+        console.log('[StorePage] Cache warmed:', {
+          services: cached.services.length,
+          products: cached.products.length,
+          hours: cached.hours.length,
+        });
+
+        // Log cache stats in dev
+        if (import.meta.env.DEV) {
+          const stats = getCacheStats(store.id);
+          console.log('[StorePage] Cache stats:', stats);
+        }
+      } catch (error) {
+        // Non-critical - just log warning
+        console.warn('[StorePage] Cache warming failed (non-critical):', error);
+      }
+    };
+
+    warmCache();
+  }, [store?.id, store?.sheet_id]);
 
   // Show store info sheet initially on mobile when store loads
   useEffect(() => {
@@ -272,15 +308,29 @@ export default function StorePage() {
 
       updateRequest(requestId, { status: 'classifying' });
 
+      // Get cached data to pass to chat-completion (avoids refetching)
+      const cachedData = storeId ? getCachedStoreData(storeId) : null;
+      if (cachedData) {
+        console.log('[StorePage] Passing cached data to chat-completion:', {
+          services: cachedData.services.length,
+          products: cachedData.products.length,
+          hours: cachedData.hours.length,
+        });
+      }
+
+      // Check if native tool calling mode is enabled (from debug store)
+      const endpoint = useNativeToolCalling ? 'chat-completion-test' : 'chat-completion';
+
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
         {
           method: 'POST',
           headers,
           body: JSON.stringify({
             messages: conversationHistory,
             storeId,
-            model: selectedModel, // 🆕 Pass selected model
+            model: selectedModel,
+            cachedData, // Pass cached data to avoid refetching
           })
         }
       );

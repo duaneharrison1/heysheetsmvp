@@ -144,6 +144,9 @@ interface DebugStore {
   evaluatorModel: string  // Default to chat model
   clearChatRequested: boolean  // Flag to signal chat should be cleared
 
+  // A/B Testing: Native tool calling toggle
+  useNativeToolCalling: boolean
+
   addRequest: (request: DebugRequest) => void
   updateRequest: (id: string, updates: Partial<DebugRequest>) => void
   addMessage: (message: Message) => void
@@ -175,6 +178,9 @@ interface DebugStore {
   getMinMaxIntentTime: () => { min: number; max: number }
   getTotalCost: () => number
   getCostBreakdown: () => { requests: number; inputTokens: number; outputTokens: number }
+
+  // A/B Testing: Native tool calling
+  setUseNativeToolCalling: (enabled: boolean) => void
 }
 
 export const useDebugStore = create<DebugStore>((set, get) => ({
@@ -194,6 +200,11 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   currentTest: null,
   evaluatorModel: 'x-ai/grok-4.1-fast', // Default evaluator model
   clearChatRequested: false,
+
+  // A/B Testing: Native tool calling (persisted to localStorage)
+  useNativeToolCalling: typeof localStorage !== 'undefined'
+    ? localStorage.getItem('heysheets:useNativeToolCalling') === 'true'
+    : false,
 
   addRequest: (request) =>
     set((state) => {
@@ -392,4 +403,12 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
         ? { ...state.currentTest, status: 'stopped', endTime: Date.now() }
         : null,
     })),
+
+  // A/B Testing: Native tool calling toggle
+  setUseNativeToolCalling: (enabled) => {
+    set({ useNativeToolCalling: enabled })
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('heysheets:useNativeToolCalling', enabled ? 'true' : 'false')
+    }
+  },
 }))
