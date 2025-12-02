@@ -13,6 +13,7 @@ export interface Classification {
   function_to_call: string | null;
   extracted_params: Record<string, any>;
   reasoning: string;
+  user_language?: string; // Detected language of user input (e.g., 'en', 'es', 'fr', 'ja')
 }
 
 /**

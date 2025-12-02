@@ -68,9 +68,13 @@ const ClassificationSchema = {
     reasoning: {
       type: "string",
       description: "Brief explanation of classification decision"
+    },
+    user_language: {
+      type: "string",
+      description: "ISO 639-1 language code detected from user input (e.g., 'en', 'es', 'fr', 'ja', 'zh', 'de', 'pt', 'ko')"
     }
   },
-  required: ["intent", "confidence", "needs_clarification", "function_to_call", "extracted_params", "reasoning"],
+  required: ["intent", "confidence", "needs_clarification", "function_to_call", "extracted_params", "reasoning", "user_language"],
   additionalProperties: false
 } as const;
 
@@ -217,6 +221,11 @@ RECOMMENDATION FLOW:
 - Extract preferences generously: experience level, budget, time preference, and any stated goals/interests
 - The function will show a preference form if not enough info is provided
 
+LANGUAGE DETECTION:
+- Detect the language of the user's CURRENT MESSAGE
+- Use ISO 639-1 language codes (e.g., 'en' for English, 'es' for Spanish, 'fr' for French, 'ja' for Japanese, 'zh' for Chinese, 'de' for German, 'pt' for Portuguese, 'ko' for Korean)
+- Default to 'en' if unsure
+
 REQUIRED OUTPUT FORMAT (exact field names):
 {
   "intent": "SERVICE_INQUIRY" | "PRODUCT_INQUIRY" | "INFO_REQUEST" | "BOOKING_REQUEST" | "LEAD_GENERATION" | "RECOMMENDATION_REQUEST" | "GREETING" | "OTHER",
@@ -225,7 +234,8 @@ REQUIRED OUTPUT FORMAT (exact field names):
   "clarification_question": "string or null",
   "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | "get_booking_slots" | "get_recommendations" | null,
   "extracted_params": { /* object with extracted parameters */ },
-  "reasoning": "string"
+  "reasoning": "string",
+  "user_language": "ISO 639-1 code (e.g., 'en', 'es', 'fr', 'ja')"
 }
 
 CRITICAL: Use "function_to_call" NOT "function", and "extracted_params" NOT "parameters"!
@@ -308,6 +318,10 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
   if (!classification.extracted_params && classification.parameters) {
     classification.extracted_params = classification.parameters;
     delete classification.parameters;
+  }
+  // Default user_language to 'en' if not detected
+  if (!classification.user_language) {
+    classification.user_language = 'en';
   }
 
   // Validate required fields exist (function_to_call can be null for greetings, extracted_params can be empty {})

@@ -61,6 +61,12 @@ IMPORTANT: Apologize politely and guide the user on what to do next.`;
     }
   }
 
+  // Determine response language from classification
+  const responseLanguage = classification.user_language || 'en';
+  const languageInstruction = responseLanguage !== 'en' 
+    ? `\n\nIMPORTANT: The user is communicating in ${responseLanguage}. You MUST respond in the same language (${responseLanguage}). All text in your response, including suggestions, should be in ${responseLanguage}.`
+    : '';
+
   // Build response generation prompt
   const responsePrompt = `You are a helpful, friendly business assistant for this store.
 
@@ -72,6 +78,7 @@ ${conversationHistory}
 
 USER INTENT: ${classification.intent}
 CONFIDENCE: ${classification.confidence}
+USER LANGUAGE: ${responseLanguage}${languageInstruction}
 
 ${functionContext}
 
