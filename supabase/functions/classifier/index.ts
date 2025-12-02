@@ -9,7 +9,7 @@ const ClassificationSchema = {
   properties: {
     intent: {
       type: "string",
-      enum: ["SERVICE_INQUIRY", "PRODUCT_INQUIRY", "INFO_REQUEST", "BOOKING_REQUEST", "LEAD_GENERATION", "GREETING", "OTHER"]
+      enum: ["SERVICE_INQUIRY", "PRODUCT_INQUIRY", "INFO_REQUEST", "BOOKING_REQUEST", "LEAD_GENERATION", "RECOMMENDATION_REQUEST", "GREETING", "OTHER"]
     },
     confidence: {
       type: "number",
@@ -27,7 +27,7 @@ const ClassificationSchema = {
     },
     function_to_call: {
       type: "string",
-      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "get_booking_slots", "null"],
+      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "get_booking_slots", "get_recommendations", "null"],
       description: "Function to execute based on intent"
     },
     extracted_params: {
@@ -52,7 +52,16 @@ const ClassificationSchema = {
         prefill_time: { type: "string" },
         prefill_name: { type: "string" },
         prefill_email: { type: "string" },
-        prefill_phone: { type: "string" }
+        prefill_phone: { type: "string" },
+        // Recommendation parameters
+        offering_type: { type: "string" },
+        budget: { type: "string" },
+        budget_max: { type: "number" },
+        experience_level: { type: "string" },
+        time_preference: { type: "string" },
+        day_preference: { type: "string" },
+        duration_preference: { type: "string" },
+        goal: { type: "string" }
       },
       description: "Parameters extracted from user message for function calling"
     },
@@ -134,6 +143,7 @@ INTENTS:
 - INFO_REQUEST: User wants general store information (hours, location, contact, policies)
 - BOOKING_REQUEST: User wants to book/schedule a service
 - LEAD_GENERATION: User wants to be contacted or leave their information
+- RECOMMENDATION_REQUEST: User wants personalized suggestions/recommendations (e.g., "what should I try?", "recommend something for a beginner", "help me choose")
 - GREETING: Greeting, small talk, or social niceties
 - OTHER: Unclear intent or off-topic
 
@@ -151,6 +161,11 @@ FUNCTIONS:
   * Always prefer this over asking text questions about availability
   Parameters: service_name (required), prefill_date, prefill_time, prefill_name, prefill_email
   Extract any details user mentioned and pass as prefill_* params
+- get_recommendations: Get personalized recommendations based on user preferences. Use when:
+  * User asks for suggestions, recommendations, or help choosing
+  * User says "what should I try?", "recommend something", "help me decide", "I'm new, what do you suggest?"
+  * User describes their needs/goals and wants matching options
+  Parameters: goal (what they're looking for), experience_level (beginner/intermediate/advanced), budget (low/medium/high), time_preference (morning/afternoon/evening), category
 
 PARAMETER EXTRACTION RULES:
 - info_type: 'hours' | 'services' | 'products' | 'all' (for get_store_info)
@@ -179,6 +194,7 @@ CRITICAL RULES:
 5. Extract query parameter generously - even vague terms like "sake", "beginner", "functional" are useful
 6. If confidence < 70 AND not LEAD_GENERATION, provide a specific clarification_question
 7. Never hallucinate information - only extract what user actually said
+8. For RECOMMENDATION_REQUEST intent, ALWAYS call get_recommendations (even if preferences are sparse - the function will collect them)
 
 BOOKING FLOW:
 - If user wants to book a service → ALWAYS use get_booking_slots (shows visual calendar picker)
@@ -191,13 +207,23 @@ BOOKING FLOW:
 - NEVER call create_booking without customer_name AND customer_email
 - PREFER get_booking_slots over check_availability when user expresses intent to book
 
+RECOMMENDATION FLOW:
+- If user wants personalized suggestions → ALWAYS use get_recommendations
+  * "What should I try?" → get_recommendations()
+  * "I'm a beginner, what do you recommend?" → get_recommendations(experience_level="beginner")
+  * "Recommend something relaxing under $50" → get_recommendations(goal="relaxing", budget="low", budget_max=50)
+  * "Help me choose a class for evening" → get_recommendations(offering_type="services", time_preference="evening")
+  * "What's good for fitness?" → get_recommendations(goal="fitness")
+- Extract preferences generously: experience level, budget, time preference, and any stated goals/interests
+- The function will show a preference form if not enough info is provided
+
 REQUIRED OUTPUT FORMAT (exact field names):
 {
-  "intent": "SERVICE_INQUIRY" | "PRODUCT_INQUIRY" | "INFO_REQUEST" | "BOOKING_REQUEST" | "LEAD_GENERATION" | "GREETING" | "OTHER",
+  "intent": "SERVICE_INQUIRY" | "PRODUCT_INQUIRY" | "INFO_REQUEST" | "BOOKING_REQUEST" | "LEAD_GENERATION" | "RECOMMENDATION_REQUEST" | "GREETING" | "OTHER",
   "confidence": 0-100,
   "needs_clarification": true | false,
   "clarification_question": "string or null",
-  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | "get_booking_slots" | null,
+  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | "get_booking_slots" | "get_recommendations" | null,
   "extracted_params": { /* object with extracted parameters */ },
   "reasoning": "string"
 }

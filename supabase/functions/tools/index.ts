@@ -7,7 +7,8 @@ import {
   SubmitLeadSchema,
   GetMiscDataSchema,
   CheckAvailabilitySchema,
-  CreateBookingSchema
+  CreateBookingSchema,
+  GetRecommendationsSchema
 } from './validators.ts';
 import { semanticMatch } from './semantic-matcher.ts';
 import { checkAvailability, createBooking, getBookingSlots } from './calendar-booking.ts';
@@ -41,6 +42,8 @@ export async function executeFunction(
         return await createBooking(params, context);
       case 'get_booking_slots':
         return await getBookingSlots(params, context);
+      case 'get_recommendations':
+        return await getRecommendations(params, context);
       default:
         return {
           success: false,
@@ -648,6 +651,522 @@ async function getMiscData(
       query: query || null
     }
   };
+}
+
+// ============================================================================
+// FUNCTION: get_recommendations
+// ============================================================================
+
+/**
+ * Generic preference fields for the PreferencesForm component
+ */
+const PREFERENCE_FIELDS = [
+  {
+    name: 'goal',
+    label: 'What are you looking for?',
+    type: 'textarea' as const,
+    required: true,
+    placeholder: 'Tell us what you\'re interested in or what you\'d like to achieve...'
+  },
+  {
+    name: 'experience_level',
+    label: 'Experience Level',
+    type: 'select' as const,
+    required: false,
+    options: [
+      { value: 'beginner', label: 'Beginner - New to this' },
+      { value: 'intermediate', label: 'Intermediate - Some experience' },
+      { value: 'advanced', label: 'Advanced - Very experienced' },
+      { value: 'any', label: 'No preference' }
+    ]
+  },
+  {
+    name: 'budget',
+    label: 'Budget Range',
+    type: 'select' as const,
+    required: false,
+    options: [
+      { value: 'low', label: 'Budget-friendly' },
+      { value: 'medium', label: 'Mid-range' },
+      { value: 'high', label: 'Premium' },
+      { value: 'any', label: 'No preference' }
+    ]
+  },
+  {
+    name: 'time_preference',
+    label: 'Preferred Time',
+    type: 'select' as const,
+    required: false,
+    options: [
+      { value: 'morning', label: 'Morning' },
+      { value: 'afternoon', label: 'Afternoon' },
+      { value: 'evening', label: 'Evening' },
+      { value: 'any', label: 'No preference' }
+    ]
+  }
+];
+
+async function getRecommendations(
+  params: any,
+  context: FunctionContext
+): Promise<FunctionResult> {
+  // Validate params
+  const validation = validateParams(GetRecommendationsSchema, params);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: `Invalid parameters: ${validation.errors.join(', ')}`
+    };
+  }
+
+  const validated = validation.data as Record<string, any>;
+  const { offering_type, budget, budget_max, experience_level, time_preference, day_preference, duration_preference, goal, category, limit } = validated;
+  const { storeId, authToken, store } = context;
+
+  console.log('[getRecommendations] Params:', { offering_type, budget, experience_level, time_preference, goal, category, limit });
+
+  // Check if we have enough preferences to make recommendations
+  // We need at least a goal OR category to provide meaningful recommendations
+  const hasMinimumPreferences = goal || category;
+
+  if (!hasMinimumPreferences) {
+    // Return PreferencesForm component for user to fill out
+    const components = [{
+      id: `preferences-form-${storeId}-${Date.now()}`,
+      type: 'PreferencesForm',
+      props: {
+        fields: PREFERENCE_FIELDS,
+        title: 'Help us find the perfect match for you!',
+        subtitle: 'Tell us a bit about what you\'re looking for',
+        defaultValues: {
+          experience_level: experience_level || '',
+          budget: budget || '',
+          time_preference: time_preference || '',
+          goal: goal || ''
+        }
+      }
+    }];
+
+    return {
+      success: true,
+      awaiting_input: true,
+      data: {
+        needs_preferences: true,
+        fields: PREFERENCE_FIELDS
+      },
+      message: 'I\'d love to help you find the perfect option! Let me ask you a few quick questions to understand what you\'re looking for.',
+      components,
+      componentsVersion: '1'
+    };
+  }
+
+  // Load offerings based on type
+  const detectedSchema = store?.detected_schema || {};
+  let services: any[] = [];
+  let products: any[] = [];
+
+  // Load services if needed
+  if (offering_type === 'services' || offering_type === 'both') {
+    const servicesTab = findActualTabName('services', detectedSchema);
+    if (servicesTab) {
+      try {
+        services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
+      } catch (err) {
+        console.error('[getRecommendations] Failed to load services:', err);
+      }
+    }
+  }
+
+  // Load products if needed
+  if (offering_type === 'products' || offering_type === 'both') {
+    const productsTab = findActualTabName('products', detectedSchema);
+    if (productsTab) {
+      try {
+        products = await loadTabData(storeId, productsTab, authToken, context.requestId);
+      } catch (err) {
+        console.error('[getRecommendations] Failed to load products:', err);
+      }
+    }
+  }
+
+  // Combine all offerings with type marker
+  let allOfferings = [
+    ...services.map(s => ({ ...s, _type: 'service', _name: s.serviceName || s.name })),
+    ...products.map(p => ({ ...p, _type: 'product', _name: p.name }))
+  ];
+
+  if (allOfferings.length === 0) {
+    return {
+      success: false,
+      error: 'No offerings available to recommend. Please ensure your sheet has Services or Products data.'
+    };
+  }
+
+  console.log(`[getRecommendations] Loaded ${services.length} services and ${products.length} products`);
+
+  // Apply filters based on preferences
+  allOfferings = applyPreferenceFilters(allOfferings, {
+    budget,
+    budget_max,
+    experience_level,
+    time_preference,
+    day_preference,
+    duration_preference,
+    category
+  });
+
+  console.log(`[getRecommendations] After filtering: ${allOfferings.length} offerings`);
+
+  // If goal is provided, use semantic matching to rank
+  let recommendations: any[] = [];
+  if (goal && allOfferings.length > 0) {
+    const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
+    const matches = await semanticMatchRecommendations(goal, allOfferings, OPENROUTER_API_KEY, {
+      experience_level,
+      budget,
+      time_preference
+    });
+    recommendations = matches.slice(0, limit);
+  } else {
+    // No goal - just take top items (could be random or by some default ordering)
+    recommendations = allOfferings.slice(0, limit).map(item => ({
+      item,
+      score: 80,
+      reasoning: 'Matches your preferences'
+    }));
+  }
+
+  // Build UI components for recommendations
+  const components: Array<Record<string, any>> = [];
+
+  if (recommendations.length > 0) {
+    components.push({
+      id: `recommendations-${storeId}-${Date.now()}`,
+      type: 'RecommendationList',
+      props: {
+        recommendations: recommendations.map(r => ({
+          ...r.item,
+          _score: r.score,
+          _reasoning: r.reasoning
+        })),
+        preferences: { goal, experience_level, budget, time_preference }
+      }
+    });
+  }
+
+  return {
+    success: true,
+    data: {
+      recommendations: recommendations.map(r => r.item),
+      count: recommendations.length,
+      preferences_used: { goal, experience_level, budget, time_preference, category },
+      total_available: services.length + products.length
+    },
+    message: recommendations.length > 0
+      ? `Based on your preferences, here are my top ${recommendations.length} recommendation${recommendations.length > 1 ? 's' : ''} for you!`
+      : 'I couldn\'t find any offerings that match your specific preferences. Try adjusting your criteria or browse all our options.',
+    components,
+    componentsVersion: '1'
+  };
+}
+
+/**
+ * Apply preference-based filters to offerings
+ */
+function applyPreferenceFilters(
+  offerings: any[],
+  preferences: {
+    budget?: string;
+    budget_max?: number;
+    experience_level?: string;
+    time_preference?: string;
+    day_preference?: string;
+    duration_preference?: string;
+    category?: string;
+  }
+): any[] {
+  let filtered = [...offerings];
+  const { budget, budget_max, experience_level, time_preference, day_preference, duration_preference, category } = preferences;
+
+  // Filter by category if specified
+  if (category) {
+    const categoryLower = category.toLowerCase();
+    filtered = filtered.filter(item =>
+      (item.category || '').toLowerCase().includes(categoryLower)
+    );
+  }
+
+  // Filter by budget
+  if (budget && budget !== 'any') {
+    filtered = filtered.filter(item => {
+      const price = parseFloat(item.price) || 0;
+      if (price === 0) return true; // Keep items without price
+      // Define budget ranges (can be customized per store type)
+      const budgetRanges: Record<string, [number, number]> = {
+        low: [0, 50],
+        medium: [30, 150],
+        high: [100, Infinity]
+      };
+      const range = budgetRanges[budget];
+      if (range) {
+        return price >= range[0] && price <= range[1];
+      }
+      return true;
+    });
+  }
+
+  // Filter by max budget
+  if (budget_max) {
+    filtered = filtered.filter(item => {
+      const price = parseFloat(item.price) || 0;
+      return price === 0 || price <= budget_max;
+    });
+  }
+
+  // Filter by experience level (check tags, description, name for level indicators)
+  if (experience_level && experience_level !== 'any') {
+    const levelKeywords: Record<string, string[]> = {
+      beginner: ['beginner', 'intro', 'introduction', 'starter', 'basic', 'first time', 'newbie', 'fundamentals', 'level 1', 'entry'],
+      intermediate: ['intermediate', 'level 2', 'continuing', 'progression', 'next level'],
+      advanced: ['advanced', 'expert', 'pro', 'professional', 'master', 'level 3', 'intensive']
+    };
+    const keywords = levelKeywords[experience_level] || [];
+    if (keywords.length > 0) {
+      const scoredFiltered = filtered.map(item => {
+        const searchText = `${item._name || ''} ${item.tags || ''} ${item.description || ''} ${item.category || ''}`.toLowerCase();
+        const matchesLevel = keywords.some(kw => searchText.includes(kw));
+        return { item, matchesLevel };
+      });
+      // Prefer items matching level, but don't exclude others if too few matches
+      const matching = scoredFiltered.filter(s => s.matchesLevel).map(s => s.item);
+      if (matching.length >= 2) {
+        filtered = matching;
+      }
+      // If fewer than 2 matches, keep all items (level wasn't specified in data)
+    }
+  }
+
+  // Filter by time preference (morning/afternoon/evening)
+  if (time_preference && time_preference !== 'any') {
+    const timeRanges: Record<string, [number, number]> = {
+      morning: [5, 12],
+      afternoon: [12, 17],
+      evening: [17, 23]
+    };
+    const range = timeRanges[time_preference];
+    if (range) {
+      const timeFiltered = filtered.filter(item => {
+        const startTime = item.startTime || item.time;
+        if (!startTime) return true; // Keep items without time info
+        const hour = parseTimeToHour(startTime);
+        if (hour === null) return true;
+        return hour >= range[0] && hour < range[1];
+      });
+      // Only apply filter if we have reasonable results
+      if (timeFiltered.length >= 2) {
+        filtered = timeFiltered;
+      }
+    }
+  }
+
+  // Filter by day preference (weekday/weekend)
+  if (day_preference && day_preference !== 'any') {
+    const dayKeywords: Record<string, string[]> = {
+      weekday: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekday'],
+      weekend: ['saturday', 'sunday', 'sat', 'sun', 'weekend']
+    };
+    const keywords = dayKeywords[day_preference] || [];
+    if (keywords.length > 0) {
+      const dayFiltered = filtered.filter(item => {
+        const days = (item.days || '').toLowerCase();
+        if (!days) return true;
+        return keywords.some(kw => days.includes(kw));
+      });
+      if (dayFiltered.length >= 2) {
+        filtered = dayFiltered;
+      }
+    }
+  }
+
+  // Filter by duration preference
+  if (duration_preference && duration_preference !== 'any') {
+    const durationRanges: Record<string, [number, number]> = {
+      quick: [0, 45],      // 0-45 minutes
+      standard: [45, 90],  // 45-90 minutes
+      extended: [90, 480]  // 90+ minutes
+    };
+    const range = durationRanges[duration_preference];
+    if (range) {
+      const durationFiltered = filtered.filter(item => {
+        const duration = parseInt(item.duration) || 0;
+        if (duration === 0) return true;
+        return duration >= range[0] && duration <= range[1];
+      });
+      if (durationFiltered.length >= 2) {
+        filtered = durationFiltered;
+      }
+    }
+  }
+
+  return filtered;
+}
+
+/**
+ * Parse time string to hour (0-23)
+ */
+function parseTimeToHour(timeStr: string): number | null {
+  if (!timeStr) return null;
+  // Handle HH:MM or H:MM format
+  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    let hour = parseInt(match[1]);
+    // Handle AM/PM if present
+    if (timeStr.toLowerCase().includes('pm') && hour < 12) {
+      hour += 12;
+    }
+    if (timeStr.toLowerCase().includes('am') && hour === 12) {
+      hour = 0;
+    }
+    return hour;
+  }
+  return null;
+}
+
+/**
+ * Semantic matching specifically for recommendations with preference context
+ */
+async function semanticMatchRecommendations(
+  goal: string,
+  items: any[],
+  apiKey: string,
+  preferences: {
+    experience_level?: string;
+    budget?: string;
+    time_preference?: string;
+  }
+): Promise<Array<{ item: any; score: number; reasoning: string }>> {
+  if (!goal || items.length === 0) {
+    return items.map(item => ({
+      item,
+      score: 50,
+      reasoning: 'Default match'
+    }));
+  }
+
+  // Build item descriptions for LLM
+  const itemDescriptions = items.map((item, index) => {
+    const name = item._name || item.serviceName || item.name || 'Unknown';
+    const type = item._type || 'offering';
+    const category = item.category || 'General';
+    const price = item.price ? `$${item.price}` : 'N/A';
+    const tags = item.tags || '';
+    const description = item.description || '';
+    return `${index}. [${type.toUpperCase()}] "${name}" - Category: ${category}, Price: ${price}, Tags: ${tags}, Description: ${description}`;
+  }).join('\n');
+
+  // Build preference context for LLM
+  let preferenceContext = '';
+  if (preferences.experience_level && preferences.experience_level !== 'any') {
+    preferenceContext += `\nUser experience level: ${preferences.experience_level}`;
+  }
+  if (preferences.budget && preferences.budget !== 'any') {
+    preferenceContext += `\nBudget preference: ${preferences.budget}`;
+  }
+  if (preferences.time_preference && preferences.time_preference !== 'any') {
+    preferenceContext += `\nTime preference: ${preferences.time_preference}`;
+  }
+
+  const prompt = `You are a recommendation engine. Match the user's goal to the most relevant offerings.
+
+USER'S GOAL: "${goal}"
+${preferenceContext ? `\nUSER PREFERENCES:${preferenceContext}` : ''}
+
+AVAILABLE OFFERINGS:
+${itemDescriptions}
+
+MATCHING GUIDELINES:
+- Focus on semantic relevance to the user's goal
+- Consider user preferences when ranking
+- A "beginner" looking for pottery should rank beginner classes higher
+- Consider synonyms and related concepts
+- Price sensitivity: if budget is "low", prefer affordable options
+- Return higher scores (80-100) for strong matches, lower (30-60) for weak matches
+
+Return a JSON object with scores and brief reasoning for top matches:
+{
+  "matches": [
+    {"index": 0, "score": 95, "reason": "Perfect match for beginner pottery"},
+    {"index": 3, "score": 82, "reason": "Related ceramics class, good for beginners"},
+    ...
+  ]
+}
+
+Only include items with score >= 40. Sort by score descending.
+Return JSON only, no markdown:`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3.5-haiku',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 800,
+        temperature: 0.3
+      })
+    });
+
+    if (!response.ok) {
+      console.error('[semanticMatchRecommendations] LLM call failed');
+      // Fallback: return items with default scores
+      return items.slice(0, 5).map(item => ({
+        item,
+        score: 70,
+        reasoning: 'Matches your criteria'
+      }));
+    }
+
+    const result = await response.json();
+    const content = result.choices[0]?.message?.content || '';
+
+    // Parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const cleanJson = jsonMatch[0]
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']');
+
+      const parsed = JSON.parse(cleanJson);
+      const matches = parsed.matches || [];
+
+      return matches
+        .filter((m: any) => m.index < items.length)
+        .map((m: any) => ({
+          item: items[m.index],
+          score: m.score || 70,
+          reasoning: m.reason || 'Matches your preferences'
+        }));
+    }
+
+    // Fallback
+    return items.slice(0, 5).map(item => ({
+      item,
+      score: 70,
+      reasoning: 'Matches your criteria'
+    }));
+  } catch (error) {
+    console.error('[semanticMatchRecommendations] Error:', error);
+    return items.slice(0, 5).map(item => ({
+      item,
+      score: 70,
+      reasoning: 'Matches your criteria'
+    }));
+  }
 }
 
 // ============================================================================

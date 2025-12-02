@@ -353,6 +353,18 @@ export default function StorePage() {
                 return { type: 'lead_form', data: leadFormComp.props };
               }
 
+              // PreferencesForm component - for collecting user preferences
+              const preferencesFormComp = fr.components.find((c: any) => c.type === 'PreferencesForm');
+              if (preferencesFormComp && preferencesFormComp.props) {
+                return { type: 'PreferencesForm', data: preferencesFormComp.props };
+              }
+
+              // RecommendationList component - for displaying personalized recommendations
+              const recommendationListComp = fr.components.find((c: any) => c.type === 'RecommendationList');
+              if (recommendationListComp && recommendationListComp.props) {
+                return { type: 'RecommendationList', data: recommendationListComp.props };
+              }
+
               // BookingCalendar component - renders date/time picker for service bookings
               const bookingCalendarComp = fr.components.find((c: any) => c.type === 'BookingCalendar' || c.type === 'booking_calendar');
               if (bookingCalendarComp && bookingCalendarComp.props) {

@@ -60,6 +60,24 @@ export const GetBookingSlotsSchema = z.object({
   prefill_phone: z.string().optional()
 });
 
+export const GetRecommendationsSchema = z.object({
+  // What type of offering to recommend (auto-detected from store data if not specified)
+  offering_type: z.enum(['services', 'products', 'both']).optional().default('both'),
+  // Generic preference fields (all optional - collect progressively via conversation)
+  budget: z.enum(['low', 'medium', 'high']).optional().nullable().transform((val) => val ?? undefined),
+  budget_max: z.number().optional().nullable().transform((val) => val ?? undefined), // Specific max price
+  experience_level: z.enum(['beginner', 'intermediate', 'advanced', 'any']).optional().nullable().transform((val) => val ?? undefined),
+  time_preference: z.enum(['morning', 'afternoon', 'evening', 'any']).optional().nullable().transform((val) => val ?? undefined),
+  day_preference: z.enum(['weekday', 'weekend', 'any']).optional().nullable().transform((val) => val ?? undefined),
+  duration_preference: z.enum(['quick', 'standard', 'extended', 'any']).optional().nullable().transform((val) => val ?? undefined),
+  // Free-text goal/interest for semantic matching (most important field)
+  goal: z.string().optional().nullable().transform((val) => val ?? undefined),
+  // Category preference if user mentions one
+  category: z.string().optional().nullable().transform((val) => val ?? undefined),
+  // Number of recommendations to return (1-5)
+  limit: z.number().min(1).max(5).optional().default(3)
+});
+
 // ============================================================================
 // VALIDATION HELPERS
 // ============================================================================

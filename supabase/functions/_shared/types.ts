@@ -6,7 +6,7 @@
  * Classification result from intent classifier
  */
 export interface Classification {
-  intent: 'SERVICE_INQUIRY' | 'PRODUCT_INQUIRY' | 'INFO_REQUEST' | 'BOOKING_REQUEST' | 'LEAD_GENERATION' | 'GREETING' | 'OTHER';
+  intent: 'SERVICE_INQUIRY' | 'PRODUCT_INQUIRY' | 'INFO_REQUEST' | 'BOOKING_REQUEST' | 'LEAD_GENERATION' | 'RECOMMENDATION_REQUEST' | 'GREETING' | 'OTHER';
   confidence: number; // 0-100
   needs_clarification: boolean;
   clarification_question?: string;

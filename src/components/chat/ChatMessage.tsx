@@ -16,6 +16,8 @@ import ServicesGrid from './ServicesGrid';
 import HoursList from './HoursList';
 import BookingCard from './BookingCard';
 import LeadForm from './LeadForm';
+import PreferencesForm from './PreferencesForm';
+import RecommendationList from './RecommendationList';
 // Calendar booking UI component - renders date/time picker for service bookings
 import { BookingCalendar } from './BookingCalendar';
 
@@ -281,6 +283,35 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, st
                 console.log('[ChatMessage] LeadForm submitted:', formData);
                 onActionClick?.('submit_lead', formData);
               }}
+            />
+          </div>
+        );
+
+      // PreferencesForm component - collects user preferences for recommendations
+      case 'preferences_form':
+      case 'PreferencesForm':
+        return (
+          <div className="mt-3">
+            <PreferencesForm
+              {...data}
+              maxWidth="500px"
+              onSubmit={(formData: any) => {
+                console.log('[ChatMessage] PreferencesForm submitted:', formData);
+                onActionClick?.('get_recommendations', formData);
+              }}
+            />
+          </div>
+        );
+
+      // RecommendationList component - displays personalized recommendations
+      case 'recommendations':
+      case 'RecommendationList':
+        return (
+          <div className="mt-3">
+            <RecommendationList
+              recommendations={data.recommendations || data}
+              preferences={data.preferences}
+              onActionClick={onActionClick}
             />
           </div>
         );
