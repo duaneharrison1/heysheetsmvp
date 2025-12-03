@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { H2, Lead } from "@/components/ui/heading";
 import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
 import { supabase } from "@/lib/supabase";
@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Send, Loader2, Bot, Sparkles, Bug, Settings2
 } from "lucide-react";
@@ -34,8 +35,6 @@ import { TestRunner } from "@/qa/lib/test-runner";
 import type { TestScenario, GoalBasedTurnResult, TestStepResult } from "@/qa/lib/types";
 import { isGoalBasedScenario } from "@/qa/lib/types";
 
-type ChatMode = 'classifier' | 'native';
-
 interface Message {
   id: string;
   type: 'bot' | 'user';
@@ -45,9 +44,10 @@ interface Message {
     type: string;
     data: any;
   };
-  suggestions?: string[];
+  suggestions?: string[]; // Dynamic suggestions for follow-up prompts
 }
 
+// Store type for typing the supabase response used in this component
 interface Store {
   id: string;
   name: string;
@@ -62,12 +62,13 @@ interface Store {
 
 export default function DebugChat() {
   const navigate = useNavigate();
+
+  // Store selector state (replaces URL param)
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [stores, setStores] = useState<Store[]>([]);
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('');
   const [store, setStore] = useState<Store | null>(null);
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
   const [currentTaskStep, setCurrentTaskStep] = useState(0);
@@ -77,10 +78,7 @@ export default function DebugChat() {
   const isMobile = useIsMobile();
   const [showDebugSheet, setShowDebugSheet] = useState(false);
 
-  // Architecture mode: classifier (3-stage) or native (tool calling)
-  const [mode, setMode] = useState<ChatMode>('classifier');
-
-  // Initial quick actions
+  // Initial quick actions shown when chat first loads
   const initialQuickActions = [
     'Show me products',
     'Show me services',
@@ -93,13 +91,32 @@ export default function DebugChat() {
   const updateRequest = useDebugStore((state) => state.updateRequest);
   const addDebugMessage = useDebugStore((state) => state.addMessage);
   const selectedModel = useDebugStore((state) => state.selectedModel);
-  const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
-  const reasoningEnabled = useDebugStore((state) => state.reasoningEnabled);
+  const useNativeToolCalling = useDebugStore((state) => state.useNativeToolCalling);
+  const setUseNativeToolCalling = useDebugStore((state) => state.setUseNativeToolCalling);
 
-  // Fetch available stores on mount
+  // Fetch user's stores
+  const { data: userStores, isLoading: storesLoading } = useQuery({
+    queryKey: ['user-stores'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data } = await supabase
+        .from('user_stores')
+        .select('store_id, stores(id, name, slug, sheet_id)')
+        .eq('user_id', user.id);
+
+      return data || [];
+    }
+  });
+
+  // Auto-select first store when stores load
   useEffect(() => {
-    loadStores();
-  }, []);
+    if (userStores && userStores.length > 0 && !selectedStoreId) {
+      const firstStore = userStores[0] as any;
+      setSelectedStoreId(firstStore.store_id);
+    }
+  }, [userStores, selectedStoreId]);
 
   // Load store details when selection changes
   useEffect(() => {
@@ -108,7 +125,7 @@ export default function DebugChat() {
     }
   }, [selectedStoreId]);
 
-  // Precache store data when store loads
+  // Precache store data when store loads (warm cache BEFORE user sends message)
   useEffect(() => {
     const warmCache = async () => {
       if (!store?.id || !store?.sheet_id) return;
@@ -146,8 +163,13 @@ export default function DebugChat() {
       return;
     }
 
-    const timer1 = setTimeout(() => setCurrentTaskStep(1), 3000);
-    const timer2 = setTimeout(() => setCurrentTaskStep(2), 6000);
+    const timer1 = setTimeout(() => {
+      setCurrentTaskStep(1);
+    }, 3000);
+
+    const timer2 = setTimeout(() => {
+      setCurrentTaskStep(2);
+    }, 6000);
 
     return () => {
       clearTimeout(timer1);
@@ -159,89 +181,31 @@ export default function DebugChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const loadStores = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-
-      // Fetch stores owned by user
-      const { data: ownedStores, error: ownedError } = await supabase
-        .from('stores')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (ownedError) {
-        console.error('[DebugChat] Error fetching owned stores:', ownedError);
-      }
-
-      // Also fetch stores user has access to via user_stores
-      const { data: accessStores, error: accessError } = await supabase
-        .from('user_stores')
-        .select('store_id, stores(*)')
-        .eq('user_id', user.id);
-
-      if (accessError) {
-        console.error('[DebugChat] Error fetching access stores:', accessError);
-      }
-
-      // Combine and deduplicate
-      const allStores: Store[] = [];
-      const seenIds = new Set<string>();
-
-      if (ownedStores) {
-        for (const s of ownedStores) {
-          if (!seenIds.has(s.id)) {
-            allStores.push(s as Store);
-            seenIds.add(s.id);
-          }
-        }
-      }
-
-      if (accessStores) {
-        for (const s of accessStores) {
-          const storeData = (s as any).stores;
-          if (storeData && !seenIds.has(storeData.id)) {
-            allStores.push(storeData as Store);
-            seenIds.add(storeData.id);
-          }
-        }
-      }
-
-      setStores(allStores);
-
-      // Select first store by default
-      if (allStores.length > 0 && !selectedStoreId) {
-        setSelectedStoreId(allStores[0].id);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadStore = async (storeId: string) => {
     try {
+      console.log('[DebugChat] Loading store:', storeId);
+
       const { data, error } = await supabase
         .from('stores')
         .select('*')
         .eq('id', storeId)
         .single();
 
+      console.log('[DebugChat] Query result:', { data, error });
+
       if (error || !data) {
         console.error('[DebugChat] Failed to load store:', error);
         return;
       }
 
-      setStore(data as Store);
+      const storeData = data as unknown as Store;
+      setStore(storeData);
 
       // Initial bot message
       const initialMessage: Message = {
         id: '1',
         type: 'bot',
-        content: `Hey there! 👋 I'm your assistant at ${data?.name ?? 'this store'}. How can I help you today?`,
+        content: `Hey there! 👋 I'm your assistant at ${storeData?.name ?? 'this store'}. How can I help you today?`,
         timestamp: new Date()
       };
       setMessages([initialMessage]);
@@ -315,17 +279,9 @@ export default function DebugChat() {
         });
       }
 
-      // Select endpoint based on mode
-      const endpoint = mode === 'native' ? 'chat-completion-native' : 'chat-completion';
-
-      console.log('[DebugChat] ==========================================');
-      console.log('[DebugChat] Sending request:');
-      console.log('[DebugChat]   Mode:', mode);
-      console.log('[DebugChat]   Endpoint:', endpoint);
-      console.log('[DebugChat]   Model:', selectedModel);
-      console.log('[DebugChat]   Reasoning:', reasoningEnabled);
-      console.log('[DebugChat]   Store:', selectedStoreId);
-      console.log('[DebugChat] ==========================================');
+      // Use correct endpoint based on mode toggle
+      const endpoint = useNativeToolCalling ? 'chat-completion-native' : 'chat-completion';
+      console.log('[DebugChat] Using endpoint:', endpoint, '(native:', useNativeToolCalling, ')');
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
@@ -337,7 +293,6 @@ export default function DebugChat() {
             storeId: selectedStoreId,
             model: selectedModel,
             cachedData,
-            reasoningEnabled, // Pass reasoning setting to backend
           })
         }
       );
@@ -348,8 +303,7 @@ export default function DebugChat() {
       }
 
       const data = await response.json();
-      console.log('[DebugChat] Response:', data);
-
+      console.log('Chat response data:', data);
       const aiResponse = data.text || "I apologize, I couldn't generate a response.";
       const suggestions = data.suggestions || [];
 
@@ -396,22 +350,27 @@ export default function DebugChat() {
               if (servicesComp && servicesComp.props && Array.isArray(servicesComp.props.services)) {
                 return { type: 'services', data: servicesComp.props.services };
               }
+
               const hoursComp = fr.components.find((c: any) => c.type === 'HoursList');
               if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {
                 return { type: 'hours', data: hoursComp.props.hours };
               }
+
               const leadFormComp = fr.components.find((c: any) => c.type === 'LeadForm');
               if (leadFormComp && leadFormComp.props) {
                 return { type: 'lead_form', data: leadFormComp.props };
               }
+
               const preferencesFormComp = fr.components.find((c: any) => c.type === 'PreferencesForm');
               if (preferencesFormComp && preferencesFormComp.props) {
                 return { type: 'PreferencesForm', data: preferencesFormComp.props };
               }
+
               const recommendationListComp = fr.components.find((c: any) => c.type === 'RecommendationList');
               if (recommendationListComp && recommendationListComp.props) {
                 return { type: 'RecommendationList', data: recommendationListComp.props };
               }
+
               const bookingCalendarComp = fr.components.find((c: any) => c.type === 'BookingCalendar' || c.type === 'booking_calendar');
               if (bookingCalendarComp && bookingCalendarComp.props) {
                 return { type: 'BookingCalendar', data: bookingCalendarComp.props };
@@ -504,6 +463,7 @@ export default function DebugChat() {
     }));
   };
 
+  // Handles running a selected test scenario using the TestRunner
   const handleRunScenario = async (scenario: TestScenario) => {
     if (!selectedStoreId) return;
 
@@ -608,38 +568,54 @@ export default function DebugChat() {
     }
   };
 
-  // Debug panel content - reused in both desktop sidebar and mobile sheet
+  // Debug panel content - LEFT side panel (replaces store info in StorePage)
   const DebugPanelContent = () => (
-    <div className="p-4 space-y-4">
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-orange-100 flex items-center justify-center">
+          <Bug className="w-8 h-8 text-orange-600" />
+        </div>
+        <h1 className="text-xl font-bold text-foreground mb-1">Debug Chat</h1>
+        <p className="text-sm text-muted-foreground">Test your chatbot</p>
+      </div>
+
       {/* Store Selector */}
       <div>
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
           Test Store
         </Label>
-        <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+        <Select
+          value={selectedStoreId || ''}
+          onValueChange={setSelectedStoreId}
+        >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a store..." />
           </SelectTrigger>
           <SelectContent>
-            {stores.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
+            {userStores?.map((us: any) => (
+              <SelectItem key={us.store_id} value={us.store_id}>
+                {us.stores?.name || us.store_id}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Architecture Mode Selector */}
+      {/* Mode Toggle */}
       <div>
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
           Architecture Mode
         </Label>
-        <RadioGroup value={mode} onValueChange={(v) => setMode(v as ChatMode)} className="space-y-1">
+        <RadioGroup
+          value={useNativeToolCalling ? 'native' : 'classifier'}
+          onValueChange={(v) => setUseNativeToolCalling(v === 'native')}
+          className="space-y-2"
+        >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="classifier" id="classifier" />
             <Label htmlFor="classifier" className="text-sm cursor-pointer">
-              Classifier + Responder (3-stage)
+              Classifier + Responder
             </Label>
           </div>
           <div className="flex items-center space-x-2">
@@ -651,33 +627,12 @@ export default function DebugChat() {
         </RadioGroup>
       </div>
 
-      {/* Debug Panel with all options */}
+      {/* Embedded Debug Panel */}
       <DebugPanel showAdvancedOptions={true} />
-
-      {/* Clear Chat Button */}
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={() => {
-          if (store) {
-            setMessages([{
-              id: '1',
-              type: 'bot',
-              content: `Hey there! 👋 I'm your assistant at ${store.name}. How can I help you today?`,
-              timestamp: new Date()
-            }]);
-          } else {
-            setMessages([]);
-          }
-          setCurrentSuggestions(initialQuickActions);
-        }}
-      >
-        Clear Chat
-      </Button>
     </div>
   );
 
-  if (loading) {
+  if (storesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -685,12 +640,12 @@ export default function DebugChat() {
     );
   }
 
-  if (stores.length === 0) {
+  if (!userStores || userStores.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30">
         <div className="text-center">
           <Bug className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h1 className="text-2xl font-bold mb-4">No stores available</h1>
+          <h1 className="text-2xl font-bold mb-4">No stores found</h1>
           <p className="text-muted-foreground mb-4">Create a store first to use Debug Chat.</p>
           <Button onClick={() => navigate('/dashboard')}>Go to Dashboard</Button>
         </div>
@@ -702,25 +657,28 @@ export default function DebugChat() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Main Content: Responsive Layout */}
       <div className="flex-1 flex w-full min-h-0">
-        {/* Chat Section - Full width on mobile */}
+        {/* Debug Panel Side Panel - LEFT side, Hidden on mobile, visible on md+ */}
+        <div className="hidden md:block w-80 flex-shrink-0 bg-card border-r border-border overflow-y-auto">
+          <DebugPanelContent />
+        </div>
+
+        {/* Chat Section - RIGHT side, Full width on mobile */}
         <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
-          {/* Chat header */}
+          {/* Chat header (bot profile) */}
           <div className="flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
             <Avatar className="w-10 h-10" variant="bot">
               <AvatarFallback className="avatar-fallback">
-                <Bug className="w-4 h-4" />
+                <Bot className="w-4 h-4" />
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <H2 className="text-base flex items-center gap-2">
-                Debug Chat
-                <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                  {mode === 'native' ? 'Native' : 'Classifier'}
+              <H2 className="text-base">
+                {store?.name || 'Store'} Assistant
+                <span className="ml-2 text-xs font-normal text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
+                  {useNativeToolCalling ? 'Native' : 'Classifier'}
                 </span>
               </H2>
-              <Lead className="truncate">
-                {store ? `Testing: ${store.name}` : 'Select a store to begin testing'}
-              </Lead>
+              <Lead className="truncate">Debug mode — test your chatbot here</Lead>
             </div>
             {/* Mobile: Debug panel toggle button */}
             {isMobile && (
@@ -742,7 +700,7 @@ export default function DebugChat() {
                 key={message.id}
                 message={message}
                 storeLogo={store?.name?.substring(0, 2).toUpperCase() || 'DB'}
-                storeId={selectedStoreId}
+                storeId={selectedStoreId!}
                 conversationHistory={getConversationHistory()}
                 onActionClick={handleChatAction}
                 onRegenerate={handleRegenerate}
@@ -782,16 +740,16 @@ export default function DebugChat() {
           </div>
 
           <div className="p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
-            {/* Suggestions area */}
-            {(currentSuggestions.length > 0 || isPanelOpen) && !isTyping && (
+            {/* Suggestions area - shows follow-up prompts AND test scenarios */}
+            {(currentSuggestions.length > 0 || true) && !isTyping && (
               <div className="mb-3">
                 <Suggestions>
-                  {isPanelOpen && (
-                    <Suggestion
-                      suggestion="🧪 Scenarios"
-                      onClick={() => setShowScenariosModal(true)}
-                    />
-                  )}
+                  {/* Show test scenarios pill */}
+                  <Suggestion
+                    suggestion="🧪 Scenarios"
+                    onClick={() => setShowScenariosModal(true)}
+                  />
+                  {/* Regular AI-suggested follow-up prompts */}
                   {currentSuggestions.map((suggestion, index) => (
                     <Suggestion
                       key={index}
@@ -805,15 +763,15 @@ export default function DebugChat() {
             <div className="flex gap-3 items-center">
               <Input
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => { setInputValue(e.target.value); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage(inputValue);
                   }
                 }}
-                placeholder={selectedStoreId ? "Type your message..." : "Select a store first..."}
                 disabled={!selectedStoreId}
+                placeholder={selectedStoreId ? "Type your message..." : "Select a store first..."}
                 className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
               <Button
@@ -827,24 +785,19 @@ export default function DebugChat() {
             </div>
           </div>
         </div>
-
-        {/* Debug Panel Side Panel - Hidden on mobile, visible on md+ */}
-        <div className="hidden md:block w-96 flex-shrink-0 bg-card border-l border-border overflow-y-auto">
-          <DebugPanelContent />
-        </div>
       </div>
 
       {/* Mobile Debug Panel Sheet */}
       <Sheet open={showDebugSheet} onOpenChange={setShowDebugSheet}>
-        <SheetContent side="right" className="w-full sm:max-w-md p-0 overflow-y-auto">
+        <SheetContent side="left" className="w-full sm:max-w-md p-0 overflow-y-auto">
           <SheetHeader className="px-6 pt-6 pb-0">
-            <SheetTitle>Debug Settings</SheetTitle>
+            <SheetTitle className="sr-only">Debug Settings</SheetTitle>
           </SheetHeader>
           <DebugPanelContent />
         </SheetContent>
       </Sheet>
 
-      {/* Test scenarios modal */}
+      {/* Test scenarios modal - for QA testing */}
       <ScenariosModal
         open={showScenariosModal}
         onOpenChange={setShowScenariosModal}
