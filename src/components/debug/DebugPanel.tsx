@@ -13,9 +13,13 @@ import { useEffect, useRef } from 'react';
 
 interface DebugPanelProps {
   showAdvancedOptions?: boolean;
+  /** When true, renders as embedded content (no fixed positioning, no close button, always visible) */
+  embedded?: boolean;
+  /** Content to render at the top of the panel (only used when embedded) */
+  topContent?: React.ReactNode;
 }
 
-export function DebugPanel({ showAdvancedOptions = true }: DebugPanelProps) {
+export function DebugPanel({ showAdvancedOptions = true, embedded = false, topContent }: DebugPanelProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -86,21 +90,38 @@ export function DebugPanel({ showAdvancedOptions = true }: DebugPanelProps) {
     }
   }, [requests.length]);
 
-  if (!isPanelOpen) return null;
+  // For non-embedded mode, only render if panel is open
+  if (!embedded && !isPanelOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 left-0 z-40 w-96 bg-gray-950 text-gray-100 border-r border-gray-800 shadow-xl flex flex-col">
+    <div className={cn(
+      "bg-gray-950 text-gray-100 flex flex-col",
+      embedded
+        ? "h-full" // Embedded: fill parent container
+        : "fixed inset-y-0 left-0 z-40 w-96 border-r border-gray-800 shadow-xl" // Floating: fixed position
+    )}>
       {/* Header */}
       <div className="p-4 border-b border-gray-800">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-100">Debug Panel</h2>
-          <button
-            onClick={togglePanel}
-            className="text-gray-400 hover:text-gray-200 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        {/* Top content (store selector, mode, etc.) - only for embedded mode */}
+        {embedded && topContent && (
+          <div className="mb-4">
+            {topContent}
+            <div className="border-t border-gray-800 mt-4 pt-4"></div>
+          </div>
+        )}
+
+        {/* Title and close button - only for non-embedded mode */}
+        {!embedded && (
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-100">Debug Panel</h2>
+            <button
+              onClick={togglePanel}
+              className="text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* Model Selector */}
         <div className="mb-3">
