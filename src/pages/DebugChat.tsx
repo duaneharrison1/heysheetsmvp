@@ -94,17 +94,23 @@ export default function DebugChat() {
   const useNativeToolCalling = useDebugStore((state) => state.useNativeToolCalling);
   const setUseNativeToolCalling = useDebugStore((state) => state.setUseNativeToolCalling);
 
-  // Fetch user's stores
+  // Fetch user's stores (same as Dashboard)
   const { data: userStores, isLoading: storesLoading } = useQuery({
-    queryKey: ['user-stores'],
+    queryKey: ['user-stores-debug'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data } = await supabase
-        .from('user_stores')
-        .select('store_id, stores(id, name, slug, sheet_id)')
-        .eq('user_id', user.id);
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id, name, slug, sheet_id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[DebugChat] Error fetching stores:', error);
+        return [];
+      }
 
       return data || [];
     }
@@ -113,8 +119,7 @@ export default function DebugChat() {
   // Auto-select first store when stores load
   useEffect(() => {
     if (userStores && userStores.length > 0 && !selectedStoreId) {
-      const firstStore = userStores[0] as any;
-      setSelectedStoreId(firstStore.store_id);
+      setSelectedStoreId(userStores[0].id);
     }
   }, [userStores, selectedStoreId]);
 
@@ -593,9 +598,9 @@ export default function DebugChat() {
             <SelectValue placeholder="Select a store..." />
           </SelectTrigger>
           <SelectContent>
-            {userStores?.map((us: any) => (
-              <SelectItem key={us.store_id} value={us.store_id}>
-                {us.stores?.name || us.store_id}
+            {userStores?.map((store: any) => (
+              <SelectItem key={store.id} value={store.id}>
+                {store.name}
               </SelectItem>
             ))}
           </SelectContent>
