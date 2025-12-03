@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Send, Loader2, Bot, Sparkles, Bug, Settings2
 } from "lucide-react";
@@ -612,24 +611,18 @@ export default function DebugChat() {
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
           Architecture Mode
         </Label>
-        <RadioGroup
+        <Select
           value={useNativeToolCalling ? 'native' : 'classifier'}
           onValueChange={(v) => setUseNativeToolCalling(v === 'native')}
-          className="space-y-2"
         >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="classifier" id="classifier" />
-            <Label htmlFor="classifier" className="text-sm cursor-pointer">
-              Classifier + Responder
-            </Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="native" id="native" />
-            <Label htmlFor="native" className="text-sm cursor-pointer">
-              Native Tool Calling
-            </Label>
-          </div>
-        </RadioGroup>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="classifier">Classifier + Responder</SelectItem>
+            <SelectItem value="native">Native Tool Calling</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Embedded Debug Panel */}

@@ -57,8 +57,8 @@ const App = () => (
           
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
 
-          {/* Developer Tools */}
-          <Route path="/debug-chat" element={<SidebarLayout><DebugChat /></SidebarLayout>} />
+          {/* Developer Tools - Standalone fullscreen (no sidebar) */}
+          <Route path="/debug-chat" element={<DebugChat />} />
 
           {/* Super Admin (platform admin) */}
           <Route path="/admin/users" element={<SidebarLayout><AdminUsers /></SidebarLayout>} />
