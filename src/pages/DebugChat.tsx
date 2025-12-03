@@ -1,415 +1,855 @@
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useDebugStore } from '@/stores/useDebugStore';
-import { DebugPanel } from '@/components/debug/DebugPanel';
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { H2, Lead } from "@/components/ui/heading";
+import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
+import { supabase } from "@/lib/supabase";
+import { ChatMessage } from "@/components/chat/ChatMessage";
+import { Task, TaskTrigger, TaskContent, TaskItem } from "@/components/ui/ai-task";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Switch } from '@/components/ui/switch';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Send, Bug, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { generateCorrelationId } from '@/lib/debug/correlation-id';
+} from "@/components/ui/select";
+import {
+  Send, Loader2, Bot, Sparkles, Bug, Settings2
+} from "lucide-react";
+import { useDebugStore } from "@/stores/useDebugStore";
+import { generateCorrelationId } from "@/lib/debug/correlation-id";
+import { requestTimer } from "@/lib/debug/timing";
+import { precacheStoreData, getCachedStoreData, getCacheStats } from "@/lib/storeDataCache";
+import { DebugPanel } from "@/components/debug/DebugPanel";
+// Test scenarios modal - shown when debug panel is open
+import { ScenariosModal } from "@/qa/components/ScenariosModal";
+// Test runner for executing QA scenarios
+import { TestRunner } from "@/qa/lib/test-runner";
+import type { TestScenario, GoalBasedTurnResult, TestStepResult } from "@/qa/lib/types";
+import { isGoalBasedScenario } from "@/qa/lib/types";
 
 type ChatMode = 'classifier' | 'native';
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  type: 'bot' | 'user';
   content: string;
+  timestamp: Date;
+  richContent?: {
+    type: string;
+    data: any;
+  };
+  suggestions?: string[];
 }
 
-interface LastRequestInfo {
-  mode: ChatMode;
-  endpoint: string;
-  model: string;
-  reasoningEnabled: boolean;
-  duration: number;
-  backendEndpoint?: string;
-  backendReasoning?: boolean;
-  endpointMatches: boolean;
-  reasoningMatches: boolean;
-  tokensIn?: number;
-  tokensOut?: number;
-  cost?: number;
-  functionCalled?: string;
-  toolCalls?: string[];
+interface Store {
+  id: string;
+  name: string;
+  type?: string;
+  category?: string;
+  logo?: string | null;
+  sheet_id?: string | null;
+  created_at?: string;
+  description?: string;
+  [key: string]: any;
 }
 
 export default function DebugChat() {
-  const [stores, setStores] = useState<Array<{ id: string; name: string }>>([]);
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('');
-  const [mode, setMode] = useState<ChatMode>('classifier');
-  const [reasoningEnabled, setReasoningEnabled] = useState(false);
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastRequestInfo, setLastRequestInfo] = useState<LastRequestInfo | null>(null);
+  const [inputValue, setInputValue] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>('');
+  const [store, setStore] = useState<Store | null>(null);
+  const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
+  const [currentTaskStep, setCurrentTaskStep] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showScenariosModal, setShowScenariosModal] = useState(false);
+  const [testRunner] = useState(() => new TestRunner());
+  const isMobile = useIsMobile();
+  const [showDebugSheet, setShowDebugSheet] = useState(false);
 
-  const { selectedModel, addRequest, updateRequest } = useDebugStore();
+  // Architecture mode: classifier (3-stage) or native (tool calling)
+  const [mode, setMode] = useState<ChatMode>('classifier');
 
-  // Fetch user's stores
+  // Initial quick actions
+  const initialQuickActions = [
+    'Show me products',
+    'Show me services',
+    'Operating hours',
+    'Store information'
+  ];
+
+  // Debug store
+  const addRequest = useDebugStore((state) => state.addRequest);
+  const updateRequest = useDebugStore((state) => state.updateRequest);
+  const addDebugMessage = useDebugStore((state) => state.addMessage);
+  const selectedModel = useDebugStore((state) => state.selectedModel);
+  const isPanelOpen = useDebugStore((state) => state.isPanelOpen);
+  const reasoningEnabled = useDebugStore((state) => state.reasoningEnabled);
+
+  // Fetch available stores on mount
   useEffect(() => {
-    const fetchStores = async () => {
+    loadStores();
+  }, []);
+
+  // Load store details when selection changes
+  useEffect(() => {
+    if (selectedStoreId) {
+      loadStore(selectedStoreId);
+    }
+  }, [selectedStoreId]);
+
+  // Precache store data when store loads
+  useEffect(() => {
+    const warmCache = async () => {
+      if (!store?.id || !store?.sheet_id) return;
+
+      console.log('[DebugChat] Warming cache for store:', store.id);
+
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        const cached = await precacheStoreData(store.id, supabaseUrl, anonKey);
+
+        console.log('[DebugChat] Cache warmed:', {
+          services: cached.services.length,
+          products: cached.products.length,
+          hours: cached.hours.length,
+        });
+
+        if (import.meta.env.DEV) {
+          const stats = getCacheStats(store.id);
+          console.log('[DebugChat] Cache stats:', stats);
+        }
+      } catch (error) {
+        console.warn('[DebugChat] Cache warming failed (non-critical):', error);
+      }
+    };
+
+    warmCache();
+  }, [store?.id, store?.sheet_id]);
+
+  // Auto-progress through task steps when typing
+  useEffect(() => {
+    if (!isTyping) {
+      setCurrentTaskStep(0);
+      return;
+    }
+
+    const timer1 = setTimeout(() => setCurrentTaskStep(1), 3000);
+    const timer2 = setTimeout(() => setCurrentTaskStep(2), 6000);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [isTyping]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isTyping]);
+
+  const loadStores = async () => {
+    try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('user_stores')
-        .select('store_id, stores(id, name)')
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('[DebugChat] Error fetching stores:', error);
+      if (!user) {
+        navigate('/auth');
         return;
       }
 
-      const storeList = data?.map((s: any) => ({
-        id: s.store_id,
-        name: s.stores?.name || s.store_id
-      })) || [];
+      // Fetch stores owned by user
+      const { data: ownedStores, error: ownedError } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('user_id', user.id);
 
-      setStores(storeList);
-
-      // Set first store as default
-      if (storeList.length > 0 && !selectedStoreId) {
-        setSelectedStoreId(storeList[0].id);
+      if (ownedError) {
+        console.error('[DebugChat] Error fetching owned stores:', ownedError);
       }
-    };
 
-    fetchStores();
-  }, []);
+      // Also fetch stores user has access to via user_stores
+      const { data: accessStores, error: accessError } = await supabase
+        .from('user_stores')
+        .select('store_id, stores(*)')
+        .eq('user_id', user.id);
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+      if (accessError) {
+        console.error('[DebugChat] Error fetching access stores:', accessError);
+      }
 
-  const endpoint = mode === 'native' ? 'chat-completion-native' : 'chat-completion';
+      // Combine and deduplicate
+      const allStores: Store[] = [];
+      const seenIds = new Set<string>();
 
-  const sendMessage = async () => {
-    if (!input.trim() || !selectedStoreId || isLoading) return;
+      if (ownedStores) {
+        for (const s of ownedStores) {
+          if (!seenIds.has(s.id)) {
+            allStores.push(s as Store);
+            seenIds.add(s.id);
+          }
+        }
+      }
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input
-    };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInput('');
-    setIsLoading(true);
+      if (accessStores) {
+        for (const s of accessStores) {
+          const storeData = (s as any).stores;
+          if (storeData && !seenIds.has(storeData.id)) {
+            allStores.push(storeData as Store);
+            seenIds.add(storeData.id);
+          }
+        }
+      }
+
+      setStores(allStores);
+
+      // Select first store by default
+      if (allStores.length > 0 && !selectedStoreId) {
+        setSelectedStoreId(allStores[0].id);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStore = async (storeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('id', storeId)
+        .single();
+
+      if (error || !data) {
+        console.error('[DebugChat] Failed to load store:', error);
+        return;
+      }
+
+      setStore(data as Store);
+
+      // Initial bot message
+      const initialMessage: Message = {
+        id: '1',
+        type: 'bot',
+        content: `Hey there! 👋 I'm your assistant at ${data?.name ?? 'this store'}. How can I help you today?`,
+        timestamp: new Date()
+      };
+      setMessages([initialMessage]);
+      setCurrentSuggestions(initialQuickActions);
+    } catch (error) {
+      console.error('[DebugChat] Error loading store:', error);
+    }
+  };
+
+  const sendMessage = async (content: string) => {
+    if (!content.trim() || !selectedStoreId) return;
 
     const requestId = generateCorrelationId();
-    const startTime = Date.now();
+    const requestStart = Date.now();
 
-    // Log what we're sending
-    console.log('[DebugChat] ==========================================');
-    console.log('[DebugChat] Sending request:');
-    console.log('[DebugChat]   Mode:', mode);
-    console.log('[DebugChat]   Endpoint:', endpoint);
-    console.log('[DebugChat]   Full URL:', `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`);
-    console.log('[DebugChat]   Model:', selectedModel);
-    console.log('[DebugChat]   Reasoning:', reasoningEnabled);
-    console.log('[DebugChat]   Store:', selectedStoreId);
-    console.log('[DebugChat] ==========================================');
-
-    // Track in debug store
+    requestTimer.start(requestId, 'total');
     addRequest({
       id: requestId,
-      timestamp: startTime,
-      userMessage: input,
+      timestamp: requestStart,
+      userMessage: content.trim(),
       model: selectedModel,
-      timings: { requestStart: startTime },
+      timings: { requestStart },
       status: 'pending',
     });
 
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content,
+      timestamp: new Date()
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+
+    if (import.meta.env.DEV) {
+      addDebugMessage({
+        id: userMessage.id,
+        type: 'user',
+        content,
+        timestamp: Date.now()
+      });
+    }
+
+    setInputValue('');
+    setIsTyping(true);
+    setCurrentSuggestions([]);
+
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const conversationHistory = updatedMessages
+        .filter(msg => msg.type === 'user' || msg.type === 'bot')
+        .map(msg => ({
+          role: msg.type === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }));
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'X-Request-ID': requestId,
+      };
+
+      updateRequest(requestId, { status: 'classifying' });
+
+      const cachedData = selectedStoreId ? getCachedStoreData(selectedStoreId) : null;
+      if (cachedData) {
+        console.log('[DebugChat] Passing cached data to chat-completion:', {
+          services: cachedData.services.length,
+          products: cachedData.products.length,
+          hours: cachedData.hours.length,
+        });
+      }
+
+      // Select endpoint based on mode
+      const endpoint = mode === 'native' ? 'chat-completion-native' : 'chat-completion';
+
+      console.log('[DebugChat] ==========================================');
+      console.log('[DebugChat] Sending request:');
+      console.log('[DebugChat]   Mode:', mode);
+      console.log('[DebugChat]   Endpoint:', endpoint);
+      console.log('[DebugChat]   Model:', selectedModel);
+      console.log('[DebugChat]   Reasoning:', reasoningEnabled);
+      console.log('[DebugChat]   Store:', selectedStoreId);
+      console.log('[DebugChat] ==========================================');
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'X-Request-ID': requestId,
-          },
+          headers,
           body: JSON.stringify({
-            messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+            messages: conversationHistory,
             storeId: selectedStoreId,
             model: selectedModel,
-            reasoningEnabled,
+            cachedData,
+            reasoningEnabled, // Pass reasoning setting to backend
           })
         }
       );
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Chat request failed');
+      }
+
       const data = await response.json();
-      const endTime = Date.now();
+      console.log('[DebugChat] Response:', data);
 
-      // Log what backend returned
-      console.log('[DebugChat] ==========================================');
-      console.log('[DebugChat] Response received:');
-      console.log('[DebugChat]   Duration:', endTime - startTime, 'ms');
-      console.log('[DebugChat]   Backend endpoint:', data.debug?.endpoint);
-      console.log('[DebugChat]   Backend reasoning:', data.debug?.reasoningEnabled);
-      console.log('[DebugChat]   Function called:', data.functionCalled || data.debug?.functionCalled);
-      console.log('[DebugChat]   Full debug:', data.debug);
-      console.log('[DebugChat] ==========================================');
+      const aiResponse = data.text || "I apologize, I couldn't generate a response.";
+      const suggestions = data.suggestions || [];
 
-      // Store debug info including what backend confirms
-      const backendEndpoint = data.debug?.endpoint || data.debug?.mode || data.debug?.steps?.[0]?.function;
-      const endpointMatches = backendEndpoint?.includes(mode === 'native' ? 'native' : 'classifier') ||
-                             backendEndpoint === endpoint;
-      const reasoningMatches = data.debug?.reasoningEnabled === reasoningEnabled;
+      setCurrentSuggestions(suggestions);
 
-      setLastRequestInfo({
-        mode,
-        endpoint,
-        model: selectedModel,
-        reasoningEnabled,
-        duration: endTime - startTime,
-        backendEndpoint,
-        backendReasoning: data.debug?.reasoningEnabled,
-        endpointMatches: endpointMatches !== false,
-        reasoningMatches: reasoningMatches !== false,
-        tokensIn: data.debug?.tokens?.total?.input,
-        tokensOut: data.debug?.tokens?.total?.output,
-        cost: data.debug?.cost?.total,
-        functionCalled: data.functionCalled || data.debug?.functionCalled,
-        toolCalls: data.debug?.functionCalls?.map((fc: any) => fc.name) ||
-                   data.debug?.steps?.[0]?.result?.functionsExecuted,
-      });
+      const totalDuration = requestTimer.end(requestId, 'total');
 
-      // Update debug store
       updateRequest(requestId, {
-        status: 'complete',
-        timings: {
-          requestStart: startTime,
-          totalDuration: endTime - startTime,
+        response: {
+          text: aiResponse,
+          richContent: data.richContent,
+          duration: 0,
         },
+        timings: {
+          requestStart,
+          totalDuration,
+          intentDuration: data.debug?.intentDuration,
+          functionDuration: data.debug?.functionDuration,
+          responseDuration: data.debug?.responseDuration,
+        },
+        intent: data.debug?.intent,
+        functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,
         steps: data.debug?.steps,
-        functionCalls: data.debug?.functionCalls,
+        status: 'complete',
       });
 
-      const responseText = data.text || data.message || 'No response';
-      setMessages([...newMessages, {
+      const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: responseText
-      }]);
+        type: 'bot',
+        content: aiResponse,
+        suggestions,
+        richContent: (() => {
+          try {
+            const fr = data.functionResult;
+            if (!fr) return undefined;
+            if (Array.isArray(fr.components) && fr.components.length) {
+              const productsComp = fr.components.find((c: any) => c.type === 'products' || c.type === 'Products');
+              if (productsComp && productsComp.props && Array.isArray(productsComp.props.products)) {
+                return { type: 'products', data: productsComp.props.products };
+              }
+              const servicesComp = fr.components.find((c: any) => c.type === 'services' || c.type === 'Services');
+              if (servicesComp && servicesComp.props && Array.isArray(servicesComp.props.services)) {
+                return { type: 'services', data: servicesComp.props.services };
+              }
+              const hoursComp = fr.components.find((c: any) => c.type === 'HoursList');
+              if (hoursComp && hoursComp.props && Array.isArray(hoursComp.props.hours)) {
+                return { type: 'hours', data: hoursComp.props.hours };
+              }
+              const leadFormComp = fr.components.find((c: any) => c.type === 'LeadForm');
+              if (leadFormComp && leadFormComp.props) {
+                return { type: 'lead_form', data: leadFormComp.props };
+              }
+              const preferencesFormComp = fr.components.find((c: any) => c.type === 'PreferencesForm');
+              if (preferencesFormComp && preferencesFormComp.props) {
+                return { type: 'PreferencesForm', data: preferencesFormComp.props };
+              }
+              const recommendationListComp = fr.components.find((c: any) => c.type === 'RecommendationList');
+              if (recommendationListComp && recommendationListComp.props) {
+                return { type: 'RecommendationList', data: recommendationListComp.props };
+              }
+              const bookingCalendarComp = fr.components.find((c: any) => c.type === 'BookingCalendar' || c.type === 'booking_calendar');
+              if (bookingCalendarComp && bookingCalendarComp.props) {
+                return { type: 'BookingCalendar', data: bookingCalendarComp.props };
+              }
+            }
+            if (fr.data && Array.isArray(fr.data.hours) && fr.data.hours.length) {
+              return { type: 'hours', data: fr.data.hours };
+            }
+            if (fr.data && Array.isArray(fr.data.products) && fr.data.products.length) {
+              return { type: 'products', data: fr.data.products };
+            }
+            return undefined;
+          } catch (e) {
+            console.error('Error mapping functionResult.components to richContent', e);
+            return undefined;
+          }
+        })(),
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, botResponse]);
 
+      if (import.meta.env.DEV) {
+        addDebugMessage({
+          id: botResponse.id,
+          type: 'bot',
+          content: aiResponse,
+          timestamp: Date.now()
+        });
+      }
     } catch (error) {
-      console.error('[DebugChat] Error sending message:', error);
+      console.error('Error getting bot response:', error);
+
       updateRequest(requestId, {
         status: 'error',
         error: {
-          stage: 'network',
+          stage: 'request',
           message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
         },
       });
-      setMessages([...newMessages, {
+
+      const fallbackResponse: Message = {
         id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Sorry, something went wrong. Please try again.'
-      }]);
+        type: 'bot',
+        content: "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, fallbackResponse]);
+      setCurrentSuggestions([]);
+
+      if (import.meta.env.DEV) {
+        addDebugMessage({
+          id: fallbackResponse.id,
+          type: 'bot',
+          content: fallbackResponse.content,
+          timestamp: Date.now()
+        });
+      }
     } finally {
-      setIsLoading(false);
+      setIsTyping(false);
     }
   };
 
-  return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Header with Store Selector */}
-        <div className="border-b p-4 flex items-center gap-4">
-          <Bug className="h-6 w-6 text-orange-500" />
-          <h1 className="text-xl font-semibold">Debug Chat</h1>
+  const handleChatAction = async (action: string, _data?: Record<string, any>) => {
+    sendMessage(action);
+  };
 
-          <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Select store..." />
-            </SelectTrigger>
-            <SelectContent>
-              {stores.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+  const handleRegenerate = (messageId: string) => {
+    const botIndex = messages.findIndex(m => m.id === messageId);
+    if (botIndex <= 0) return;
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && (
-            <div className="text-center text-muted-foreground py-8">
-              <p>Select a store and send a message to test the chat.</p>
-              <p className="text-sm mt-2">Use the sidebar to switch between modes and configure settings.</p>
-            </div>
-          )}
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`p-3 rounded-lg max-w-[80%] ${
-                msg.role === 'user'
-                  ? 'bg-blue-100 ml-auto'
-                  : 'bg-gray-100'
-              }`}
-            >
-              {msg.content}
-            </div>
-          ))}
-          {isLoading && (
-            <div className="bg-gray-100 p-3 rounded-lg animate-pulse flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Thinking...
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+    let userMessageContent = '';
+    for (let i = botIndex - 1; i >= 0; i--) {
+      if (messages[i].type === 'user') {
+        userMessageContent = messages[i].content;
+        break;
+      }
+    }
 
-        {/* Input */}
-        <div className="border-t p-4">
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-              placeholder="Type a message..."
-              disabled={!selectedStoreId || isLoading}
-            />
-            <Button
-              onClick={sendMessage}
-              disabled={!selectedStoreId || isLoading || !input.trim()}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+    if (userMessageContent) {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      sendMessage(userMessageContent);
+    }
+  };
+
+  const getConversationHistory = () => {
+    return messages.map(m => ({
+      role: m.type === 'user' ? 'user' : 'assistant',
+      content: m.content
+    }));
+  };
+
+  const handleRunScenario = async (scenario: TestScenario) => {
+    if (!selectedStoreId) return;
+
+    setMessages([{
+      id: 'scenario-start',
+      type: 'bot',
+      content: `🧪 Starting test: **${scenario.name}**\n\n${scenario.description || ''}`,
+      timestamp: new Date()
+    }]);
+
+    setCurrentSuggestions([]);
+
+    try {
+      const execution = await testRunner.runScenario(
+        scenario,
+        selectedStoreId,
+        selectedModel,
+        selectedModel,
+        (result: TestStepResult) => {
+          setMessages(prev => [...prev, {
+            id: `test-bot-${result.stepIndex}`,
+            type: 'bot',
+            content: result.botResponse,
+            timestamp: new Date(),
+            richContent: result.richContent
+          }]);
+        },
+        (userMessage: string, stepIndex: number) => {
+          setMessages(prev => [...prev, {
+            id: `test-user-${stepIndex}`,
+            type: 'user',
+            content: userMessage,
+            timestamp: new Date()
+          }]);
+        },
+        {
+          onTurnStart: (turn: number, userMessage: string) => {
+            setMessages(prev => [...prev, {
+              id: `test-user-turn-${turn}`,
+              type: 'user',
+              content: `🤖 ${userMessage}`,
+              timestamp: new Date()
+            }]);
+          },
+          onTurnComplete: (result: GoalBasedTurnResult) => {
+            setMessages(prev => [...prev, {
+              id: `test-bot-turn-${result.turnIndex}`,
+              type: 'bot',
+              content: result.botResponse,
+              timestamp: new Date()
+            }]);
+          }
+        }
+      );
+
+      const isGoalBased = isGoalBasedScenario(scenario);
+      const passed = isGoalBased
+        ? execution.goalAchieved
+        : execution.results?.every(r => r.passed) ?? false;
+
+      const summaryLines = [
+        passed ? '✅ **TEST PASSED**' : '❌ **TEST FAILED**',
+        '',
+        `**Scenario:** ${scenario.name}`,
+        `**Type:** ${isGoalBased ? 'Goal-Based' : 'Scripted'}`,
+        `**Duration:** ${((execution.endTime || Date.now()) - execution.startTime) / 1000}s`,
+      ];
+
+      if (isGoalBased) {
+        summaryLines.push(`**Turns:** ${execution.turns?.length || 0}`);
+        summaryLines.push(`**Goal Achieved:** ${execution.goalAchieved ? 'Yes ✓' : 'No ✗'}`);
+      } else {
+        const passedSteps = execution.results?.filter(r => r.passed).length || 0;
+        const totalSteps = execution.results?.length || 0;
+        summaryLines.push(`**Steps:** ${passedSteps}/${totalSteps} passed`);
+      }
+
+      if (execution.overallEvaluation) {
+        summaryLines.push('');
+        summaryLines.push(`**Quality Score:** ${execution.overallEvaluation.score}/100`);
+        summaryLines.push(`**Evaluation:** ${execution.overallEvaluation.reasoning}`);
+      }
+
+      setMessages(prev => [...prev, {
+        id: 'test-summary',
+        type: 'bot',
+        content: summaryLines.join('\n'),
+        timestamp: new Date()
+      }]);
+
+      setCurrentSuggestions(initialQuickActions);
+
+    } catch (error) {
+      console.error('Test scenario failed:', error);
+      setMessages(prev => [...prev, {
+        id: 'test-error',
+        type: 'bot',
+        content: `❌ **Test failed with error:**\n${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date()
+      }]);
+      setCurrentSuggestions(initialQuickActions);
+    }
+  };
+
+  // Debug panel content - reused in both desktop sidebar and mobile sheet
+  const DebugPanelContent = () => (
+    <div className="p-4 space-y-4">
+      {/* Store Selector */}
+      <div>
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
+          Test Store
+        </Label>
+        <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a store..." />
+          </SelectTrigger>
+          <SelectContent>
+            {stores.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Debug Sidebar */}
-      <div className="w-80 border-l p-4 overflow-y-auto bg-gray-50">
-        {/* Mode Selector */}
-        <div className="mb-6">
-          <Label className="text-sm font-medium mb-2 block">Architecture Mode</Label>
-          <RadioGroup value={mode} onValueChange={(v) => setMode(v as ChatMode)}>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="classifier" id="classifier" />
-              <Label htmlFor="classifier" className="text-sm">Classifier + Responder</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="native" id="native" />
-              <Label htmlFor="native" className="text-sm">Native Tool Calling</Label>
-            </div>
-          </RadioGroup>
-        </div>
-
-        {/* Reasoning Toggle */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Enable Reasoning</Label>
-            <Switch
-              checked={reasoningEnabled}
-              onCheckedChange={setReasoningEnabled}
-            />
+      {/* Architecture Mode Selector */}
+      <div>
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
+          Architecture Mode
+        </Label>
+        <RadioGroup value={mode} onValueChange={(v) => setMode(v as ChatMode)} className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="classifier" id="classifier" />
+            <Label htmlFor="classifier" className="text-sm cursor-pointer">
+              Classifier + Responder (3-stage)
+            </Label>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Adds reasoning tokens (slower, may improve quality)
-          </p>
-        </div>
-
-        {/* Current Settings Display */}
-        <div className="mb-6 p-3 bg-white rounded-lg border text-sm">
-          <div className="font-medium mb-2">Current Settings</div>
-          <div><strong>Mode:</strong> {mode}</div>
-          <div><strong>Endpoint:</strong> {endpoint}</div>
-          <div><strong>Model:</strong> {selectedModel}</div>
-          <div><strong>Reasoning:</strong> {reasoningEnabled ? 'ON' : 'OFF'}</div>
-        </div>
-
-        {/* Last Request Info - VERIFICATION */}
-        {lastRequestInfo && (
-          <div className="mb-6 p-3 bg-white rounded-lg border text-sm space-y-2">
-            <div className="font-medium mb-2">Last Request Verification</div>
-
-            {/* Duration */}
-            <div><strong>Duration:</strong> {lastRequestInfo.duration}ms</div>
-
-            {/* Endpoint Verification */}
-            <div className="border-t pt-2 mt-2">
-              <div><strong>Endpoint Sent:</strong> {lastRequestInfo.endpoint}</div>
-              <div className={lastRequestInfo.endpointMatches ? 'text-green-600' : 'text-red-600'}>
-                <strong>Backend Confirms:</strong> {lastRequestInfo.backendEndpoint || 'N/A'}
-                {lastRequestInfo.endpointMatches ? (
-                  <CheckCircle className="inline h-4 w-4 ml-1" />
-                ) : (
-                  <XCircle className="inline h-4 w-4 ml-1" />
-                )}
-              </div>
-            </div>
-
-            {/* Reasoning Verification */}
-            <div className="border-t pt-2 mt-2">
-              <div><strong>Reasoning Sent:</strong> {lastRequestInfo.reasoningEnabled ? 'ON' : 'OFF'}</div>
-              <div className={lastRequestInfo.reasoningMatches ? 'text-green-600' : 'text-red-600'}>
-                <strong>Backend Confirms:</strong> {lastRequestInfo.backendReasoning !== undefined ? (lastRequestInfo.backendReasoning ? 'ON' : 'OFF') : 'N/A'}
-                {lastRequestInfo.reasoningMatches ? (
-                  <CheckCircle className="inline h-4 w-4 ml-1" />
-                ) : (
-                  <XCircle className="inline h-4 w-4 ml-1" />
-                )}
-              </div>
-            </div>
-
-            {/* Function/Tool Info */}
-            {(lastRequestInfo.functionCalled || lastRequestInfo.toolCalls?.length) && (
-              <div className="border-t pt-2 mt-2">
-                {lastRequestInfo.functionCalled && (
-                  <div><strong>Function:</strong> {lastRequestInfo.functionCalled}</div>
-                )}
-                {lastRequestInfo.toolCalls && lastRequestInfo.toolCalls.length > 0 && (
-                  <div><strong>Tool Calls:</strong> {lastRequestInfo.toolCalls.join(', ')}</div>
-                )}
-              </div>
-            )}
-
-            {/* Token Info */}
-            {(lastRequestInfo.tokensIn || lastRequestInfo.tokensOut) && (
-              <div className="border-t pt-2 mt-2">
-                <div><strong>Tokens:</strong> {lastRequestInfo.tokensIn || 0} in / {lastRequestInfo.tokensOut || 0} out</div>
-                {lastRequestInfo.cost !== undefined && (
-                  <div><strong>Cost:</strong> ${lastRequestInfo.cost.toFixed(4)}</div>
-                )}
-              </div>
-            )}
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="native" id="native" />
+            <Label htmlFor="native" className="text-sm cursor-pointer">
+              Native Tool Calling
+            </Label>
           </div>
-        )}
+        </RadioGroup>
+      </div>
 
-        {/* Clear Chat Button */}
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => {
+      {/* Debug Panel with all options */}
+      <DebugPanel showAdvancedOptions={true} />
+
+      {/* Clear Chat Button */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          if (store) {
+            setMessages([{
+              id: '1',
+              type: 'bot',
+              content: `Hey there! 👋 I'm your assistant at ${store.name}. How can I help you today?`,
+              timestamp: new Date()
+            }]);
+          } else {
             setMessages([]);
-            setLastRequestInfo(null);
-          }}
-        >
-          Clear Chat
-        </Button>
+          }
+          setCurrentSuggestions(initialQuickActions);
+        }}
+      >
+        Clear Chat
+      </Button>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
+    );
+  }
+
+  if (stores.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30">
+        <div className="text-center">
+          <Bug className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h1 className="text-2xl font-bold mb-4">No stores available</h1>
+          <p className="text-muted-foreground mb-4">Create a store first to use Debug Chat.</p>
+          <Button onClick={() => navigate('/dashboard')}>Go to Dashboard</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Main Content: Responsive Layout */}
+      <div className="flex-1 flex w-full min-h-0">
+        {/* Chat Section - Full width on mobile */}
+        <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
+          {/* Chat header */}
+          <div className="flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
+            <Avatar className="w-10 h-10" variant="bot">
+              <AvatarFallback className="avatar-fallback">
+                <Bug className="w-4 h-4" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <H2 className="text-base flex items-center gap-2">
+                Debug Chat
+                <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                  {mode === 'native' ? 'Native' : 'Classifier'}
+                </span>
+              </H2>
+              <Lead className="truncate">
+                {store ? `Testing: ${store.name}` : 'Select a store to begin testing'}
+              </Lead>
+            </div>
+            {/* Mobile: Debug panel toggle button */}
+            {isMobile && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="flex-shrink-0"
+                onClick={() => setShowDebugSheet(true)}
+              >
+                <Settings2 className="w-4 h-4" />
+                <span className="sr-only">Debug Settings</span>
+              </Button>
+            )}
+          </div>
+
+          <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                storeLogo={store?.name?.substring(0, 2).toUpperCase() || 'DB'}
+                storeId={selectedStoreId}
+                conversationHistory={getConversationHistory()}
+                onActionClick={handleChatAction}
+                onRegenerate={handleRegenerate}
+              />
+            ))}
+
+            {isTyping && (
+              <div className="flex gap-3 items-start">
+                <Avatar className="w-9 h-9 flex-shrink-0" variant="bot">
+                  <AvatarFallback className="avatar-fallback">
+                    <Bot className="w-4 h-4" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-[280px] pt-1">
+                  <Task defaultOpen={false}>
+                    <TaskTrigger
+                      title="Processing your request..."
+                      icon={<Sparkles className="h-4 w-4" />}
+                      count={currentTaskStep + 1}
+                    />
+                    <TaskContent>
+                      {currentTaskStep >= 0 && (
+                        <TaskItem isLoading={currentTaskStep === 0}>Analyzing your message</TaskItem>
+                      )}
+                      {currentTaskStep >= 1 && (
+                        <TaskItem isLoading={currentTaskStep === 1}>Searching store data</TaskItem>
+                      )}
+                      {currentTaskStep >= 2 && (
+                        <TaskItem isLoading={currentTaskStep === 2}>Generating response</TaskItem>
+                      )}
+                    </TaskContent>
+                  </Task>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+            {/* Suggestions area */}
+            {(currentSuggestions.length > 0 || isPanelOpen) && !isTyping && (
+              <div className="mb-3">
+                <Suggestions>
+                  {isPanelOpen && (
+                    <Suggestion
+                      suggestion="🧪 Scenarios"
+                      onClick={() => setShowScenariosModal(true)}
+                    />
+                  )}
+                  {currentSuggestions.map((suggestion, index) => (
+                    <Suggestion
+                      key={index}
+                      suggestion={suggestion}
+                      onClick={handleChatAction}
+                    />
+                  ))}
+                </Suggestions>
+              </div>
+            )}
+            <div className="flex gap-3 items-center">
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage(inputValue);
+                  }
+                }}
+                placeholder={selectedStoreId ? "Type your message..." : "Select a store first..."}
+                disabled={!selectedStoreId}
+                className="flex-1 rounded-full bg-muted border border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              />
+              <Button
+                onClick={() => sendMessage(inputValue)}
+                size="sm"
+                className="rounded-full w-11 h-11 p-0"
+                disabled={!inputValue.trim() || !selectedStoreId}
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Debug Panel Side Panel - Hidden on mobile, visible on md+ */}
+        <div className="hidden md:block w-96 flex-shrink-0 bg-card border-l border-border overflow-y-auto">
+          <DebugPanelContent />
+        </div>
+      </div>
+
+      {/* Mobile Debug Panel Sheet */}
+      <Sheet open={showDebugSheet} onOpenChange={setShowDebugSheet}>
+        <SheetContent side="right" className="w-full sm:max-w-md p-0 overflow-y-auto">
+          <SheetHeader className="px-6 pt-6 pb-0">
+            <SheetTitle>Debug Settings</SheetTitle>
+          </SheetHeader>
+          <DebugPanelContent />
+        </SheetContent>
+      </Sheet>
+
+      {/* Test scenarios modal */}
+      <ScenariosModal
+        open={showScenariosModal}
+        onOpenChange={setShowScenariosModal}
+        onSelectScenario={handleRunScenario}
+      />
     </div>
   );
 }

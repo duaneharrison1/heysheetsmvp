@@ -33,8 +33,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      {/* Debug Panel - now visible in production */}
-      <DebugPanel />
+      {/* Debug Panel - now visible in production (no advanced options in main chat) */}
+      <DebugPanel showAdvancedOptions={false} />
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
