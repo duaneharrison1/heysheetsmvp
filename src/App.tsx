@@ -22,6 +22,7 @@ import AdminStores from './pages/AdminStores';
 import AdminFeedback from './pages/AdminFeedback';
 import AdminSupportTickets from './pages/AdminSupportTickets';
 import AdminEmails from './pages/AdminEmails';
+import DebugChat from './pages/DebugChat';
 import { DebugPanel } from "@/components/debug/DebugPanel";
 import { DebugToggle } from "@/components/debug/DebugToggle";
 import { QAResultsPage } from "@/qa/components/QAResultsPage";
@@ -55,6 +56,9 @@ const App = () => (
           <Route path="/images" element={<SidebarLayout><ManageImages /></SidebarLayout>} />
           
           <Route path="/help" element={<SidebarLayout><Help /></SidebarLayout>} />
+
+          {/* Developer Tools */}
+          <Route path="/debug-chat" element={<SidebarLayout><DebugChat /></SidebarLayout>} />
 
           {/* Super Admin (platform admin) */}
           <Route path="/admin/users" element={<SidebarLayout><AdminUsers /></SidebarLayout>} />

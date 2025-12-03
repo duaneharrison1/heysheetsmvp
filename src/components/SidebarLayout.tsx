@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image, BarChart3, Mail } from "lucide-react";
+import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image, BarChart3, Mail, Bug } from "lucide-react";
 import { useUserRole } from '@/hooks/useUserRole';
 // No sidebar tooltips needed; keep imports minimal
 
@@ -41,6 +41,7 @@ const adminNavItems = [
   { id: "admin-support", label: "Support Tickets", href: "/admin/support", icon: Ticket },
   { id: "admin-emails", label: "Email Lists", href: "/admin/emails", icon: Mail },
   { id: "admin-qa", label: "QA Results", href: "/admin/qa-results", icon: LayoutGrid },
+  { id: "debug-chat", label: "Debug Chat", href: "/debug-chat", icon: Bug },
 ];
 
 interface SidebarLayoutProps {

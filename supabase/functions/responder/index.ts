@@ -48,6 +48,9 @@ ${store?.description ? `Description: ${store.description}` : ''}
   // Get architecture config
   const archConfig = getArchitectureConfig(options?.architectureMode || 'enhanced');
 
+  // Log reasoning setting
+  console.log(`[Responder] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
+
   // Build function result context
   let functionContext = '';
   if (functionResult) {
@@ -152,10 +155,8 @@ RESPOND WITH JSON ONLY:`;
         messages: [{ role: 'user', content: responsePrompt }],
         max_tokens: 600,
         temperature: 0.7, // Higher temperature for more natural, varied responses
-        // Disable reasoning unless explicitly enabled (saves tokens and time)
-        ...(!archConfig.reasoningEnabled && !options?.reasoningEnabled && {
-          reasoning: { enabled: false }
-        }),
+        // Pass reasoning setting from options (defaults to disabled)
+        reasoning: { enabled: options?.reasoningEnabled ?? false },
       }),
       signal: controller.signal
     });

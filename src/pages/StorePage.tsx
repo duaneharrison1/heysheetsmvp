@@ -22,7 +22,6 @@ import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
 import { precacheStoreData, getCachedStoreData, getCacheStats } from "@/lib/storeDataCache";
-import { canHandleDirectly, directFunctionCall, getActionDisplayText } from "@/lib/directFunction";
 // Test scenarios modal - shown when debug panel is open
 import { ScenariosModal } from "@/qa/components/ScenariosModal";
 // Test runner for executing QA scenarios
@@ -320,7 +319,7 @@ export default function StorePage() {
       }
 
       // Check if native tool calling mode is enabled (from debug store)
-      const endpoint = useNativeToolCalling ? 'chat-completion-test' : 'chat-completion';
+      const endpoint = useNativeToolCalling ? 'chat-completion-native' : 'chat-completion';
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
@@ -489,124 +488,10 @@ export default function StorePage() {
 
   /**
    * Handle chat actions from UI components.
-   * For known actions (view_products, book_service, etc.), use direct function call (~50ms).
-   * For text suggestions, use regular LLM path (~3-5s).
+   * All actions go through the LLM path for classification and response.
    */
-  const handleChatAction = async (action: string, data?: Record<string, any>) => {
-    // Check if this is a direct-callable action (from button click with action name)
-    if (data && canHandleDirectly(action)) {
-      // Direct function call - bypasses LLM
-      console.log('[StorePage] Direct function call:', action, data);
-
-      const requestId = generateCorrelationId();
-      const requestStart = Date.now();
-
-      // Get display text for user message
-      const displayText = getActionDisplayText(action, data);
-
-      // Add user message to chat
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        type: 'user',
-        content: displayText,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setIsTyping(true);
-      setCurrentSuggestions([]);
-
-      // Track in debug store
-      addRequest({
-        id: requestId,
-        timestamp: requestStart,
-        userMessage: displayText,
-        model: 'direct',
-        timings: { requestStart },
-        status: 'executing',
-      });
-
-      try {
-        // Get cached data
-        const cachedData = storeId ? getCachedStoreData(storeId) : null;
-
-        // Call direct function endpoint
-        const result = await directFunctionCall(action, data, storeId!, cachedData || undefined);
-
-        console.log('[StorePage] Direct function result:', result);
-
-        // Create bot response
-        const botResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'bot',
-          content: result.text,
-          timestamp: new Date(),
-          richContent: (() => {
-            // Map components to richContent similar to LLM path
-            const fr = result.functionResult;
-            if (!fr?.components?.length) return undefined;
-
-            const productsComp = fr.components.find((c: any) => c.type === 'products');
-            if (productsComp?.props?.products) {
-              return { type: 'products', data: productsComp.props.products };
-            }
-            const servicesComp = fr.components.find((c: any) => c.type === 'services');
-            if (servicesComp?.props?.services) {
-              return { type: 'services', data: servicesComp.props.services };
-            }
-            const bookingCalendarComp = fr.components.find((c: any) => c.type === 'BookingCalendar');
-            if (bookingCalendarComp?.props) {
-              return { type: 'BookingCalendar', data: bookingCalendarComp.props };
-            }
-            const leadFormComp = fr.components.find((c: any) => c.type === 'LeadForm');
-            if (leadFormComp?.props) {
-              return { type: 'lead_form', data: leadFormComp.props };
-            }
-            return undefined;
-          })(),
-        };
-
-        setMessages(prev => [...prev, botResponse]);
-
-        // Update debug store
-        const totalDuration = Date.now() - requestStart;
-        updateRequest(requestId, {
-          status: 'complete',
-          timings: {
-            requestStart,
-            totalDuration,
-            functionDuration: result.debug?.functionDuration,
-          },
-          functionCalls: [{
-            name: action,
-            arguments: data,
-            result: { success: result.success, data: result.data },
-            duration: result.debug?.functionDuration || 0,
-          }],
-        });
-
-      } catch (error) {
-        console.error('[StorePage] Direct function error:', error);
-        updateRequest(requestId, {
-          status: 'error',
-          error: {
-            stage: 'direct-function',
-            message: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
-
-        setMessages(prev => [...prev, {
-          id: (Date.now() + 1).toString(),
-          type: 'bot',
-          content: "Sorry, something went wrong. Please try again.",
-          timestamp: new Date(),
-        }]);
-      } finally {
-        setIsTyping(false);
-      }
-      return;
-    }
-
-    // Regular LLM path for text suggestions
+  const handleChatAction = async (action: string, _data?: Record<string, any>) => {
+    // All actions go through LLM path
     sendMessage(action);
   };
 
