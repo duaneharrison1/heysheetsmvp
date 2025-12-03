@@ -27,7 +27,7 @@ const ClassificationSchema = {
     },
     function_to_call: {
       type: "string",
-      enum: ["get_store_info", "get_services", "get_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "get_booking_slots", "get_recommendations", "null"],
+      enum: ["get_store_info", "get_services", "get_products", "search_services", "search_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "get_booking_slots", "get_recommendations", "null"],
       description: "Function to execute based on intent"
     },
     extracted_params: {
@@ -97,6 +97,9 @@ export async function classifyIntent(
     throw new Error('OPENROUTER_API_KEY not configured');
   }
 
+  // Log reasoning setting
+  console.log(`[Classifier] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
+
   // Get last message
   const lastMessage = messages[messages.length - 1]?.content || '';
 
@@ -106,27 +109,8 @@ export async function classifyIntent(
     .map(m => `${m.role}: ${m.content}`)
     .join('\n');
 
-  // Build store context (skip in lean mode to save tokens)
-  let storeContext = '';
-  const includeStoreData = options?.includeStoreData !== false; // Default to true
-
-  if (includeStoreData && context?.storeData) {
-    const { services = [], products = [], hours = [] } = context.storeData;
-
-    // Context windowing: Only include high-level overview
-    storeContext = `
-AVAILABLE SERVICES (${services.length} total):
-${services.slice(0, 5).map(s => `- ${s.serviceName} (${s.category || 'General'}): $${s.price || 'N/A'}`).join('\n')}
-${services.length > 5 ? `... and ${services.length - 5} more services` : ''}
-
-AVAILABLE PRODUCTS (${products.length} total):
-${products.slice(0, 5).map(p => `- ${p.name} (${p.category || 'General'}): $${p.price || 'N/A'}`).join('\n')}
-${products.length > 5 ? `... and ${products.length - 5} more products` : ''}
-
-BUSINESS HOURS:
-${hours.map(h => `${h.day}: ${h.isOpen ? `${h.openTime} - ${h.closeTime}` : 'Closed'}`).join('\n')}
-`;
-  }
+  // NOTE: Classifier no longer receives store data to keep prompts lean
+  // All matching is done by function execution (get_services, search_services, etc.)
 
   // Get today's date
   const today = new Date();
@@ -140,8 +124,6 @@ ${hours.map(h => `${h.day}: ${h.isOpen ? `${h.openTime} - ${h.closeTime}` : 'Clo
 
 CONVERSATION HISTORY (recent turns only):
 ${conversationHistory}
-
-${storeContext}
 
 CURRENT MESSAGE: "${lastMessage}"
 TODAY'S DATE: ${todayStr}
@@ -159,8 +141,10 @@ INTENTS:
 
 FUNCTIONS:
 - get_store_info: Get store details, hours, general info (returns overview with all services/products)
-- get_services: Search and filter services with semantic matching (user wants service details)
-- get_products: Search and filter products with semantic matching (user wants product details)
+- get_services: Get complete list of ALL services (no filtering). Use when user wants to browse/see all services.
+- get_products: Get complete list of ALL products (no filtering). Use when user wants to browse/see all products.
+- search_services: Search services by keyword with semantic matching. Use when user asks for something SPECIFIC like "beginner classes", "pottery for kids", "relaxing", etc. Requires query parameter.
+- search_products: Search products by keyword with semantic matching. Use when user asks for specific products. Requires query parameter.
 - submit_lead: Capture user contact information and interest
 - get_misc_data: Access custom tabs like FAQ, Policies, etc. (if user asks about topics not in standard tabs)
 - check_availability: Check if a service is available at a specific date/time (requires service_name, date, time)
@@ -198,13 +182,14 @@ CONFIDENCE SCORING:
 
 CRITICAL RULES:
 1. For LEAD_GENERATION intent, ALWAYS call submit_lead (even if contact info is missing - the function will return a form)
-2. Use get_services/get_products for browsing/searching (they handle semantic matching)
-3. Use get_store_info for general questions ("what do you offer?", "tell me about your studio")
-4. Parse relative dates ("tomorrow", "next Monday") into YYYY-MM-DD format
-5. Extract query parameter generously - even vague terms like "sake", "beginner", "functional" are useful
-6. If confidence < 70 AND not LEAD_GENERATION, provide a specific clarification_question
-7. Never hallucinate information - only extract what user actually said
-8. For RECOMMENDATION_REQUEST intent, ALWAYS call get_recommendations (even if preferences are sparse - the function will collect them)
+2. Use get_services/get_products when user wants to browse ALL offerings (no specific query)
+3. Use search_services/search_products when user mentions SPECIFIC terms like "beginner", "relaxing", "pottery for kids" - these require the query parameter
+4. Use get_store_info for general questions ("what do you offer?", "tell me about your studio")
+5. Parse relative dates ("tomorrow", "next Monday") into YYYY-MM-DD format
+6. Extract query parameter for search functions - pass the user's specific terms like "beginner classes", "relaxing", "sake"
+7. If confidence < 70 AND not LEAD_GENERATION, provide a specific clarification_question
+8. Never hallucinate information - only extract what user actually said
+9. For RECOMMENDATION_REQUEST intent, ALWAYS call get_recommendations (even if preferences are sparse - the function will collect them)
 
 BOOKING FLOW:
 - If user wants to book a service → ALWAYS use get_booking_slots (shows visual calendar picker)
@@ -238,7 +223,7 @@ REQUIRED OUTPUT FORMAT (exact field names):
   "confidence": 0-100,
   "needs_clarification": true | false,
   "clarification_question": "string or null",
-  "function_to_call": "get_store_info" | "get_services" | "get_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | "get_booking_slots" | "get_recommendations" | null,
+  "function_to_call": "get_store_info" | "get_services" | "get_products" | "search_services" | "search_products" | "submit_lead" | "get_misc_data" | "check_availability" | "create_booking" | "get_booking_slots" | "get_recommendations" | null,
   "extracted_params": { /* object with extracted parameters */ },
   "reasoning": "string",
   "user_language": "ISO 639-1 code (e.g., 'en', 'es', 'fr', 'ja')"
@@ -269,8 +254,8 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
         response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
         temperature: 0.1, // Very low temp for consistency
         max_tokens: 500, // Limit response size
-        // Disable reasoning unless explicitly enabled (saves tokens and time)
-        ...(options?.reasoningEnabled === false || options?.reasoningEnabled === undefined ? { reasoning: { enabled: false } } : {}),
+        // Pass reasoning setting from options (defaults to disabled)
+        reasoning: { enabled: options?.reasoningEnabled ?? false },
       }),
       signal: controller.signal
     });

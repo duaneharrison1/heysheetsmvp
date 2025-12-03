@@ -1,5 +1,5 @@
 /**
- * chat-completion-test - Native Tool Calling Implementation
+ * chat-completion-native - Native Tool Calling Implementation
  *
  * This edge function uses native OpenAI-compatible tool calling instead of
  * the custom classifier. Used for A/B testing to compare performance.
@@ -50,17 +50,13 @@ const tools = [
     type: 'function',
     function: {
       name: 'get_services',
-      description: 'Search and retrieve services/classes. Use when user asks about specific services, wants to browse services, or describes what they are looking for. Supports semantic matching for vague queries.',
+      description: 'Get complete list of ALL services/classes offered. Use when user wants to browse or see all services without a specific search term.',
       parameters: {
         type: 'object',
         properties: {
-          query: {
-            type: 'string',
-            description: 'Search term or description (e.g., "sake", "beginner pottery", "weekend classes")'
-          },
           category: {
             type: 'string',
-            description: 'Specific category to filter by if explicitly mentioned'
+            description: 'Optional category to filter by if explicitly mentioned'
           }
         },
         required: []
@@ -70,21 +66,51 @@ const tools = [
   {
     type: 'function',
     function: {
+      name: 'search_services',
+      description: 'Search for specific services by keyword with semantic matching. Use when user asks for something SPECIFIC like "beginner classes", "pottery for kids", "relaxing", "weekend", etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Search term or description (e.g., "sake", "beginner pottery", "weekend classes")'
+          }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_products',
-      description: 'Search and retrieve products for sale. Use when user asks about specific products, wants to browse products, or describes what they want to buy. Supports semantic matching.',
+      description: 'Get complete list of ALL products for sale. Use when user wants to browse or see all products without a specific search term.',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            description: 'Optional category to filter by if explicitly mentioned'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_products',
+      description: 'Search for specific products by keyword with semantic matching. Use when user asks for something SPECIFIC.',
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
             description: 'Search term or description for products'
-          },
-          category: {
-            type: 'string',
-            description: 'Specific category to filter by if explicitly mentioned'
           }
         },
-        required: []
+        required: ['query']
       }
     }
   },
@@ -325,8 +351,10 @@ Be friendly, helpful, and conversational. When you need specific data, use the a
 
 IMPORTANT RULES:
 - For booking requests, ALWAYS use get_booking_slots (not check_availability) to show the calendar
-- For general questions about services, use get_services
-- For product questions, use get_products
+- For browsing ALL services, use get_services (returns complete list)
+- For SPECIFIC service searches (e.g., "beginner classes", "relaxing"), use search_services with query
+- For browsing ALL products, use get_products (returns complete list)
+- For SPECIFIC product searches, use search_products with query
 - For hours/contact/general info, use get_store_info
 - For lead capture (user wants to be contacted), use submit_lead
 - Only use create_booking when you have ALL required fields (service_name, date, time, customer_name, customer_email)
@@ -385,7 +413,18 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { messages, storeId, model, cachedData } = body;
+    const { messages, storeId, model, cachedData, reasoningEnabled = false } = body;
+
+    // Log endpoint and settings for verification
+    log(requestId, '==========================================');
+    log(requestId, 'Endpoint called: chat-completion-native');
+    log(requestId, 'This is the NATIVE TOOL CALLING endpoint');
+    log(requestId, '==========================================');
+    log(requestId, 'Received settings:', {
+      model: model || 'x-ai/grok-4.1-fast (default)',
+      reasoningEnabled,
+      storeId,
+    });
 
     if (!messages || messages.length === 0 || !storeId) {
       return new Response(
@@ -503,8 +542,8 @@ serve(async (req) => {
           tool_choice: 'auto',
           temperature: 0.3,
           max_tokens: 1000,
-          // Disable reasoning to save tokens and time
-          reasoning: { enabled: false },
+          // Pass reasoning setting from request (defaults to disabled)
+          reasoning: { enabled: reasoningEnabled },
         })
       });
 
@@ -619,6 +658,8 @@ serve(async (req) => {
       functionCalled: functionCalls[functionCalls.length - 1]?.name || null,
       functionResult: functionResult,
       debug: {
+        endpoint: 'chat-completion-native',  // Confirm which endpoint was used
+        reasoningEnabled,                     // Confirm reasoning setting
         mode: 'native-tool-calling',
         llmCalls: totalCalls,
         totalDuration,
@@ -641,7 +682,7 @@ serve(async (req) => {
         steps: [
           {
             name: 'Native Tool Calling',
-            function: 'chat-completion-test',
+            function: 'chat-completion-native',
             status: 'success',
             duration: totalDuration,
             result: {
@@ -677,4 +718,4 @@ serve(async (req) => {
   }
 });
 
-console.log('[chat-completion-test] Native tool calling function loaded');
+console.log('[chat-completion-native] Native tool calling function loaded');

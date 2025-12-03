@@ -4,6 +4,8 @@ import {
   GetStoreInfoSchema,
   GetServicesSchema,
   GetProductsSchema,
+  SearchServicesSchema,
+  SearchProductsSchema,
   SubmitLeadSchema,
   GetMiscDataSchema,
   CheckAvailabilitySchema,
@@ -32,6 +34,10 @@ export async function executeFunction(
         return await getServices(params, context);
       case 'get_products':
         return await getProducts(params, context);
+      case 'search_services':
+        return await searchServices(params, context);
+      case 'search_products':
+        return await searchProducts(params, context);
       case 'submit_lead':
         return await submitLead(params, context);
       case 'get_misc_data':
@@ -276,12 +282,7 @@ async function getServices(
     );
   }
 
-  // Apply semantic matching if query provided
-  if (query) {
-    const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
-    const matches = await semanticMatch(query, services, 'service', OPENROUTER_API_KEY);
-    services = matches.map(m => m.item);
-  }
+  // NOTE: Semantic matching removed - use search_services for keyword-based search
 
   // Build optional UI components payload (frontend will render if available)
   const components: Array<Record<string, any>> = [];
@@ -299,7 +300,6 @@ async function getServices(
     data: {
       services,
       count: services.length,
-      query: query || null,
       category: category || null
     },
     message: `Found ${services.length} services.`,
@@ -378,12 +378,7 @@ async function getProducts(
     );
   }
 
-  // Apply semantic matching if query provided
-  if (query) {
-    const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
-    const matches = await semanticMatch(query, products, 'product', OPENROUTER_API_KEY);
-    products = matches.map(m => m.item);
-  }
+  // NOTE: Semantic matching removed - use search_products for keyword-based search
 
   // Build optional UI components payload (frontend will render if available)
   const components: Array<Record<string, any>> = [];
@@ -401,10 +396,185 @@ async function getProducts(
     data: {
       products,
       count: products.length,
-      query: query || null,
       category: category || null
     },
     message: `Found ${products.length} products.`,
+    components,
+    componentsVersion: '1'
+  };
+}
+
+// ============================================================================
+// FUNCTION: search_services
+// ============================================================================
+
+async function searchServices(
+  params: any,
+  context: FunctionContext
+): Promise<FunctionResult> {
+  // Validate params
+  const validation = validateParams(SearchServicesSchema, params);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: `Invalid parameters: ${validation.errors.join(', ')}`
+    };
+  }
+
+  const { query } = validation.data as { query: string };
+  const { storeId, authToken, store } = context;
+
+  // USE CACHED DATA FIRST if available in context
+  let services = context.storeData?.services;
+
+  if (services && services.length > 0) {
+    console.log('[searchServices] ✅ Using cached services from context:', services.length, 'items');
+  } else {
+    // Fallback: fetch from Google Sheets if not in context
+    console.log('[searchServices] No cached services, fetching from sheet...');
+
+    const detectedSchema = store?.detected_schema || {};
+    let servicesTab = findActualTabName('services', detectedSchema);
+
+    if (!servicesTab) {
+      const commonNames = ['Services', 'services', 'SERVICES', 'Service'];
+      for (const name of commonNames) {
+        try {
+          const testData = await loadTabData(storeId, name, authToken, context.requestId);
+          if (testData && testData.length >= 0) {
+            servicesTab = name;
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    if (!servicesTab) {
+      return {
+        success: false,
+        error: `Services data not available. Please ensure your sheet has a tab named "Services".`
+      };
+    }
+
+    services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
+  }
+
+  // Apply semantic matching
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
+  const matches = await semanticMatch(query, services, 'service', OPENROUTER_API_KEY);
+  const matchedServices = matches.map(m => m.item);
+
+  // Build optional UI components payload
+  const components: Array<Record<string, any>> = [];
+
+  if (matchedServices.length) {
+    components.push({
+      id: `services-${storeId}`,
+      type: 'services',
+      props: { services: matchedServices }
+    });
+  }
+
+  return {
+    success: true,
+    data: {
+      services: matchedServices,
+      count: matchedServices.length,
+      search_query: query
+    },
+    message: matchedServices.length
+      ? `Found ${matchedServices.length} services matching "${query}".`
+      : `No services found matching "${query}". Try browsing all services instead.`,
+    components,
+    componentsVersion: '1'
+  };
+}
+
+// ============================================================================
+// FUNCTION: search_products
+// ============================================================================
+
+async function searchProducts(
+  params: any,
+  context: FunctionContext
+): Promise<FunctionResult> {
+  // Validate params
+  const validation = validateParams(SearchProductsSchema, params);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: `Invalid parameters: ${validation.errors.join(', ')}`
+    };
+  }
+
+  const { query } = validation.data as { query: string };
+  const { storeId, authToken, store } = context;
+
+  // USE CACHED DATA FIRST if available in context
+  let products = context.storeData?.products;
+
+  if (products && products.length > 0) {
+    console.log('[searchProducts] ✅ Using cached products from context:', products.length, 'items');
+  } else {
+    // Fallback: fetch from Google Sheets if not in context
+    console.log('[searchProducts] No cached products, fetching from sheet...');
+
+    const detectedSchema = store?.detected_schema || {};
+    let productsTab = findActualTabName('products', detectedSchema);
+
+    if (!productsTab) {
+      const commonNames = ['Products', 'products', 'PRODUCTS', 'Product', 'Inventory'];
+      for (const name of commonNames) {
+        try {
+          const testData = await loadTabData(storeId, name, authToken, context.requestId);
+          if (testData && testData.length >= 0) {
+            productsTab = name;
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    if (!productsTab) {
+      return {
+        success: false,
+        error: 'Products data not available. Please ensure your sheet has a tab named "Products".'
+      };
+    }
+
+    products = await loadTabData(storeId, productsTab, authToken, context.requestId);
+  }
+
+  // Apply semantic matching
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY') || '';
+  const matches = await semanticMatch(query, products, 'product', OPENROUTER_API_KEY);
+  const matchedProducts = matches.map(m => m.item);
+
+  // Build optional UI components payload
+  const components: Array<Record<string, any>> = [];
+
+  if (matchedProducts.length) {
+    components.push({
+      id: `products-${storeId}`,
+      type: 'products',
+      props: { products: matchedProducts }
+    });
+  }
+
+  return {
+    success: true,
+    data: {
+      products: matchedProducts,
+      count: matchedProducts.length,
+      search_query: query
+    },
+    message: matchedProducts.length
+      ? `Found ${matchedProducts.length} products matching "${query}".`
+      : `No products found matching "${query}". Try browsing all products instead.`,
     components,
     componentsVersion: '1'
   };

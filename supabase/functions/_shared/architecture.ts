@@ -69,28 +69,10 @@ export const ARCHITECTURE_CONFIGS: Record<ArchitectureMode, ArchitectureConfig> 
     prettyPrint: false,
     reasoningEnabled: false,
     classifierHasData: false, // N/A - uses tools array
-    endpoint: 'chat-completion-test',
+    endpoint: 'chat-completion-native',
   },
 };
 
 export function getArchitectureConfig(mode: ArchitectureMode): ArchitectureConfig {
   return ARCHITECTURE_CONFIGS[mode] || ARCHITECTURE_CONFIGS.enhanced;
-}
-
-/**
- * Parse architecture mode from request headers
- */
-export function getArchitectureModeFromHeaders(headers: Headers): ArchitectureMode {
-  const mode = headers.get('x-architecture-mode') as ArchitectureMode;
-  if (mode && mode in ARCHITECTURE_CONFIGS) {
-    return mode;
-  }
-  return 'enhanced'; // Default to enhanced
-}
-
-/**
- * Parse reasoning enabled setting from request headers
- */
-export function getReasoningEnabledFromHeaders(headers: Headers): boolean {
-  return headers.get('x-reasoning-enabled') === 'true';
 }

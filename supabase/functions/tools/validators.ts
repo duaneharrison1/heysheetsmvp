@@ -21,6 +21,15 @@ export const GetProductsSchema = z.object({
   category: z.string().optional().nullable().transform((val: string | null | undefined) => val ?? undefined)
 });
 
+// Search schemas - require query for semantic matching
+export const SearchServicesSchema = z.object({
+  query: z.string().min(1, "Search query is required")
+});
+
+export const SearchProductsSchema = z.object({
+  query: z.string().min(1, "Search query is required")
+});
+
 export const SubmitLeadSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),

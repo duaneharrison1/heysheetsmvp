@@ -51,7 +51,18 @@ serve(async (req) => {
   try {
     // Parse request
     const body: ChatCompletionRequest = await req.json();
-    const { messages, storeId, model, simpleMode, cachedData } = body as ChatCompletionRequest & { cachedData?: { services?: any[]; products?: any[]; hours?: any[] } };
+    const { messages, storeId, model, simpleMode, cachedData, reasoningEnabled = false } = body as ChatCompletionRequest & { cachedData?: { services?: any[]; products?: any[]; hours?: any[] }; reasoningEnabled?: boolean };
+
+    // Log endpoint and settings for verification
+    log(requestId, '==========================================');
+    log(requestId, 'Endpoint called: chat-completion');
+    log(requestId, 'This is the CLASSIFIER + RESPONDER endpoint');
+    log(requestId, '==========================================');
+    log(requestId, 'Received settings:', {
+      model: model || 'x-ai/grok-4.1-fast (default)',
+      reasoningEnabled,
+      storeId,
+    });
 
     // 🆕 SIMPLE MODE: Just do a raw LLM call, no chatbot logic
     if (simpleMode) {
@@ -203,7 +214,7 @@ serve(async (req) => {
       { storeData },
       model,
       {
-        reasoningEnabled: false,  // Disable reasoning tokens
+        reasoningEnabled,         // Pass reasoning setting from request
         includeStoreData: true,   // Enhanced mode: include store overview (set to false for lean mode)
       }
     );
@@ -363,8 +374,8 @@ serve(async (req) => {
       storeConfig,
       model,  // Pass user-selected model to responder
       {
-        architectureMode: 'enhanced',  // Use enhanced mode by default (slim results, no pretty-print, no reasoning)
-        reasoningEnabled: false,
+        architectureMode: 'enhanced',  // Use enhanced mode by default (slim results, no pretty-print)
+        reasoningEnabled,              // Pass reasoning setting from request
         functionName: classification.function_to_call || undefined,
       }
     );
@@ -394,6 +405,8 @@ serve(async (req) => {
       suggestions, // Dynamic suggestions from responder
       // 🆕 ADD DEBUG METADATA (frontend will filter in production)
       debug: {
+        endpoint: 'chat-completion',    // Confirm which endpoint was used
+        reasoningEnabled,               // Confirm reasoning setting
         intentDuration: classifyDuration,
         functionDuration,
         responseDuration,
