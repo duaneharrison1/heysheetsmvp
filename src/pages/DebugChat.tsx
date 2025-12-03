@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { H2, Lead } from "@/components/ui/heading";
 import { Suggestions, Suggestion } from "@/components/ui/ai-suggestions";
 import { supabase } from "@/lib/supabase";
@@ -12,13 +11,6 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Task, TaskTrigger, TaskContent, TaskItem } from "@/components/ui/ai-task";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
 import {
   Send, Loader2, Bot, Sparkles, Bug, Settings2
 } from "lucide-react";
@@ -572,61 +564,47 @@ export default function DebugChat() {
     }
   };
 
-  // Debug panel content - LEFT side panel (replaces store info in StorePage)
-  const DebugPanelContent = () => (
-    <div className="p-6 space-y-6">
+  // Top content for embedded debug panel - store selector and mode toggle with dark styling
+  const debugPanelTopContent = (
+    <div className="space-y-4">
       {/* Header */}
-      <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-orange-100 flex items-center justify-center">
-          <Bug className="w-8 h-8 text-orange-600" />
+      <div className="text-center mb-4">
+        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-orange-500/20 flex items-center justify-center">
+          <Bug className="w-6 h-6 text-orange-400" />
         </div>
-        <h1 className="text-xl font-bold text-foreground mb-1">Debug Chat</h1>
-        <p className="text-sm text-muted-foreground">Test your chatbot</p>
+        <h1 className="text-lg font-bold text-gray-100">Debug Chat</h1>
+        <p className="text-xs text-gray-400">Test your chatbot</p>
       </div>
 
-      {/* Store Selector */}
+      {/* Store Selector - dark styling */}
       <div>
-        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-          Test Store
-        </Label>
-        <Select
+        <label className="text-xs text-gray-400 block mb-1">Test Store</label>
+        <select
           value={selectedStoreId || ''}
-          onValueChange={setSelectedStoreId}
+          onChange={(e) => setSelectedStoreId(e.target.value)}
+          className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a store..." />
-          </SelectTrigger>
-          <SelectContent>
-            {userStores?.map((store: any) => (
-              <SelectItem key={store.id} value={store.id}>
-                {store.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <option value="" disabled>Select a store...</option>
+          {userStores?.map((store: any) => (
+            <option key={store.id} value={store.id}>
+              {store.name}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Mode Toggle */}
+      {/* Architecture Mode - dark styling */}
       <div>
-        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-          Architecture Mode
-        </Label>
-        <Select
+        <label className="text-xs text-gray-400 block mb-1">Architecture Mode</label>
+        <select
           value={useNativeToolCalling ? 'native' : 'classifier'}
-          onValueChange={(v) => setUseNativeToolCalling(v === 'native')}
+          onChange={(e) => setUseNativeToolCalling(e.target.value === 'native')}
+          className="w-full bg-gray-900 text-gray-100 p-2 rounded border border-gray-700 focus:border-gray-600 focus:outline-none text-sm"
         >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="classifier">Classifier + Responder</SelectItem>
-            <SelectItem value="native">Native Tool Calling</SelectItem>
-          </SelectContent>
-        </Select>
+          <option value="classifier">Classifier + Responder</option>
+          <option value="native">Native Tool Calling</option>
+        </select>
       </div>
-
-      {/* Embedded Debug Panel */}
-      <DebugPanel showAdvancedOptions={true} />
     </div>
   );
 
@@ -656,8 +634,8 @@ export default function DebugChat() {
       {/* Main Content: Responsive Layout */}
       <div className="flex-1 flex w-full min-h-0">
         {/* Debug Panel Side Panel - LEFT side, Hidden on mobile, visible on md+ */}
-        <div className="hidden md:block w-80 flex-shrink-0 bg-card border-r border-border overflow-y-auto">
-          <DebugPanelContent />
+        <div className="hidden md:block w-96 flex-shrink-0 overflow-hidden">
+          <DebugPanel embedded={true} topContent={debugPanelTopContent} showAdvancedOptions={true} />
         </div>
 
         {/* Chat Section - RIGHT side, Full width on mobile */}
@@ -787,11 +765,11 @@ export default function DebugChat() {
 
       {/* Mobile Debug Panel Sheet */}
       <Sheet open={showDebugSheet} onOpenChange={setShowDebugSheet}>
-        <SheetContent side="left" className="w-full sm:max-w-md p-0 overflow-y-auto">
-          <SheetHeader className="px-6 pt-6 pb-0">
-            <SheetTitle className="sr-only">Debug Settings</SheetTitle>
+        <SheetContent side="left" className="w-full sm:max-w-md p-0 overflow-hidden bg-gray-950">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Debug Settings</SheetTitle>
           </SheetHeader>
-          <DebugPanelContent />
+          <DebugPanel embedded={true} topContent={debugPanelTopContent} showAdvancedOptions={true} />
         </SheetContent>
       </Sheet>
 
