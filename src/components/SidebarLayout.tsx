@@ -29,7 +29,7 @@ export const UserContext = React.createContext<any>(null);
 const navItems = [
   { id: "stores", label: "My Stores", href: "/dashboard", icon: Store },
   { id: "images", label: "Manage Images", href: "/images", icon: Image },
-  { id: "debug-chat", label: "Debug Chat", href: "/debug-chat", icon: Bug },
+  { id: "debug-chat", label: "Debug Chat", href: "/debug-chat", icon: Bug, newWindow: true },
   { id: "account", label: "Settings", href: "/account", icon: UserCog },
   { id: "help", label: "Help & Support", href: "/help", icon: LifeBuoy },
 ];
@@ -239,7 +239,23 @@ function SidebarWrapper({ user, location, firstStoreId }: { user: any; location:
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.href;
-            
+
+            // Handle items that should open in a new window
+            if (item.newWindow) {
+              return (
+                <SidebarMenuItem key={item.id}>
+                  <SidebarMenuButton
+                    isActive={isActive}
+                    onClick={() => window.open(item.href, '_blank')}
+                    className={isCollapsed ? 'flex items-center justify-center w-full cursor-pointer' : 'flex items-center gap-3 cursor-pointer'}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            }
+
             return (
               <SidebarMenuItem key={item.id}>
                 <SidebarMenuButton
