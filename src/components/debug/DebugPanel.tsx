@@ -11,7 +11,11 @@ import { DEBUG_CONFIG } from '@/config/debug';
 import { cn } from '@/lib/utils';
 import { useEffect, useRef } from 'react';
 
-export function DebugPanel() {
+interface DebugPanelProps {
+  showAdvancedOptions?: boolean;
+}
+
+export function DebugPanel({ showAdvancedOptions = true }: DebugPanelProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -114,8 +118,8 @@ export function DebugPanel() {
           </select>
         </div>
 
-        {/* Evaluator Model Selector - Only visible in test mode */}
-        {isTestMode && (
+        {/* Evaluator Model Selector - Only visible in test mode and when advanced options shown */}
+        {showAdvancedOptions && isTestMode && (
           <div className="mb-3">
             <label className="text-xs text-gray-400 block mb-1">Evaluator Model (QA)</label>
             <select
@@ -132,39 +136,36 @@ export function DebugPanel() {
           </div>
         )}
 
-        {/* Architecture Options (collapsible) */}
-        <details className="mb-3">
-          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300 mb-2">
-            ⚙️ Architecture Options
-            {useNativeToolCalling && (
-              <Badge className="ml-2 bg-blue-600 text-white text-xs py-0 px-1.5">
-                NATIVE
-              </Badge>
-            )}
-          </summary>
-          <div className="ml-4 space-y-2">
-            {/* Native Tool Calling Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={useNativeToolCalling}
-                onChange={(e) => setUseNativeToolCalling(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-              />
-              <span className="text-xs text-gray-400 group-hover:text-gray-300">
-                Native Tool Calling
-              </span>
-            </label>
-            <p className="text-xs text-gray-500 ml-6">
-              Use OpenAI-style native tool calling instead of classifier + responder
-            </p>
-
-            {/* Tip for Debug Chat */}
-            <p className="text-xs text-gray-500 border-t border-gray-800 pt-2 mt-2">
-              For advanced debugging with mode switching and reasoning toggle, use the <a href="/debug-chat" className="text-blue-400 hover:text-blue-300">Debug Chat</a> page.
-            </p>
-          </div>
-        </details>
+        {/* Architecture Options (collapsible) - only show when showAdvancedOptions is true */}
+        {showAdvancedOptions && (
+          <details className="mb-3">
+            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300 mb-2">
+              ⚙️ Architecture Options
+              {useNativeToolCalling && (
+                <Badge className="ml-2 bg-blue-600 text-white text-xs py-0 px-1.5">
+                  NATIVE
+                </Badge>
+              )}
+            </summary>
+            <div className="ml-4 space-y-2">
+              {/* Native Tool Calling Toggle */}
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={useNativeToolCalling}
+                  onChange={(e) => setUseNativeToolCalling(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+                />
+                <span className="text-xs text-gray-400 group-hover:text-gray-300">
+                  Native Tool Calling
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 ml-6">
+                Use OpenAI-style native tool calling instead of classifier + responder
+              </p>
+            </div>
+          </details>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">

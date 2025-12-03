@@ -29,6 +29,7 @@ export const UserContext = React.createContext<any>(null);
 const navItems = [
   { id: "stores", label: "My Stores", href: "/dashboard", icon: Store },
   { id: "images", label: "Manage Images", href: "/images", icon: Image },
+  { id: "debug-chat", label: "Debug Chat", href: "/debug-chat", icon: Bug },
   { id: "account", label: "Settings", href: "/account", icon: UserCog },
   { id: "help", label: "Help & Support", href: "/help", icon: LifeBuoy },
 ];
@@ -41,7 +42,6 @@ const adminNavItems = [
   { id: "admin-support", label: "Support Tickets", href: "/admin/support", icon: Ticket },
   { id: "admin-emails", label: "Email Lists", href: "/admin/emails", icon: Mail },
   { id: "admin-qa", label: "QA Results", href: "/admin/qa-results", icon: LayoutGrid },
-  { id: "debug-chat", label: "Debug Chat", href: "/debug-chat", icon: Bug },
 ];
 
 interface SidebarLayoutProps {
