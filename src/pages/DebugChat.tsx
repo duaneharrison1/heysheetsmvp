@@ -103,7 +103,7 @@ export default function DebugChat() {
 
       const { data, error } = await supabase
         .from('stores')
-        .select('id, name, slug, sheet_id')
+        .select('id, name, sheet_id')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
