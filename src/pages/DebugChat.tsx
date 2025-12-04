@@ -630,7 +630,7 @@ export default function DebugChat() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Main Content: Responsive Layout */}
       <div className="flex-1 flex w-full min-h-0">
         {/* Debug Panel Side Panel - LEFT side, Hidden on mobile, visible on md+ */}
