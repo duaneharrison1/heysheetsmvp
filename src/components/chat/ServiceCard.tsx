@@ -17,12 +17,16 @@ export const ServiceCard: React.FC<{
     >
       <CardHeader className="pb-3 p-3 sm:p-6">
         <div className="aspect-square bg-gradient-to-br from-muted to-muted/60 rounded-lg mb-2 flex items-center justify-center h-16 sm:h-20 overflow-hidden">
-          {service?.image ? (
+          {(service?.imageURL || service?.image) ? (
             <img
-              src={service.image}
+              src={service.imageURL || service.image}
               alt={service.serviceName || 'service image'}
               className="w-full h-full object-cover"
               decoding="async"
+              onError={(e) => {
+                // Hide broken images by replacing with fallback
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
             />
           ) : (
             <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50" />

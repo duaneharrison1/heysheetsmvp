@@ -16,12 +16,16 @@ export const ProductCard: React.FC<{
     >
       <CardHeader className="pb-2 p-3 sm:p-4">
         <div className="aspect-square bg-gradient-to-br from-muted to-muted/60 rounded-lg mb-2 flex items-center justify-center h-16 sm:h-20 overflow-hidden">
-          {product?.image ? (
+          {(product?.imageURL || product?.image) ? (
             <img
-              src={product.image}
+              src={product.imageURL || product.image}
               alt={product.name || 'product image'}
               className="w-full h-full object-cover"
               decoding="async"
+              onError={(e) => {
+                // Hide broken images by replacing with fallback
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
             />
           ) : (
             <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50" />
