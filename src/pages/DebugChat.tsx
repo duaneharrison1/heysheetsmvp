@@ -174,7 +174,8 @@ export default function DebugChat() {
   }, [isTyping]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Use block: 'nearest' to prevent scrolling the entire page
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages, isTyping]);
 
   const loadStore = async (storeId: string) => {
@@ -566,17 +567,11 @@ export default function DebugChat() {
 
   // Top content for embedded debug panel - store selector and mode toggle with dark styling
   const debugPanelTopContent = (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="text-center mb-4">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-orange-500/20 flex items-center justify-center">
-          <Bug className="w-6 h-6 text-orange-400" />
-        </div>
-        <h1 className="text-lg font-bold text-gray-100">Debug Chat</h1>
-        <p className="text-xs text-gray-400">Test your chatbot</p>
-      </div>
+    <div className="space-y-3">
+      {/* Simple Header - matches Main Store style */}
+      <h1 className="text-lg font-bold text-gray-100">Debug Chat</h1>
 
-      {/* Store Selector - dark styling */}
+      {/* Store Selector */}
       <div>
         <label className="text-xs text-gray-400 block mb-1">Test Store</label>
         <select
@@ -593,9 +588,9 @@ export default function DebugChat() {
         </select>
       </div>
 
-      {/* Architecture Mode - dark styling */}
+      {/* Architecture Mode */}
       <div>
-        <label className="text-xs text-gray-400 block mb-1">Architecture Mode</label>
+        <label className="text-xs text-gray-400 block mb-1">Architecture</label>
         <select
           value={useNativeToolCalling ? 'native' : 'classifier'}
           onChange={(e) => setUseNativeToolCalling(e.target.value === 'native')}

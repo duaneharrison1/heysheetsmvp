@@ -529,6 +529,11 @@ serve(async (req) => {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
+    // Track timing breakdown for debug panel (similar to classifier mode)
+    let intentDuration = 0;      // First LLM call (tool decision)
+    let totalFunctionDuration = 0;  // Sum of all function executions
+    let responseDuration = 0;    // Final LLM call (response generation)
+
     // Iterative tool calling loop
     while (totalCalls < maxCalls) {
       totalCalls++;
@@ -582,6 +587,10 @@ serve(async (req) => {
 
       // Check if AI wants to call a tool
       if (message.tool_calls && message.tool_calls.length > 0) {
+        // First LLM call with tool decision = intentDuration
+        if (intentDuration === 0) {
+          intentDuration = llmDuration;
+        }
         const toolCall = message.tool_calls[0];
         const functionName = toolCall.function.name;
         let functionArgs: Record<string, any> = {};
@@ -605,6 +614,9 @@ serve(async (req) => {
           result: functionResult,
           duration: functionDuration
         });
+
+        // Accumulate function duration for timeline
+        totalFunctionDuration += functionDuration;
 
         log(requestId, `✅ Function ${functionName} (${functionDuration.toFixed(0)}ms)`, {
           success: functionResult?.success,
@@ -644,8 +656,16 @@ serve(async (req) => {
       }
 
       // No tool call - this is the final text response
+      responseDuration = llmDuration;  // Track final response duration
       finalResponse = message.content || '';
       break;
+    }
+
+    // If no functions were called, the intentDuration is the entire response time
+    // (i.e., it was a simple greeting without tool use)
+    if (functionCalls.length === 0) {
+      intentDuration = responseDuration;
+      responseDuration = 0;
     }
 
     const totalDuration = performance.now() - requestStart;
@@ -675,6 +695,10 @@ serve(async (req) => {
         mode: 'native-tool-calling',
         llmCalls: totalCalls,
         totalDuration,
+        // Timeline breakdown (compatible with classifier mode debug panel)
+        intentDuration,        // Tool decision time (first LLM call)
+        functionDuration: totalFunctionDuration,  // Total function execution time
+        responseDuration,      // Response generation time (final LLM call)
         functionCalls: functionCalls.map(fc => ({
           name: fc.name,
           arguments: fc.args,
