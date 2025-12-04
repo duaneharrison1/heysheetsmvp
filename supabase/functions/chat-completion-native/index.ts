@@ -18,6 +18,7 @@ import {
   Message,
 } from '../_shared/types.ts';
 import { slimForResponder } from '../_shared/slim.ts';
+import { getReasoningConfig } from '../_shared/model-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -534,12 +535,54 @@ serve(async (req) => {
     let totalFunctionDuration = 0;  // Sum of all function executions
     let responseDuration = 0;    // Final LLM call (response generation)
 
+    // Reasoning tracking
+    let reasoning: string | null = null;
+    let reasoningDetails: any[] | null = null;
+    let reasoningDuration = 0;
+
+    // Check if model supports reasoning
+    const modelId = model || 'x-ai/grok-4.1-fast';
+    const modelConfig = getReasoningConfig(modelId);
+    const shouldUseReasoning = reasoningEnabled && modelConfig.supportsReasoning;
+
+    log(requestId, '🧠 Reasoning config:', {
+      requestedModel: modelId,
+      supportsReasoning: modelConfig.supportsReasoning,
+      reasoningEnabled,
+      willUseReasoning: shouldUseReasoning,
+    });
+
     // Iterative tool calling loop
     while (totalCalls < maxCalls) {
       totalCalls++;
       log(requestId, `🔄 LLM call #${totalCalls}`);
 
       const llmStart = performance.now();
+
+      // Build request body with conditional reasoning
+      const requestBody: Record<string, any> = {
+        model: modelId,
+        messages: apiMessages,
+        tools: tools,
+        tool_choice: 'auto',
+        temperature: 0.3,
+        max_tokens: 600,  // Reduced from 1000 to match responder (prevent verbose responses)
+      };
+
+      // Add reasoning parameter if enabled and supported
+      if (shouldUseReasoning) {
+        if (modelConfig.reasoningParam === 'legacy_deepseek') {
+          // DeepSeek R1 uses legacy parameter
+          requestBody.include_reasoning = true;
+        } else {
+          // Unified reasoning parameter (default)
+          requestBody.reasoning = {
+            effort: modelConfig.defaultEffort || 'medium'
+          };
+        }
+        log(requestId, '🧠 Reasoning enabled with:', requestBody.reasoning || requestBody.include_reasoning);
+      }
+
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -548,16 +591,7 @@ serve(async (req) => {
           'HTTP-Referer': 'https://heysheets.com',
           'X-Title': 'HeySheets Native Tool Calling'
         },
-        body: JSON.stringify({
-          model: model || 'x-ai/grok-4.1-fast',
-          messages: apiMessages,
-          tools: tools,
-          tool_choice: 'auto',
-          temperature: 0.3,
-          max_tokens: 600,  // Reduced from 1000 to match responder (prevent verbose responses)
-          // Pass reasoning setting from request (defaults to disabled)
-          reasoning: { enabled: reasoningEnabled },
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -580,9 +614,35 @@ serve(async (req) => {
         throw new Error('No message in OpenRouter response');
       }
 
+      // Extract reasoning from response if present
+      if (shouldUseReasoning) {
+        // Check for simple reasoning field
+        if (message.reasoning && !reasoning) {
+          reasoning = message.reasoning;
+          reasoningDuration += llmDuration; // Attribute LLM time to reasoning
+          log(requestId, '🧠 Got reasoning (simple):', { length: reasoning.length });
+        }
+
+        // Check for detailed reasoning_details array
+        if (message.reasoning_details && Array.isArray(message.reasoning_details)) {
+          reasoningDetails = message.reasoning_details;
+
+          // Extract text for simple display if not already set
+          if (!reasoning) {
+            reasoning = message.reasoning_details
+              .filter((r: any) => r.type === 'reasoning.text' || r.type === 'reasoning.summary')
+              .map((r: any) => r.text || r.summary?.join('\n') || '')
+              .join('\n\n');
+            reasoningDuration += llmDuration;
+          }
+          log(requestId, '🧠 Got reasoning_details:', { count: reasoningDetails.length });
+        }
+      }
+
       log(requestId, `✅ LLM response (${llmDuration.toFixed(0)}ms)`, {
         hasToolCalls: !!message.tool_calls?.length,
-        contentLength: message.content?.length || 0
+        contentLength: message.content?.length || 0,
+        hasReasoning: !!message.reasoning || !!message.reasoning_details
       });
 
       // Check if AI wants to call a tool
@@ -691,7 +751,7 @@ serve(async (req) => {
       functionResult: functionResult,
       debug: {
         endpoint: 'chat-completion-native',  // Confirm which endpoint was used
-        reasoningEnabled,                     // Confirm reasoning setting
+        reasoningEnabled: shouldUseReasoning, // Actual reasoning status (after model check)
         mode: 'native-tool-calling',
         llmCalls: totalCalls,
         totalDuration,
@@ -699,6 +759,10 @@ serve(async (req) => {
         intentDuration,        // Tool decision time (first LLM call)
         functionDuration: totalFunctionDuration,  // Total function execution time
         responseDuration,      // Response generation time (final LLM call)
+        reasoningDuration: reasoningDuration > 0 ? reasoningDuration : undefined,  // Time spent on reasoning
+        // Reasoning content (if available)
+        reasoning,             // Simple text version
+        reasoningDetails,      // Full structured version (if available)
         functionCalls: functionCalls.map(fc => ({
           name: fc.name,
           arguments: fc.args,
