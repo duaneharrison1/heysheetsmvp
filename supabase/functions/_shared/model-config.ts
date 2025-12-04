@@ -7,7 +7,7 @@
 
 export interface ModelReasoningConfig {
   supportsReasoning: boolean;
-  reasoningParam?: 'unified' | 'legacy_deepseek';
+  reasoningParam?: 'unified' | 'unified_enabled' | 'legacy_deepseek';
   defaultEffort?: 'low' | 'medium' | 'high';
 }
 
@@ -19,16 +19,14 @@ export const MODEL_REASONING_CONFIG: Record<string, ModelReasoningConfig> = {
   'meta-llama/llama-3.1-70b-instruct': { supportsReasoning: false },
   'google/gemini-flash-1.5': { supportsReasoning: false },
 
-  // xAI Grok - supports effort
+  // xAI Grok - use simple enabled flag (not effort)
   'x-ai/grok-2': {
     supportsReasoning: true,
-    reasoningParam: 'unified',
-    defaultEffort: 'medium'
+    reasoningParam: 'unified_enabled',
   },
   'x-ai/grok-4.1-fast': {
     supportsReasoning: true,
-    reasoningParam: 'unified',
-    defaultEffort: 'medium'
+    reasoningParam: 'unified_enabled',
   },
 
   // Anthropic - full support

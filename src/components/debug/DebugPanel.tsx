@@ -486,7 +486,7 @@ function RequestCard({
 
           {/* Reasoning Content - shown when reasoning was used */}
           {request.reasoning && (
-            <div className="text-xs">
+            <div className="text-xs" onClick={(e) => e.stopPropagation()}>
               <div className="text-purple-400 font-semibold mb-1.5">
                 🧠 Model Reasoning:
               </div>
