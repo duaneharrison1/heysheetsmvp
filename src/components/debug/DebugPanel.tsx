@@ -398,6 +398,18 @@ function RequestCard({
         </div>
       )}
 
+      {/* Reasoning Badge - visible in collapsed view when reasoning was used */}
+      {request.reasoning && (
+        <div className="mb-2">
+          <Badge
+            variant="outline"
+            className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
+          >
+            🧠 Reasoning ({request.reasoning.length > 500 ? 'detailed' : 'brief'})
+          </Badge>
+        </div>
+      )}
+
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
@@ -472,17 +484,17 @@ function RequestCard({
             </div>
           )}
 
-          {/* Reasoning Content - collapsible, only if reasoning text was returned */}
+          {/* Reasoning Content - shown when reasoning was used */}
           {request.reasoning && (
             <div className="text-xs">
-              <details className="group">
-                <summary className="text-purple-400 cursor-pointer hover:text-purple-300 font-semibold mb-1">
-                  🧠 View Reasoning ({request.reasoning.length > 500 ? 'expanded' : 'brief'})
-                </summary>
-                <pre className="mt-1.5 p-2 bg-gray-800/50 rounded text-[10px] text-gray-300 font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
+              <div className="text-purple-400 font-semibold mb-1.5">
+                🧠 Model Reasoning:
+              </div>
+              <div className="p-2.5 bg-purple-900/20 border border-purple-500/30 rounded">
+                <pre className="text-[11px] text-gray-200 font-mono whitespace-pre-wrap max-h-64 overflow-y-auto">
                   {request.reasoning}
                 </pre>
-              </details>
+              </div>
             </div>
           )}
 

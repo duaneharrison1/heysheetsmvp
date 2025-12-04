@@ -319,6 +319,18 @@ export default function DebugChat() {
 
       const data = await response.json();
       console.log('Chat response data:', data);
+
+      // Debug: Log reasoning info specifically
+      if (shouldEnableReasoning) {
+        console.log('[DebugChat] Reasoning debug:', {
+          enabled: data.debug?.reasoningEnabled,
+          hasReasoning: !!data.debug?.reasoning,
+          reasoningLength: data.debug?.reasoning?.length || 0,
+          reasoningDuration: data.debug?.reasoningDuration,
+          hasReasoningDetails: !!data.debug?.reasoningDetails,
+        });
+      }
+
       const aiResponse = data.text || "I apologize, I couldn't generate a response.";
       const suggestions = data.suggestions || [];
 
