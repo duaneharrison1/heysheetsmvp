@@ -60,8 +60,13 @@ export interface DebugRequest {
     intentDuration?: number
     functionDuration?: number
     responseDuration?: number
+    reasoningDuration?: number
     totalDuration?: number
   }
+
+  // Reasoning content (Native Tool Calling mode)
+  reasoning?: string | null
+  reasoningDetails?: any[] | null
 
   tokens?: {
     classification?: { input: number; output: number }

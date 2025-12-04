@@ -68,6 +68,19 @@ export default function DebugChat() {
   const [testRunner] = useState(() => new TestRunner());
   const isMobile = useIsMobile();
   const [showDebugSheet, setShowDebugSheet] = useState(false);
+  const [reasoningEnabled, setReasoningEnabled] = useState(false);
+
+  // Models that support OpenRouter's reasoning parameter
+  const MODELS_WITH_REASONING = [
+    'anthropic/claude-3.5-sonnet',
+    'anthropic/claude-3.7-sonnet',
+    'anthropic/claude-sonnet-4',
+    'x-ai/grok-2',
+    'x-ai/grok-4.1-fast',
+    'deepseek/deepseek-r1',
+    'deepseek/deepseek-chat-v3.1',
+    'google/gemini-2.0-flash-thinking-exp',
+  ];
 
   // Initial quick actions shown when chat first loads
   const initialQuickActions = [
@@ -279,6 +292,11 @@ export default function DebugChat() {
       const endpoint = useNativeToolCalling ? 'chat-completion-native' : 'chat-completion';
       console.log('[DebugChat] Using endpoint:', endpoint, '(native:', useNativeToolCalling, ')');
 
+      // Only pass reasoningEnabled if Native mode + supported model
+      const shouldEnableReasoning = useNativeToolCalling &&
+        MODELS_WITH_REASONING.includes(selectedModel) &&
+        reasoningEnabled;
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
         {
@@ -289,6 +307,7 @@ export default function DebugChat() {
             storeId: selectedStoreId,
             model: selectedModel,
             cachedData,
+            reasoningEnabled: shouldEnableReasoning,
           })
         }
       );
@@ -319,12 +338,15 @@ export default function DebugChat() {
           intentDuration: data.debug?.intentDuration,
           functionDuration: data.debug?.functionDuration,
           responseDuration: data.debug?.responseDuration,
+          reasoningDuration: data.debug?.reasoningDuration,
         },
         intent: data.debug?.intent,
         functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,
         steps: data.debug?.steps,
+        reasoning: data.debug?.reasoning,
+        reasoningDetails: data.debug?.reasoningDetails,
         status: 'complete',
       });
 
@@ -599,6 +621,21 @@ export default function DebugChat() {
           <option value="native">Native Tool Calling</option>
         </select>
       </div>
+
+      {/* Reasoning Toggle - only show for Native mode + supported models */}
+      {useNativeToolCalling && MODELS_WITH_REASONING.includes(selectedModel) && (
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reasoningEnabled}
+              onChange={(e) => setReasoningEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
+            />
+            <span className="text-xs text-gray-300">Extended Reasoning</span>
+          </label>
+        </div>
+      )}
     </div>
   );
 

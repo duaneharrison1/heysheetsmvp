@@ -156,24 +156,6 @@ export function DebugPanel({ showAdvancedOptions = true, embedded = false, topCo
           </div>
         )}
 
-        {/* Reasoning Toggle - only show when Native Tool Calling is enabled */}
-        {showAdvancedOptions && useNativeToolCalling && (
-          <div className="mb-3">
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={false}
-                onChange={() => {}}
-                disabled
-                className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900 opacity-50"
-              />
-              <span className="text-xs text-gray-500">
-                Reasoning (coming soon)
-              </span>
-            </label>
-          </div>
-        )}
-
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2">
           <HoverTooltip
@@ -469,6 +451,13 @@ function RequestCard({
                   </>
                 )}
 
+                {/* Reasoning - only shows if reasoning was used */}
+                {request.timings.reasoningDuration !== undefined && request.timings.reasoningDuration > 0 && (
+                  <div className="text-purple-400">
+                    🧠 Reasoning: {(request.timings.reasoningDuration / 1000).toFixed(2)}s
+                  </div>
+                )}
+
                 {/* Response Generation */}
                 {request.timings.responseDuration !== undefined ? (
                   <div className="text-gray-400">
@@ -480,6 +469,20 @@ function RequestCard({
                   </div>
                 ) : null}
               </div>
+            </div>
+          )}
+
+          {/* Reasoning Content - collapsible, only if reasoning text was returned */}
+          {request.reasoning && (
+            <div className="text-xs">
+              <details className="group">
+                <summary className="text-purple-400 cursor-pointer hover:text-purple-300 font-semibold mb-1">
+                  🧠 View Reasoning ({request.reasoning.length > 500 ? 'expanded' : 'brief'})
+                </summary>
+                <pre className="mt-1.5 p-2 bg-gray-800/50 rounded text-[10px] text-gray-300 font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
+                  {request.reasoning}
+                </pre>
+              </details>
             </div>
           )}
 
