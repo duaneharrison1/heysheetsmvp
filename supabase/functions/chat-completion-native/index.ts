@@ -17,6 +17,7 @@ import {
   FunctionResult,
   Message,
 } from '../_shared/types.ts';
+import { slimForResponder } from '../_shared/slim.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -347,9 +348,16 @@ function buildSystemPrompt(store: StoreConfig, storeData: StoreData): string {
 
   let prompt = `You are a helpful assistant for ${storeName}. Help customers with their questions about services, products, bookings, and store information.
 
-Be friendly, helpful, and conversational. When you need specific data, use the available tools.
+RESPONSE GUIDELINES:
+- Be warm, friendly, and professional
+- Keep responses CONCISE (under 200 words unless explaining complex details)
+- When listing services/products, show 3-4 highlights maximum, not the full list
+- DO NOT include image URLs or markdown images in your response (the UI handles images separately)
+- Present data naturally and conversationally - don't just dump lists
+- Use emojis sparingly and appropriately
+- Don't mention internal system details (functions, tools, confidence scores)
 
-IMPORTANT RULES:
+TOOL USAGE RULES:
 - For booking requests, ALWAYS use get_booking_slots (not check_availability) to show the calendar
 - For browsing ALL services, use get_services (returns complete list)
 - For SPECIFIC service searches (e.g., "beginner classes", "relaxing"), use search_services with query
@@ -541,7 +549,7 @@ serve(async (req) => {
           tools: tools,
           tool_choice: 'auto',
           temperature: 0.3,
-          max_tokens: 1000,
+          max_tokens: 600,  // Reduced from 1000 to match responder (prevent verbose responses)
           // Pass reasoning setting from request (defaults to disabled)
           reasoning: { enabled: reasoningEnabled },
         })
@@ -610,6 +618,10 @@ serve(async (req) => {
           break;
         }
 
+        // Slim the function result before passing back to LLM
+        // This removes imageURL, tags, and truncates descriptions to reduce token usage
+        const slimmedData = slimForResponder(functionName, functionResult?.data);
+
         // Add tool call and result to messages
         apiMessages.push({
           role: 'assistant',
@@ -621,7 +633,7 @@ serve(async (req) => {
           tool_call_id: toolCall.id,
           content: JSON.stringify({
             success: functionResult?.success,
-            data: functionResult?.data,
+            data: slimmedData,  // Use slimmed data instead of full data
             message: functionResult?.message,
             error: functionResult?.error
           })
