@@ -174,8 +174,7 @@ export default function DebugChat() {
   }, [isTyping]);
 
   useEffect(() => {
-    // Use block: 'nearest' to prevent scrolling the entire page
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
   const loadStore = async (storeId: string) => {
