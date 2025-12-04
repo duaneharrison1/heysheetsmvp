@@ -574,8 +574,11 @@ serve(async (req) => {
         if (modelConfig.reasoningParam === 'legacy_deepseek') {
           // DeepSeek R1 uses legacy parameter
           requestBody.include_reasoning = true;
+        } else if (modelConfig.reasoningParam === 'unified_enabled') {
+          // Simple enabled flag (for models like Grok that don't support effort)
+          requestBody.reasoning = { enabled: true };
         } else {
-          // Unified reasoning parameter (default)
+          // Unified reasoning parameter with effort (default)
           requestBody.reasoning = {
             effort: modelConfig.defaultEffort || 'medium'
           };
