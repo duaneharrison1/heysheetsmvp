@@ -104,9 +104,8 @@ export function DebugPanel({ showAdvancedOptions = true, embedded = false, topCo
       <div className="p-4 border-b border-gray-800">
         {/* Top content (store selector, mode, etc.) - only for embedded mode */}
         {embedded && topContent && (
-          <div className="mb-4">
+          <div className="mb-3">
             {topContent}
-            <div className="border-t border-gray-800 mt-4 pt-4"></div>
           </div>
         )}
 
@@ -157,35 +156,22 @@ export function DebugPanel({ showAdvancedOptions = true, embedded = false, topCo
           </div>
         )}
 
-        {/* Architecture Options (collapsible) - only show when showAdvancedOptions is true */}
-        {showAdvancedOptions && (
-          <details className="mb-3">
-            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300 mb-2">
-              ⚙️ Architecture Options
-              {useNativeToolCalling && (
-                <Badge className="ml-2 bg-blue-600 text-white text-xs py-0 px-1.5">
-                  NATIVE
-                </Badge>
-              )}
-            </summary>
-            <div className="ml-4 space-y-2">
-              {/* Native Tool Calling Toggle */}
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={useNativeToolCalling}
-                  onChange={(e) => setUseNativeToolCalling(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-                />
-                <span className="text-xs text-gray-400 group-hover:text-gray-300">
-                  Native Tool Calling
-                </span>
-              </label>
-              <p className="text-xs text-gray-500 ml-6">
-                Use OpenAI-style native tool calling instead of classifier + responder
-              </p>
-            </div>
-          </details>
+        {/* Reasoning Toggle - only show when Native Tool Calling is enabled */}
+        {showAdvancedOptions && useNativeToolCalling && (
+          <div className="mb-3">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => {}}
+                disabled
+                className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900 opacity-50"
+              />
+              <span className="text-xs text-gray-500">
+                Reasoning (coming soon)
+              </span>
+            </label>
+          </div>
         )}
 
         {/* Quick Stats */}
