@@ -230,6 +230,7 @@ async function getServices(
 
   const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
+  let dataLoadDuration = 0;
 
   // USE CACHED DATA FIRST if available in context
   let services = context.storeData?.services;
@@ -270,8 +271,10 @@ async function getServices(
       };
     }
 
-    // Load all services
-    services = await loadTabData(storeId, servicesTab, authToken, context.requestId);
+    // Load all services with timing
+    const loadResult = await loadTabDataWithTiming(storeId, servicesTab, authToken, context.requestId);
+    services = loadResult.data;
+    dataLoadDuration += loadResult.duration;
   }
 
   // Apply category filter if specified
@@ -300,7 +303,8 @@ async function getServices(
     data: {
       services,
       count: services.length,
-      category: category || null
+      category: category || null,
+      dataLoadDuration: dataLoadDuration > 0 ? dataLoadDuration : undefined
     },
     message: `Found ${services.length} services.`,
     components,
@@ -327,6 +331,7 @@ async function getProducts(
 
   const { query, category } = validation.data as Record<string, any>;
   const { storeId, authToken, store } = context;
+  let dataLoadDuration = 0;
 
   // USE CACHED DATA FIRST if available in context
   let products = context.storeData?.products;
@@ -366,8 +371,10 @@ async function getProducts(
       };
     }
 
-    // Load all products
-    products = await loadTabData(storeId, productsTab, authToken, context.requestId);
+    // Load all products with timing
+    const loadResult = await loadTabDataWithTiming(storeId, productsTab, authToken, context.requestId);
+    products = loadResult.data;
+    dataLoadDuration += loadResult.duration;
   }
 
   // Apply category filter if specified
@@ -396,7 +403,8 @@ async function getProducts(
     data: {
       products,
       count: products.length,
-      category: category || null
+      category: category || null,
+      dataLoadDuration: dataLoadDuration > 0 ? dataLoadDuration : undefined
     },
     message: `Found ${products.length} products.`,
     components,
@@ -1445,14 +1453,23 @@ function findActualTabName(
 }
 
 /**
- * Load data from a sheet tab via google-sheet function
+ * Result from loading tab data with timing information
  */
-async function loadTabData(
+interface LoadTabResult {
+  data: any[];
+  duration: number;
+}
+
+/**
+ * Load data from a sheet tab via google-sheet function with timing
+ */
+async function loadTabDataWithTiming(
   storeId: string,
   tabName: string,
   authToken: string,
   requestId?: string
-): Promise<any[]> {
+): Promise<LoadTabResult> {
+  const startTime = performance.now();
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
   console.log(`[loadTabData] Loading tab: ${tabName} for store: ${storeId}`);
@@ -1485,9 +1502,25 @@ async function loadTabData(
   }
 
   const result = await response.json();
-  console.log(`[loadTabData] Loaded ${result.data?.length || 0} rows from ${tabName}`);
-  return result.data || [];
+  const duration = performance.now() - startTime;
+  console.log(`[loadTabData] Loaded ${result.data?.length || 0} rows from ${tabName} (${duration.toFixed(0)}ms)`);
+  return { data: result.data || [], duration };
 }
+
+/**
+ * Load data from a sheet tab via google-sheet function
+ * @deprecated Use loadTabDataWithTiming for timing information
+ */
+async function loadTabData(
+  storeId: string,
+  tabName: string,
+  authToken: string,
+  requestId?: string
+): Promise<any[]> {
+  const result = await loadTabDataWithTiming(storeId, tabName, authToken, requestId);
+  return result.data;
+}
+
 
 /**
  * Append data to a sheet tab via google-sheet function

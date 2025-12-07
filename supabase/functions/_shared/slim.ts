@@ -19,8 +19,10 @@ export function slimForResponder(functionName: string, data: any): any {
 
   switch (functionName) {
     case 'get_products':
+    case 'search_products':
       return slimProducts(data);
     case 'get_services':
+    case 'search_services':
       return slimServices(data);
     case 'get_booking_slots':
       return slimBookingSlots(data);
@@ -129,28 +131,68 @@ function slimRecommendations(data: any): any {
 }
 
 function slimStoreInfo(data: any): any {
-  if (!data.data) return data;
-
+  // Handle both cases: data is the inner object OR data.data exists
+  // When called from native tool calling: slimForResponder(name, functionResult.data)
+  // functionResult.data = { store_name, info_type, services: [...], ... }
+  // So we receive the inner object directly, NOT a wrapper with .data property
+  
+  const innerData = data.data || data;
+  const hasWrapper = !!data.data;
+  
   // Keep store info relatively complete but trim arrays
-  const slimmedData: any = { ...data.data };
+  const slimmedData: any = {};
+  
+  // Preserve essential scalar fields
+  if (innerData.store_name) slimmedData.store_name = innerData.store_name;
+  if (innerData.info_type) slimmedData.info_type = innerData.info_type;
 
-  if (slimmedData.services) {
-    slimmedData.services = slimmedData.services.slice(0, 5).map((s: any) => ({
+  // Slim store_info array - extract only essential fields
+  if (innerData.store_info && Array.isArray(innerData.store_info)) {
+    const storeInfo = innerData.store_info[0];
+    if (storeInfo) {
+      slimmedData.storeDetails = {
+        name: storeInfo.name || storeInfo.storeName,
+        address: storeInfo.address,
+        phone: storeInfo.phone,
+        email: storeInfo.email,
+        website: storeInfo.website,
+        description: storeInfo.description?.substring(0, 200),
+        // REMOVED: large social media objects, images, full HTML, etc.
+      };
+    }
+  }
+
+  // Slim hours - keep minimal fields
+  if (innerData.hours && Array.isArray(innerData.hours)) {
+    slimmedData.hours = innerData.hours.slice(0, 7).map((h: any) => ({
+      day: h.day,
+      openTime: h.openTime || h.open,
+      closeTime: h.closeTime || h.close,
+      isOpen: h.isOpen,
+    }));
+  }
+
+  if (innerData.services) {
+    slimmedData.services = innerData.services.slice(0, 5).map((s: any) => ({
       serviceName: s.serviceName,
       price: s.price,
       category: s.category,
     }));
-    slimmedData.servicesCount = data.data.services.length;
+    slimmedData.servicesCount = innerData.services.length;
   }
 
-  if (slimmedData.products) {
-    slimmedData.products = slimmedData.products.slice(0, 5).map((p: any) => ({
+  if (innerData.products) {
+    slimmedData.products = innerData.products.slice(0, 5).map((p: any) => ({
       name: p.name,
       price: p.price,
       category: p.category,
     }));
-    slimmedData.productsCount = data.data.products.length;
+    slimmedData.productsCount = innerData.products.length;
   }
 
-  return { ...data, data: slimmedData };
+  // Return in same structure as received
+  if (hasWrapper) {
+    return { ...data, data: slimmedData };
+  }
+  return slimmedData;
 }

@@ -418,6 +418,20 @@ function RequestCard({
                 Timeline:
               </div>
               <div className="space-y-1">
+                {/* Data Loading - shown first as it happens before classification */}
+                {request.timings.dataLoadDuration !== undefined && request.timings.dataLoadDuration > 0 && (
+                  <div className="text-cyan-400">
+                    📦 Data Load: {(request.timings.dataLoadDuration / 1000).toFixed(2)}s
+                    {request.timings.dataLoadSource && (
+                      <span className="text-cyan-600 ml-1">
+                        ({request.timings.dataLoadSource === 'orchestrator' ? 'pre-fetch' : 
+                          request.timings.dataLoadSource === 'function' ? 'in-function' : 
+                          'pre-fetch + in-function'})
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* Tool Selection (classifier duration) */}
                 {request.timings.intentDuration !== undefined && (
                   <div className="text-gray-400">
@@ -433,6 +447,12 @@ function RequestCard({
                         <span className="text-red-400">❌ </span>
                       )}
                       🔧 Functions: {(request.timings.functionDuration / 1000).toFixed(2)}s
+                      {/* Show data load breakdown if it happened within function */}
+                      {request.timings.dataLoadSource === 'function' && request.timings.dataLoadDuration && (
+                        <span className="text-cyan-600 ml-1">
+                          (incl. {(request.timings.dataLoadDuration / 1000).toFixed(2)}s data load)
+                        </span>
+                      )}
                     </div>
 
                     {/* Show error inline if function failed */}

@@ -43,7 +43,7 @@ export function getFromCache<T>(storeId: string, dataType: string): T | null {
   // Tier 1: Check memory cache first (fastest)
   const memEntry = memoryCache.get(key);
   if (memEntry && now < memEntry.expiry) {
-    console.log(`[Cache] Memory HIT: ${dataType} (age: ${Math.round((now - memEntry.cachedAt) / 1000)}s)`);
+    // console.log(`[Cache] Memory HIT: ${dataType} (age: ${Math.round((now - memEntry.cachedAt) / 1000)}s)`);
     return memEntry.data as T;
   }
 
@@ -53,21 +53,21 @@ export function getFromCache<T>(storeId: string, dataType: string): T | null {
     if (stored) {
       const entry: CacheEntry<T> = JSON.parse(stored);
       if (now < entry.expiry) {
-        console.log(`[Cache] localStorage HIT: ${dataType} (age: ${Math.round((now - entry.cachedAt) / 1000)}s)`);
+        // console.log(`[Cache] localStorage HIT: ${dataType} (age: ${Math.round((now - entry.cachedAt) / 1000)}s)`);
         // Promote to memory cache for faster next access
         memoryCache.set(key, entry);
         return entry.data;
       } else {
         // Expired, clean up
         localStorage.removeItem(key);
-        console.log(`[Cache] Expired: ${dataType}`);
+        // console.log(`[Cache] Expired: ${dataType}`);
       }
     }
   } catch (e) {
     console.warn('[Cache] localStorage read error:', e);
   }
 
-  console.log(`[Cache] MISS: ${dataType}`);
+  // console.log(`[Cache] MISS: ${dataType}`);
   return null;
 }
 
@@ -89,9 +89,9 @@ export function setInCache<T>(storeId: string, dataType: string, data: T, ttlMs?
   memoryCache.set(key, entry);
 
   // Tier 2: localStorage
-  try {
+    try {
     localStorage.setItem(key, JSON.stringify(entry));
-    console.log(`[Cache] Stored: ${dataType} (TTL: ${ttl / 1000}s, size: ${Array.isArray(data) ? data.length : 'n/a'})`);
+    // console.log(`[Cache] Stored: ${dataType} (TTL: ${ttl / 1000}s, size: ${Array.isArray(data) ? data.length : 'n/a'})`);
   } catch (e) {
     // localStorage might be full or disabled
     console.warn('[Cache] localStorage write error:', e);
@@ -113,14 +113,14 @@ export function clearStoreCache(storeId: string): void {
   }
 
   // Clear localStorage
-  try {
+    try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
       if (key?.startsWith(prefix)) {
         localStorage.removeItem(key);
       }
     }
-    console.log(`[Cache] Cleared all cache for store: ${storeId}`);
+    // console.log(`[Cache] Cleared all cache for store: ${storeId}`);
   } catch (e) {
     console.warn('[Cache] localStorage clear error:', e);
   }
@@ -196,7 +196,7 @@ export async function precacheStoreData(
   supabaseUrl: string,
   anonKey: string
 ): Promise<StoreDataCache> {
-  console.log(`[Cache] Precaching data for store: ${storeId}`);
+  // console.log(`[Cache] Precaching data for store: ${storeId}`);
 
   const dataTypes = ['services', 'products', 'hours'];
   const results: any[] = [];
@@ -223,11 +223,11 @@ export async function precacheStoreData(
     hours: results[2] || [],
   };
 
-  console.log(`[Cache] Precache complete:`, {
-    services: storeData.services.length,
-    products: storeData.products.length,
-    hours: storeData.hours.length,
-  });
+  // console.log(`[Cache] Precache complete:`, {
+  //   services: storeData.services.length,
+  //   products: storeData.products.length,
+  //   hours: storeData.hours.length,
+  // });
 
   return storeData;
 }

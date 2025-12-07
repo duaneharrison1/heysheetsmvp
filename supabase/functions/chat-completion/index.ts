@@ -108,13 +108,19 @@ async function loadTab(
 }
 
 /** Pre-load store data from sheets or use cached data */
+interface LoadStoreDataResult {
+  storeData: StoreData;
+  duration: number;
+}
+
 async function loadStoreData(
   storeConfig: StoreConfig,
   cachedData: { services?: any[]; products?: any[]; hours?: any[] } | undefined,
   storeId: string,
   serviceRoleKey: string,
   requestId: string
-): Promise<StoreData> {
+): Promise<LoadStoreDataResult> {
+  const startTime = performance.now();
   const storeData: StoreData = { services: [], products: [], hours: [] };
 
   const hasCachedServices = cachedData?.services && cachedData.services.length > 0;
@@ -153,10 +159,18 @@ async function loadStoreData(
           : Promise.resolve([]),
     ]);
 
-    return { services, products, hours };
+    const duration = performance.now() - startTime;
+    log(requestId, `📊 Store data loaded (${duration.toFixed(0)}ms)`, {
+      services: services.length,
+      products: products.length,
+      hours: hours.length,
+    });
+
+    return { storeData: { services, products, hours }, duration };
   } catch (error) {
     console.error('[Orchestrator] Error pre-loading data:', error);
-    return storeData;
+    const duration = performance.now() - startTime;
+    return { storeData, duration };
   }
 }
 
@@ -172,7 +186,9 @@ function buildSkipResponderResponse(
   classifyDuration: number,
   functionDuration: number,
   totalDuration: number,
-  model?: string
+  model?: string,
+  dataLoadDuration?: number,
+  dataLoadSource?: 'orchestrator' | 'function' | 'both'
 ): ChatCompletionResponse {
   const pricing = getModelPricing(model);
 
@@ -185,6 +201,8 @@ function buildSkipResponderResponse(
       functionDuration,
       responseDuration: 0,
       totalDuration,
+      dataLoadDuration,
+      dataLoadSource,
       toolSelection: {
         function: classification.function_to_call,
         duration: classifyDuration,
@@ -257,7 +275,9 @@ function buildFullResponse(
   responseDuration: number,
   totalDuration: number,
   reasoningEnabled: boolean,
-  model?: string
+  model?: string,
+  dataLoadDuration?: number,
+  dataLoadSource?: 'orchestrator' | 'function' | 'both'
 ): ChatCompletionResponse {
   const pricing = getModelPricing(model);
   const totalInputTokens = classifyUsage.input + responseUsage.input;
@@ -276,6 +296,8 @@ function buildFullResponse(
       functionDuration,
       responseDuration,
       totalDuration,
+      dataLoadDuration,
+      dataLoadSource,
       toolSelection: {
         function: classification.function_to_call,
         duration: classifyDuration,
@@ -430,7 +452,7 @@ serve(async (req) => {
     });
 
     // Pre-load store data
-    const storeData = await loadStoreData(storeConfig, cachedData, storeId, serviceRoleKey, requestId);
+    const { storeData, duration: orchestratorDataLoadDuration } = await loadStoreData(storeConfig, cachedData, storeId, serviceRoleKey, requestId);
 
     // Step 1: Classify intent
     log(requestId, '🎯 Classifying intent...');
@@ -449,6 +471,7 @@ serve(async (req) => {
     // Step 2: Execute function if classified
     let functionResult: FunctionResult | undefined;
     let functionDuration = 0;
+    let functionDataLoadDuration = 0;
 
     if (classification.function_to_call && classification.function_to_call !== 'null') {
       log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
@@ -471,8 +494,13 @@ serve(async (req) => {
       );
 
       functionDuration = performance.now() - functionStart;
+      // Extract data load duration from function result if available
+      if (functionResult?.data?.dataLoadDuration) {
+        functionDataLoadDuration = functionResult.data.dataLoadDuration;
+      }
       log(requestId, `✅ Function complete (${functionDuration.toFixed(0)}ms)`, {
         success: functionResult?.success,
+        dataLoadDuration: functionDataLoadDuration || undefined,
       });
     }
 
@@ -481,6 +509,16 @@ serve(async (req) => {
       log(requestId, '🎯 Using deterministic response (skipResponder)');
       const totalDuration = performance.now() - requestStart;
 
+      // Calculate total data load duration and source
+      const totalDataLoadDuration = orchestratorDataLoadDuration + functionDataLoadDuration;
+      const dataLoadSource = orchestratorDataLoadDuration > 0 && functionDataLoadDuration > 0
+        ? 'both'
+        : orchestratorDataLoadDuration > 0
+        ? 'orchestrator'
+        : functionDataLoadDuration > 0
+        ? 'function'
+        : undefined;
+
       const response = buildSkipResponderResponse(
         functionResult,
         classification,
@@ -488,10 +526,12 @@ serve(async (req) => {
         classifyDuration,
         functionDuration,
         totalDuration,
-        model
+        model,
+        totalDataLoadDuration > 0 ? totalDataLoadDuration : undefined,
+        dataLoadSource
       );
 
-      log(requestId, `⏱️ Timing: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=0ms, total=${totalDuration.toFixed(0)}ms`);
+      log(requestId, `⏱️ Timing: dataLoad=${orchestratorDataLoadDuration.toFixed(0)}ms, intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms), response=0ms, total=${totalDuration.toFixed(0)}ms`);
       log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
 
       return new Response(JSON.stringify(response), {
@@ -528,9 +568,19 @@ serve(async (req) => {
     const totalOutputTokens = classifyUsage.output + responseUsage.output;
     const totalCost = calculateCost(totalInputTokens, totalOutputTokens, model);
 
+    // Calculate total data load duration and source
+    const totalDataLoadDuration = orchestratorDataLoadDuration + functionDataLoadDuration;
+    const dataLoadSource = orchestratorDataLoadDuration > 0 && functionDataLoadDuration > 0
+      ? 'both'
+      : orchestratorDataLoadDuration > 0
+      ? 'orchestrator'
+      : functionDataLoadDuration > 0
+      ? 'function'
+      : undefined;
+
     log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
     log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
-    log(requestId, `⏱️ Timing: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+    log(requestId, `⏱️ Timing: dataLoad=${orchestratorDataLoadDuration.toFixed(0)}ms, intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms), response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
     log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
 
     // Step 4: Return response
@@ -546,7 +596,9 @@ serve(async (req) => {
       responseDuration,
       totalDuration,
       reasoningEnabled,
-      model
+      model,
+      totalDataLoadDuration > 0 ? totalDataLoadDuration : undefined,
+      dataLoadSource
     );
 
     return new Response(JSON.stringify(response), {

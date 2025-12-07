@@ -106,6 +106,9 @@ export function formatRequestForAI(
   // Timing summary
   lines.push(`TIMING:`)
   lines.push(`Total: ${(request.timings.totalDuration! / 1000).toFixed(2)}s`)
+  if (request.timings.dataLoadDuration) {
+    lines.push(`  Data Load: ${(request.timings.dataLoadDuration / 1000).toFixed(2)}s${request.timings.dataLoadSource ? ` (${request.timings.dataLoadSource})` : ''}`)
+  }
   if (request.timings.intentDuration) {
     lines.push(`  Tool Selection: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
   }
@@ -264,6 +267,9 @@ export function formatAllRequestsForAI(
     // Timing breakdown
     lines.push(`TIMING:`)
     lines.push(`Total: ${(request.timings.totalDuration! / 1000).toFixed(2)}s`)
+    if (request.timings.dataLoadDuration) {
+      lines.push(`  Data Load: ${(request.timings.dataLoadDuration / 1000).toFixed(2)}s${request.timings.dataLoadSource ? ` (${request.timings.dataLoadSource})` : ''}`)
+    }
     if (request.timings.intentDuration) {
       lines.push(`  Tool Selection: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
     }

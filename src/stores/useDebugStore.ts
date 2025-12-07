@@ -67,6 +67,10 @@ export interface DebugRequest {
     responseDuration?: number
     reasoningDuration?: number
     totalDuration?: number
+    // Data loading duration (Google Sheets fetch)
+    dataLoadDuration?: number
+    // Where data loading occurred: 'orchestrator' (before classification) or 'function' (within function execution)
+    dataLoadSource?: 'orchestrator' | 'function' | 'both'
   }
 
   // Reasoning content (Native Tool Calling mode)

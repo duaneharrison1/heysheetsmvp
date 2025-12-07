@@ -106,7 +106,10 @@ export interface FunctionContext {
  */
 export interface FunctionResult {
   success: boolean;
-  data?: any;
+  data?: any & {
+    // Duration spent loading data from Google Sheets within this function (ms)
+    dataLoadDuration?: number;
+  };
   error?: string;
   message?: string;
   // If true, the orchestrator should bypass the LLM responder and
