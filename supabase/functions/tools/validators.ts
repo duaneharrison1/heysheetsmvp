@@ -52,37 +52,37 @@ export const CreateBookingSchema = z.object({
   service_name: z.string(),
   date: z.string(), // YYYY-MM-DD
   time: z.string(), // HH:MM
-  customer_name: z.string(),
-  customer_email: z.string().email(),
-  customer_phone: z.string().optional()
+  name: z.string(),
+  email: z.string().email(),
+  phone: z.string().optional()
 });
 
 export const GetBookingSlotsSchema = z.object({
   service_name: z.string(),
   start_date: z.string().optional(), // YYYY-MM-DD
   end_date: z.string().optional(),   // YYYY-MM-DD
-  // Prefill data from user message
-  prefill_date: z.string().optional(),
-  prefill_time: z.string().optional(),
-  prefill_name: z.string().optional(),
-  prefill_email: z.string().optional(),
-  prefill_phone: z.string().optional()
+  // Prefill data from user message (date/time can prefill the calendar)
+  date: z.string().optional(),  // YYYY-MM-DD - prefills selected date
+  time: z.string().optional(),  // HH:MM - prefills selected time
+  name: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional()
 });
 
 export const GetRecommendationsSchema = z.object({
   // What type of offering to recommend (auto-detected from store data if not specified)
   offering_type: z.enum(['services', 'products', 'both']).optional().default('both'),
   // Generic preference fields (all optional - collect progressively via conversation)
-  budget: z.enum(['low', 'medium', 'high']).optional().nullable().transform((val) => val ?? undefined),
-  budget_max: z.number().optional().nullable().transform((val) => val ?? undefined), // Specific max price
-  experience_level: z.enum(['beginner', 'intermediate', 'advanced', 'any']).optional().nullable().transform((val) => val ?? undefined),
-  time_preference: z.enum(['morning', 'afternoon', 'evening', 'any']).optional().nullable().transform((val) => val ?? undefined),
-  day_preference: z.enum(['weekday', 'weekend', 'any']).optional().nullable().transform((val) => val ?? undefined),
-  duration_preference: z.enum(['quick', 'standard', 'extended', 'any']).optional().nullable().transform((val) => val ?? undefined),
+  budget: z.enum(['low', 'medium', 'high']).optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
+  budget_max: z.number().optional().nullable().transform((val: number | null | undefined) => val ?? undefined), // Specific max price
+  experience_level: z.enum(['beginner', 'intermediate', 'advanced', 'any']).optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
+  time_preference: z.enum(['morning', 'afternoon', 'evening', 'any']).optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
+  day_preference: z.enum(['weekday', 'weekend', 'any']).optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
+  duration_preference: z.enum(['quick', 'standard', 'extended', 'any']).optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
   // Free-text goal/interest for semantic matching (most important field)
-  goal: z.string().optional().nullable().transform((val) => val ?? undefined),
+  goal: z.string().optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
   // Category preference if user mentions one
-  category: z.string().optional().nullable().transform((val) => val ?? undefined),
+  category: z.string().optional().nullable().transform((val: string | null | undefined) => val ?? undefined),
   // Number of recommendations to return (1-5)
   limit: z.number().min(1).max(5).optional().default(3)
 });

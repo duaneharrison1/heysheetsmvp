@@ -207,23 +207,23 @@ const tools = [
             type: 'string',
             description: 'End of date range in YYYY-MM-DD format (default: today + 14 days)'
           },
-          prefill_date: {
+          date: {
             type: 'string',
             description: 'Pre-selected date if user mentioned one (YYYY-MM-DD)'
           },
-          prefill_time: {
+          time: {
             type: 'string',
             description: 'Pre-selected time if user mentioned one (HH:MM)'
           },
-          prefill_name: {
+          name: {
             type: 'string',
             description: "User's name if mentioned"
           },
-          prefill_email: {
+          email: {
             type: 'string',
             description: "User's email if mentioned"
           },
-          prefill_phone: {
+          phone: {
             type: 'string',
             description: "User's phone if mentioned"
           }
@@ -236,7 +236,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'create_booking',
-      description: 'Create an actual booking with calendar invite. ONLY call this when you have ALL required info: service_name, date, time, customer_name, AND customer_email. Usually called from booking calendar UI.',
+      description: 'Create an actual booking with calendar invite. ONLY call this when you have ALL required info: service_name, date, time, name, AND email. Usually called from booking calendar UI.',
       parameters: {
         type: 'object',
         properties: {
@@ -252,20 +252,20 @@ const tools = [
             type: 'string',
             description: 'Booking time in HH:MM format'
           },
-          customer_name: {
+          name: {
             type: 'string',
             description: 'Full name of person making booking'
           },
-          customer_email: {
+          email: {
             type: 'string',
             description: 'Email address for confirmation'
           },
-          customer_phone: {
+          phone: {
             type: 'string',
             description: 'Phone number (optional)'
           }
         },
-        required: ['service_name', 'date', 'time', 'customer_name', 'customer_email']
+        required: ['service_name', 'date', 'time', 'name', 'email']
       }
     }
   }
@@ -366,7 +366,7 @@ TOOL USAGE RULES:
 - For SPECIFIC product searches, use search_products with query
 - For hours/contact/general info, use get_store_info
 - For lead capture (user wants to be contacted), use submit_lead
-- Only use create_booking when you have ALL required fields (service_name, date, time, customer_name, customer_email)
+- Only use create_booking when you have ALL required fields (service_name, date, time, name, email)
 - For greetings like "hi" or "hello", respond conversationally without using tools
 
 TODAY'S DATE: ${new Date().toISOString().split('T')[0]}
@@ -888,7 +888,9 @@ serve(async (req) => {
         status: 'success',
         duration: intentDuration,
         result: {
-          function_to_call: detectedIntent,
+          intent: detectedIntent,
+          confidence: 90,
+          reasoning: reasoning || 'Native tool calling - model selected tool directly',
           tokens: classificationTokens,
         },
       });
@@ -945,6 +947,8 @@ serve(async (req) => {
     // Build response with classifier-compatible debug schema
     const responsePayload = {
       text: finalResponse,
+      intent: detectedIntent,
+      confidence: 90, // Native tool calling has high confidence
       functionCalled: functionCalls[functionCalls.length - 1]?.name || null,
       functionResult: functionResult,
       debug: {
@@ -961,11 +965,16 @@ serve(async (req) => {
         // Reasoning content (if available)
         reasoning,             // Simple text version
         reasoningDetails,      // Full structured version (if available)
-        // Tool Selection info
-        toolSelection: {
-          function: detectedIntent,
+        // Intent/Tool Selection object matching classifier schema
+        intent: {
+          detected: detectedIntent,
+          confidence: 90,
           duration: intentDuration,
+          reasoning: reasoning || 'Native tool calling - model selected tool directly',
         },
+        // Renamed timing fields for clarity
+        toolSelectionDuration: intentDuration,   // Time for LLM to select tool(s)
+        llmResponseDuration: responseDuration,   // Time for final LLM response
         // Function calls array (existing format)
         functionCalls: functionCalls.map(fc => ({
           name: fc.name,

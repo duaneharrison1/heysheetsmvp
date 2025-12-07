@@ -149,43 +149,10 @@ export default function StorePage() {
 
   useEffect(() => {
     if (storeId) {
-      loadStore();
+      loadStoreAndPrecache();
       checkAuth();
     }
   }, [storeId]);
-
-  // Precache store data when store loads (warm cache BEFORE user sends message)
-  useEffect(() => {
-    const warmCache = async () => {
-      if (!store?.id || !store?.sheet_id) return;
-
-      console.log('[StorePage] Warming cache for store:', store.id);
-
-      try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        const cached = await precacheStoreData(store.id, supabaseUrl, anonKey);
-
-        console.log('[StorePage] Cache warmed:', {
-          services: cached.services.length,
-          products: cached.products.length,
-          hours: cached.hours.length,
-        });
-
-        // Log cache stats in dev
-        if (import.meta.env.DEV) {
-          const stats = getCacheStats(store.id);
-          console.log('[StorePage] Cache stats:', stats);
-        }
-      } catch (error) {
-        // Non-critical - just log warning
-        console.warn('[StorePage] Cache warming failed (non-critical):', error);
-      }
-    };
-
-    warmCache();
-  }, [store?.id, store?.sheet_id]);
 
   // Show store info sheet initially on mobile when store loads
   useEffect(() => {
@@ -249,7 +216,7 @@ export default function StorePage() {
           console.error('[StorePage] Failed to load store:', error);
         }
         navigate('/');
-        return;
+        return null;
       }
 
       // Cast supabase result into our local Store type (supabase client typings vary)
@@ -268,8 +235,51 @@ export default function StorePage() {
       setMessages([initialMessage]);
       // show initial quick actions using the same suggestions component
       setCurrentSuggestions(initialQuickActions);
+      
+      return storeData;
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * OPTIMIZED: Load store data and precache in parallel
+   * Instead of: loadStore() -> wait -> precacheStoreData()
+   * Now: Promise.all([loadStore(), precacheStoreData()])
+   * 
+   * This reduces total load time by running both operations concurrently.
+   */
+  const loadStoreAndPrecache = async () => {
+    if (!storeId) return;
+    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    console.log('[StorePage] Loading store + precaching in parallel:', storeId);
+    const startTime = performance.now();
+    
+    // Run store fetch and precache in parallel
+    const [storeData, cachedData] = await Promise.all([
+      loadStore(),
+      // Start precaching immediately with storeId (don't wait for store data)
+      precacheStoreData(storeId, supabaseUrl, anonKey).catch(error => {
+        console.warn('[StorePage] Cache warming failed (non-critical):', error);
+        return { services: [], products: [], hours: [] };
+      })
+    ]);
+    
+    const duration = performance.now() - startTime;
+    console.log(`[StorePage] Parallel load complete in ${duration.toFixed(0)}ms:`, {
+      store: storeData?.name || 'failed',
+      services: cachedData.services.length,
+      products: cachedData.products.length,
+      hours: cachedData.hours.length,
+    });
+    
+    // Log cache stats in dev
+    if (import.meta.env.DEV && storeId) {
+      const stats = getCacheStats(storeId);
+      console.log('[StorePage] Cache stats:', stats);
     }
   };
 

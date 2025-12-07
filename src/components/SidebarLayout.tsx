@@ -20,10 +20,26 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Store, Users, UserCog, LifeBuoy, Loader2, LogOut, LayoutGrid, MessageSquare, Ticket, Image, BarChart3, Mail, Bug } from "lucide-react";
 import { useUserRole } from '@/hooks/useUserRole';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserStores, UserStore } from '@/hooks/useUserStores';
 // No sidebar tooltips needed; keep imports minimal
 
 // Create a context to share user data with child components
 export const UserContext = React.createContext<any>(null);
+
+// Create a context to share stores data with child components (prevents duplicate fetches)
+export interface StoresContextValue {
+  stores: UserStore[];
+  firstStoreId: string | null;
+  isLoading: boolean;
+  refetch: () => void;
+}
+export const StoresContext = React.createContext<StoresContextValue>({
+  stores: [],
+  firstStoreId: null,
+  isLoading: true,
+  refetch: () => {},
+});
 
 // Navigation items for Store Admin
 const navItems = [
@@ -130,53 +146,33 @@ function UserProfileSection({ user }: { user: any }) {
 }
 
 export default function SidebarLayout({ children }: SidebarLayoutProps) {
-  const [user, setUser] = useState<any>(null);
-  const [firstStoreId, setFirstStoreId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
-
+  
+  // Use centralized auth hook (cached via TanStack Query)
+  const { user, isLoading: authLoading } = useAuth();
+  
+  // Use centralized stores hook (cached via TanStack Query)
+  const { stores, firstStoreId, isLoading: storesLoading, refetch } = useUserStores();
+  
+  // Sync to Mailjet once per session (non-blocking)
+  const [mailjetSynced, setMailjetSynced] = useState(false);
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-      setUser(user);
-
-      // Sync user to Mailjet contact list (runs once per session, non-blocking)
+    if (user && !mailjetSynced) {
       syncCurrentUserToMailjet();
-
-      // Fetch the first store for this user to enable quick analytics link
-      try {
-        const { data: storesData, error: storesError } = await supabase
-          .from('stores')
-          .select('id')
-          .eq('user_id', user.id)
-          .limit(1);
-
-        if (!storesError && Array.isArray(storesData) && storesData.length > 0) {
-          setFirstStoreId(storesData[0].id);
-        }
-      } catch (err) {
-        // ignore store load errors here; analytics link will be hidden
-        console.error('Error loading user stores for sidebar analytics link:', err);
-      }
-    } catch (error) {
-      console.error('Error loading user:', error);
-      navigate('/auth');
-    } finally {
-      setLoading(false);
+      setMailjetSynced(true);
     }
-  };
+  }, [user, mailjetSynced]);
+
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [authLoading, user, navigate]);
 
   // Show loading spinner while checking auth
-  if (loading) {
+  if (authLoading || (!user && !authLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -184,23 +180,33 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
     );
   }
 
+  // Context value for stores (prevents child components from refetching)
+  const storesContextValue: StoresContextValue = {
+    stores,
+    firstStoreId,
+    isLoading: storesLoading,
+    refetch,
+  };
+
   return (
     <UserContext.Provider value={user}>
-      <SidebarProvider>
-        <SidebarWrapper user={user} location={location} firstStoreId={firstStoreId} />
-        <SidebarInset>
-          {/* Header with sidebar trigger and page title */}
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
-            <SidebarTrigger className="-ml-1" />
-            <div className="flex-1" />
-          </header>
+      <StoresContext.Provider value={storesContextValue}>
+        <SidebarProvider>
+          <SidebarWrapper user={user} location={location} firstStoreId={firstStoreId} />
+          <SidebarInset>
+            {/* Header with sidebar trigger and page title */}
+            <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
+              <SidebarTrigger className="-ml-1" />
+              <div className="flex-1" />
+            </header>
 
-          {/* Main content area */}
-          <div className="flex flex-1 flex-col gap-4 py-4 px-6 md:px-8">
-            {children}
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+            {/* Main content area */}
+            <div className="flex flex-1 flex-col gap-4 py-4 px-6 md:px-8">
+              {children}
+            </div>
+          </SidebarInset>
+        </SidebarProvider>
+      </StoresContext.Provider>
     </UserContext.Provider>
   );
 }

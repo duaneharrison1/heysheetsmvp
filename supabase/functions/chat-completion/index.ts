@@ -336,7 +336,7 @@ function buildFullResponse(
             tokens: { input: classifyUsage.input, output: classifyUsage.output },
           },
         },
-        ...(classification.function_to_call && classification.function_to_call !== 'null'
+        ...(classification.function_to_call && classification.function_to_call !== null
           ? [{
               name: 'Function Execution',
               function: 'tools',
@@ -473,7 +473,7 @@ serve(async (req) => {
     let functionDuration = 0;
     let functionDataLoadDuration = 0;
 
-    if (classification.function_to_call && classification.function_to_call !== 'null') {
+    if (classification.function_to_call && classification.function_to_call !== null) {
       log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
       const functionStart = performance.now();
 

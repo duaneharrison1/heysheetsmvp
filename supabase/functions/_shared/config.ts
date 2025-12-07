@@ -36,7 +36,7 @@ export const DEFAULT_REASONING_EFFORT: 'low' | 'medium' | 'high' = 'low';
 // ============================================================================
 
 /** Max tokens for classifier response (structured JSON output) */
-export const CLASSIFIER_MAX_TOKENS = 200;
+export const CLASSIFIER_MAX_TOKENS = 150;
 
 /** Temperature for classifier (low for consistency) */
 export const CLASSIFIER_TEMPERATURE = 0.1;
@@ -52,7 +52,7 @@ export const CLASSIFIER_MAX_CONTEXT_MESSAGES = 6;
 // ============================================================================
 
 /** Max tokens for responder output */
-export const RESPONDER_MAX_TOKENS = 400;
+export const RESPONDER_MAX_TOKENS = 300;
 
 /** Temperature for responder (moderate for natural responses) */
 export const RESPONDER_TEMPERATURE = 0.5;

@@ -139,7 +139,7 @@ export default function DebugChat() {
     const warmCache = async () => {
       if (!store?.id || !store?.sheet_id) return;
 
-      // console.log('[DebugChat] Warming cache for store:', store.id);
+      console.log('[DebugChat] Warming cache for store:', store.id);
 
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -147,11 +147,15 @@ export default function DebugChat() {
 
         const cached = await precacheStoreData(store.id, supabaseUrl, anonKey);
 
-        // Cache warmed (details suppressed)
+        console.log('[DebugChat] Cache warmed:', {
+          services: cached.services.length,
+          products: cached.products.length,
+          hours: cached.hours.length,
+        });
 
-          if (import.meta.env.DEV) {
+        if (import.meta.env.DEV) {
           const stats = getCacheStats(store.id);
-          // console.log('[DebugChat] Cache stats:', stats);
+          console.log('[DebugChat] Cache stats:', stats);
         }
       } catch (error) {
         console.warn('[DebugChat] Cache warming failed (non-critical):', error);
@@ -188,7 +192,7 @@ export default function DebugChat() {
 
   const loadStore = async (storeId: string) => {
     try {
-      // console.log('[DebugChat] Loading store:', storeId);
+      console.log('[DebugChat] Loading store:', storeId);
 
       const { data, error } = await supabase
         .from('stores')
@@ -196,7 +200,7 @@ export default function DebugChat() {
         .eq('id', storeId)
         .single();
 
-      // console.log('[DebugChat] Query result:', { data, error });
+      console.log('[DebugChat] Query result:', { data, error });
 
       if (error || !data) {
         console.error('[DebugChat] Failed to load store:', error);
@@ -277,12 +281,16 @@ export default function DebugChat() {
 
       const cachedData = selectedStoreId ? getCachedStoreData(selectedStoreId) : null;
       if (cachedData) {
-        // Passing cached data to chat-completion (details suppressed)
+        console.log('[DebugChat] Passing cached data to chat-completion:', {
+          services: cachedData.services.length,
+          products: cachedData.products.length,
+          hours: cachedData.hours.length,
+        });
       }
 
       // Use correct endpoint based on mode toggle
       const endpoint = useNativeToolCalling ? 'chat-completion-native' : 'chat-completion';
-      // console.log('[DebugChat] Using endpoint:', endpoint, '(native:', useNativeToolCalling, ')');
+      console.log('[DebugChat] Using endpoint:', endpoint, '(native:', useNativeToolCalling, ')');
 
       // Only pass reasoningEnabled if Native mode + supported model
       const shouldEnableReasoning = useNativeToolCalling &&
@@ -310,11 +318,17 @@ export default function DebugChat() {
       }
 
       const data = await response.json();
-      // console.log('Chat response data:', data);
+      console.log('Chat response data:', data);
 
-      // Debug: Reasoning info suppressed
+      // Debug: Log reasoning info specifically
       if (shouldEnableReasoning) {
-        // Reasoning debug suppressed
+        console.log('[DebugChat] Reasoning debug:', {
+          enabled: data.debug?.reasoningEnabled,
+          hasReasoning: !!data.debug?.reasoning,
+          reasoningLength: data.debug?.reasoning?.length || 0,
+          reasoningDuration: data.debug?.reasoningDuration,
+          hasReasoningDetails: !!data.debug?.reasoningDetails,
+        });
       }
 
       const aiResponse = data.text || "I apologize, I couldn't generate a response.";

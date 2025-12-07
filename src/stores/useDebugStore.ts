@@ -30,10 +30,11 @@ export interface DebugRequest {
   // 🆕 ADD: Step-by-step breakdown
   steps?: DebugStep[]
 
-  // Tool selection info from classifier
-  toolSelection?: {
-    function: string | null  // The function_to_call value
-    duration: number         // Classifier duration (ms)
+  intent?: {
+    detected: string
+    confidence: number
+    duration: number
+    reasoning?: string
   }
 
   functionCalls?: Array<{
@@ -48,6 +49,9 @@ export interface DebugRequest {
     cacheHit?: boolean
   }>
 
+  // Tool selection captured from classifier/native tool-calling debug output
+  toolSelection?: any
+
   response?: {
     text: string
     richContent?: any
@@ -55,22 +59,12 @@ export interface DebugRequest {
   }
 
   timings: {
-    // Timestamp when request started. Older code may set `requestStart` (ms).
-    requestStart?: number
-    // Normalized fields added later for clarity
-    requestStartMs?: number
-    requestStartSeconds?: number
-    requestStartIso?: string
-    // Durations (milliseconds)
+    requestStart: number
     intentDuration?: number
     functionDuration?: number
     responseDuration?: number
     reasoningDuration?: number
     totalDuration?: number
-    // Data loading duration (Google Sheets fetch)
-    dataLoadDuration?: number
-    // Where data loading occurred: 'orchestrator' (before classification) or 'function' (within function execution)
-    dataLoadSource?: 'orchestrator' | 'function' | 'both'
   }
 
   // Reasoning content (Native Tool Calling mode)

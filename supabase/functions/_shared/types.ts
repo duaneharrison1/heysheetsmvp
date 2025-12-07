@@ -3,12 +3,69 @@
 // ============================================================================
 
 /**
+ * Valid function names for classification
+ */
+export type ClassifierFunction =
+  | 'get_store_info'
+  | 'get_services'
+  | 'get_products'
+  | 'search_services'
+  | 'search_products'
+  | 'submit_lead'
+  | 'get_misc_data'
+  | 'check_availability'
+  | 'create_booking'
+  | 'get_booking_slots'
+  | 'get_recommendations'
+  | null;
+
+/**
+ * Valid info_type values for get_store_info
+ */
+export type InfoType = 'hours' | 'services' | 'products' | 'all';
+
+/**
+ * Extracted parameters from user message
+ */
+export interface ExtractedParams {
+  // get_store_info
+  info_type?: InfoType;
+  // search_services, search_products
+  query?: string;
+  // get_products, get_recommendations
+  category?: string;
+  // get_misc_data
+  tab_name?: string;
+  // submit_lead
+  // Contact info (used for leads, bookings, prefill)
+  name?: string;
+  email?: string;
+  phone?: string;
+  message?: string;
+  // check_availability, create_booking, get_booking_slots
+  service_name?: string;
+  date?: string; // YYYY-MM-DD
+  time?: string; // HH:MM
+  // get_recommendations
+  offering_type?: string;
+  budget?: string;
+  budget_max?: number;
+  experience_level?: string;
+  time_preference?: string;
+  day_preference?: string;
+  duration_preference?: string;
+  goal?: string;
+}
+
+/**
  * Classification result from tool selector
  */
 export interface Classification {
-  function_to_call: string | null;
-  extracted_params: Record<string, any>;
-  user_language: string; // Detected language of user input (e.g., 'en', 'es', 'fr', 'ja')
+  needs_clarification: boolean;
+  clarification_question?: string;
+  function_to_call: ClassifierFunction;
+  extracted_params: ExtractedParams;
+  user_language: string; // ISO 639-1 code (e.g., 'en', 'es', 'ja')
 }
 
 /**

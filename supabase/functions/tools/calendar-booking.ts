@@ -344,11 +344,11 @@ export async function getBookingSlots(
     start_date?: string  // YYYY-MM-DD, default: today
     end_date?: string    // YYYY-MM-DD, default: today + 14 days
     // Prefill data extracted from user message
-    prefill_date?: string
-    prefill_time?: string
-    prefill_name?: string
-    prefill_email?: string
-    prefill_phone?: string
+    date?: string        // YYYY-MM-DD - prefills selected date
+    time?: string        // HH:MM - prefills selected time  
+    name?: string
+    email?: string
+    phone?: string
   },
   context: FunctionContext
 ): Promise<any> {
@@ -358,11 +358,11 @@ export async function getBookingSlots(
       service_name,
       start_date,
       end_date,
-      prefill_date,
-      prefill_time,
-      prefill_name,
-      prefill_email,
-      prefill_phone
+      date: prefill_date,
+      time: prefill_time,
+      name: prefill_name,
+      email: prefill_email,
+      phone: prefill_phone
     } = params;
 
     console.log('[get_booking_slots] Called with:', { service_name, start_date, end_date, prefill_date, prefill_time });
@@ -726,20 +726,20 @@ export async function createBooking(
     service_name: string;
     date: string;
     time: string;
-    customer_name: string;
-    customer_email: string;
-    customer_phone?: string;
+    name: string;
+    email: string;
+    phone?: string;
   },
   context: FunctionContext
 ): Promise<any> {
   try {
     const { storeId, authToken } = context;
-    const { service_name, date, time, customer_name, customer_email, customer_phone } = params;
+    const { service_name, date, time, name, email, phone } = params;
 
-    console.log('[create_booking] Called with:', { service_name, date, time, customer_name, customer_email });
+    console.log('[create_booking] Called with:', { service_name, date, time, name, email });
 
     // Validate required fields
-    if (!service_name || !date || !time || !customer_name || !customer_email) {
+    if (!service_name || !date || !time || !name || !email) {
       return {
         success: false,
         needs_clarification: true,
@@ -914,9 +914,9 @@ Price: $${service.price || 'N/A'}
 Duration: ${duration} minutes
 
 Customer Details:
-Name: ${customer_name}
-Email: ${customer_email}
-${customer_phone ? `Phone: ${customer_phone}` : ''}
+Name: ${name}
+Email: ${email}
+${phone ? `Phone: ${phone}` : ''}
 
 Thank you for booking with ${store.name}!
 If you need to reschedule or cancel, please contact us.
@@ -927,7 +927,7 @@ If you need to reschedule or cancel, please contact us.
     const event = await createEvent(
       store.invite_calendar_id,
       {
-        summary: `${service.serviceName} - ${customer_name}`,
+        summary: `${service.serviceName} - ${name}`,
         description: eventDescription,
         location: service.location || '',
         start: {
@@ -944,9 +944,9 @@ If you need to reschedule or cancel, please contact us.
           private: {
             booking_id: bookingId,
             service_id: serviceId,
-            customer_name,
-            customer_email,
-            customer_phone: customer_phone || '',
+            customer_name: name,
+            customer_email: email,
+            customer_phone: phone || '',
             booked_at: new Date().toISOString(),
           },
         },
@@ -964,8 +964,8 @@ If you need to reschedule or cancel, please contact us.
       time,
       duration,
       price: service.price,
-      customer_name,
-      customer_email,
+      customer_name: name,
+      customer_email: email,
       available_spots_remaining: capacity - bookedCount - 1,
       message: `Booking confirmed for ${service.serviceName} on ${date} at ${time}! Your confirmation details have been saved. See you there!`,
     };

@@ -108,9 +108,9 @@ export function BookingCalendar({
       service_id: service.id,
       date: selectedDateStr,
       time: selectedTime,
-      customer_name: customerDetails.name,
-      customer_email: customerDetails.email,
-      customer_phone: customerDetails.phone || undefined
+      name: customerDetails.name,
+      email: customerDetails.email,
+      phone: customerDetails.phone || undefined
     })
   }
 

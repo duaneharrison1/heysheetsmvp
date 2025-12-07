@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext } from 'react';
+import { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,7 @@ import { H1, Lead } from '@/components/ui/heading';
 import { StoreCard } from '@/components/StoreCard';
 import { toast } from 'sonner';
 import { Plus, MessageSquare, Settings, Loader2 } from 'lucide-react';
-import { UserContext } from '@/components/SidebarLayout';
+import { UserContext, StoresContext } from '@/components/SidebarLayout';
 import {
   Dialog,
   DialogContent,
@@ -21,76 +21,12 @@ import { Input } from '@/components/ui/input';
 
 const Dashboard = () => {
   const user = useContext(UserContext);
-  const [stores, setStores] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use stores from context (already fetched by SidebarLayout, cached via TanStack Query)
+  const { stores, isLoading: loading, refetch: reloadStores } = useContext(StoresContext);
   const [creating, setCreating] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [storeName, setStoreName] = useState('');
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Wait for user context to be available
-    if (!user?.id) {
-      // Keep loading true while waiting for user
-      return;
-    }
-    
-    let cancelled = false;
-    
-    const loadUserStores = async () => {
-      try {
-        setLoading(true);
-        const res = await supabase
-          .from('stores')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }) as unknown as { data: any[] | null; error: any };
-
-        const { data, error } = res;
-
-        if (error) {
-          console.error('Error loading stores:', error);
-          toast.error('Failed to load stores');
-        }
-
-        if (!cancelled) {
-          setStores(data || []);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    
-    loadUserStores();
-    
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
-
-  // Helper to reload stores after creation
-  const reloadStores = async () => {
-    if (!user?.id) return;
-    try {
-      setLoading(true);
-      const res = await supabase
-        .from('stores')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false }) as unknown as { data: any[] | null; error: any };
-
-      const { data, error } = res;
-      if (error) {
-        console.error('Error loading stores:', error);
-        toast.error('Failed to load stores');
-      }
-      setStores(data || []);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCreate = async () => {
     if (!storeName.trim()) {

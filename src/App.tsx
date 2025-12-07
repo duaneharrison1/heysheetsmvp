@@ -27,7 +27,25 @@ import { DebugPanel } from "@/components/debug/DebugPanel";
 import { DebugToggle } from "@/components/debug/DebugToggle";
 import { QAResultsPage } from "@/qa/components/QAResultsPage";
 
-const queryClient = new QueryClient();
+/**
+ * TanStack Query Configuration
+ * ============================
+ * Centralized caching configuration for all queries.
+ * - staleTime: 5 min - data considered fresh, won't refetch
+ * - gcTime: 30 min - keep unused data in cache for background tabs
+ * - No refetch on window focus (prevents unnecessary API calls)
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh
+      gcTime: 30 * 60 * 1000,   // 30 minutes - garbage collection time
+      refetchOnWindowFocus: false, // Don't refetch when tab regains focus
+      refetchOnReconnect: true,    // Refetch when network reconnects
+      retry: 1,                    // Retry failed requests once
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

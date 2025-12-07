@@ -361,9 +361,9 @@ Creates an actual booking in Google Calendar. Validates all required fields. Che
 | service_name | string | Yes | Service name to book |
 | date | string | Yes | Booking date in YYYY-MM-DD format |
 | time | string | Yes | Booking time in HH:MM format |
-| customer_name | string | Yes | Full name of person making booking |
-| customer_email | string | Yes | Email address for confirmation |
-| customer_phone | string | No | Phone number for the booking |
+| name | string | Yes | Full name of person making booking |
+| email | string | Yes | Email address for confirmation |
+| phone | string | No | Phone number for the booking |
 
 **Returns:**
 ```typescript
@@ -392,9 +392,9 @@ export const CreateBookingSchema = z.object({
   service_name: z.string(),
   date: z.string(),
   time: z.string(),
-  customer_name: z.string(),
-  customer_email: z.string().email(),
-  customer_phone: z.string().optional()
+  name: z.string(),
+  email: z.string().email(),
+  phone: z.string().optional()
 });
 ```
 
@@ -457,7 +457,7 @@ interface Classification {
     category?: string;
     tab_name?: string;
 
-    // Lead params
+    // Contact info (used for leads, bookings, prefill)
     name?: string;
     email?: string;
     phone?: string;
@@ -467,16 +467,6 @@ interface Classification {
     service_name?: string;
     date?: string;       // YYYY-MM-DD
     time?: string;       // HH:MM
-    customer_name?: string;
-    customer_email?: string;
-    customer_phone?: string;
-
-    // Prefill params for get_booking_slots
-    prefill_date?: string;
-    prefill_time?: string;
-    prefill_name?: string;
-    prefill_email?: string;
-    prefill_phone?: string;
   };
   reasoning: string;
 }
