@@ -388,7 +388,7 @@ export default function StorePage() {
           functionDuration: data.debug?.functionDuration,
           responseDuration: data.debug?.responseDuration,
         },
-        intent: data.debug?.intent,
+        toolSelection: data.debug?.toolSelection,
         functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,

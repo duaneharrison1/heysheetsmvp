@@ -30,11 +30,10 @@ export interface DebugRequest {
   // 🆕 ADD: Step-by-step breakdown
   steps?: DebugStep[]
 
-  intent?: {
-    detected: string
-    confidence: number
-    duration: number
-    reasoning?: string
+  // Tool selection info from classifier
+  toolSelection?: {
+    function: string | null  // The function_to_call value
+    duration: number         // Classifier duration (ms)
   }
 
   functionCalls?: Array<{
@@ -56,7 +55,13 @@ export interface DebugRequest {
   }
 
   timings: {
-    requestStart: number
+    // Timestamp when request started. Older code may set `requestStart` (ms).
+    requestStart?: number
+    // Normalized fields added later for clarity
+    requestStartMs?: number
+    requestStartSeconds?: number
+    requestStartIso?: string
+    // Durations (milliseconds)
     intentDuration?: number
     functionDuration?: number
     responseDuration?: number

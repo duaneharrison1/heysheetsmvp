@@ -220,10 +220,7 @@ serve(async (req) => {
     );
 
     const classifyDuration = performance.now() - classifyStart;
-    log(requestId, `✅ Intent: ${classification.intent} (${classifyDuration.toFixed(0)}ms)`, {
-      confidence: classification.confidence,
-      function: classification.function_to_call,
-    });
+    log(requestId, `✅ Tool selected: ${classification.function_to_call || 'none'} (${classifyDuration.toFixed(0)}ms)`);
 
     // Step 2: Execute function if classified
     let functionResult: FunctionResult | undefined;
@@ -281,20 +278,16 @@ serve(async (req) => {
       // Build response without calling LLM responder
       const response: ChatCompletionResponse = {
         text: functionResult.message,
-        intent: classification.intent,
-        confidence: classification.confidence,
         functionCalled: classification.function_to_call || undefined,
         functionResult,
         debug: {
-          intentDuration: classifyDuration,
+          intentDuration: classifyDuration,  // Classifier duration (for frontend compatibility)
           functionDuration,
           responseDuration: 0, // No responder call
           totalDuration,
-          intent: {
-            detected: classification.intent,
-            confidence: classification.confidence,
+          toolSelection: {
+            function: classification.function_to_call,
             duration: classifyDuration,
-            reasoning: classification.reasoning,
           },
           functionCalls: [{
             name: classification.function_to_call || '',
@@ -323,10 +316,9 @@ serve(async (req) => {
               status: 'success',
               duration: classifyDuration,
               result: {
-                intent: classification.intent,
-                confidence: classification.confidence,
-                reasoning: classification.reasoning,
+                function_to_call: classification.function_to_call,
                 params: classification.extracted_params,
+                tokens: { input: classifyUsage.input, output: classifyUsage.output },
               },
             },
             {
@@ -338,7 +330,7 @@ serve(async (req) => {
               result: functionResult.success ? functionResult.data : undefined,
             },
             {
-              name: 'LLM Response',
+              name: 'Response Generation',
               function: 'skipResponder',
               status: 'success',
               duration: 0,
@@ -351,6 +343,7 @@ serve(async (req) => {
         },
       };
 
+      log(requestId, `⏱️ Timing breakdown: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=0ms (skipResponder), total=${totalDuration.toFixed(0)}ms`);
       log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
 
       return new Response(JSON.stringify(response), {
@@ -393,13 +386,12 @@ serve(async (req) => {
 
     log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
     log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
+    log(requestId, `⏱️ Timing breakdown: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
     log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
 
     // Step 4: Return response
     const response: ChatCompletionResponse = {
       text: responseText,
-      intent: classification.intent,
-      confidence: classification.confidence,
       functionCalled: classification.function_to_call || undefined,
       functionResult,
       suggestions, // Dynamic suggestions from responder
@@ -407,15 +399,13 @@ serve(async (req) => {
       debug: {
         endpoint: 'chat-completion',    // Confirm which endpoint was used
         reasoningEnabled,               // Confirm reasoning setting
-        intentDuration: classifyDuration,
+        intentDuration: classifyDuration,  // Classifier duration (for frontend compatibility)
         functionDuration,
         responseDuration,
         totalDuration,
-        intent: {
-          detected: classification.intent,
-          confidence: classification.confidence,
+        toolSelection: {
+          function: classification.function_to_call,
           duration: classifyDuration,
-          reasoning: classification.reasoning, // 🆕 Add reasoning from classifier
         },
         functionCalls: functionResult ? [{
           name: classification.function_to_call || '',
@@ -445,10 +435,9 @@ serve(async (req) => {
             status: 'success',
             duration: classifyDuration,
             result: {
-              intent: classification.intent,
-              confidence: classification.confidence,
-              reasoning: classification.reasoning,
+              function_to_call: classification.function_to_call,
               params: classification.extracted_params,
+              tokens: { input: classifyUsage.input, output: classifyUsage.output },
             },
           },
           ...(classification.function_to_call && classification.function_to_call !== 'null' ? [{
@@ -464,7 +453,7 @@ serve(async (req) => {
             } : undefined,
           }] : []),
           {
-            name: 'LLM Response',
+            name: 'Response Generation',
             function: 'responder',
             status: 'success',
             duration: responseDuration,

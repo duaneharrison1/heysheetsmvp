@@ -2,7 +2,40 @@ import { Classification, Message, FunctionResult, StoreConfig } from '../_shared
 
 // ============================================================================
 // RESPONDER FUNCTION
+// Generates natural language responses using OpenRouter API
 // ============================================================================
+
+// ----------------------------------------------------------------------------
+// CONFIGURATION
+// ----------------------------------------------------------------------------
+
+/** Default model for response generation (cost-effective, fast) */
+export const DEFAULT_MODEL = 'x-ai/grok-4.1-fast';
+
+/** Max recent messages to include (≈3 conversation turns) */
+const MAX_CONTEXT_MESSAGES = 6;
+
+/** Response token limit */
+const MAX_TOKENS = 600;
+
+/** Temperature for natural, varied responses */
+const DEFAULT_TEMPERATURE = 0.5;
+
+/** OpenRouter API endpoint */
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// ----------------------------------------------------------------------------
+// TYPES
+// ----------------------------------------------------------------------------
+
+export interface ResponderOptions {
+  /** Enable extended reasoning for supported models (adds latency) */
+  reasoningEnabled?: boolean;
+  /** Mode describing output formatting/architecture preferences (informational) */
+  architectureMode?: string;
+  /** Function name that was executed (for context) */
+  functionName?: string;
+}
 
 export interface ResponderResult {
   text: string;
@@ -10,159 +43,135 @@ export interface ResponderResult {
   usage: { input: number; output: number };
 }
 
-// Added model parameter to allow user selection of AI model
-export async function generateResponse(
+// ----------------------------------------------------------------------------
+// PROMPT BUILDING HELPERS
+// ----------------------------------------------------------------------------
+
+function buildStoreContext(store?: StoreConfig): string {
+  if (!store) return 'Store: Unknown';
+  const parts = [`Store: ${store.name || 'Unknown'}`, `Type: ${store.type || 'general'}`];
+  if (store.description) parts.push(`About: ${store.description}`);
+  return parts.join(' | ');
+}
+
+function buildConversationHistory(messages: Message[]): string {
+  return messages
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map(m => `${m.role}: ${m.content}`)
+    .join('\n');
+}
+
+function buildFunctionContext(result?: FunctionResult, functionName?: string): string {
+  if (!result) return '';
+
+  const prefix = functionName ? `[${functionName}] ` : '';
+
+  if (result.success) {
+    const data = result.data || result;
+    return `\n\n${prefix}DATA:\n${JSON.stringify(data, null, 2)}`;
+  }
+
+  if (result.needs_clarification) {
+    return `\n\n${prefix}NEEDS INFO: ${result.message || 'More information required'}`;
+  }
+
+  return `\n\n${prefix}ERROR: ${result.error || 'Operation failed'}`;
+}
+
+function buildLanguageInstruction(language?: string): string {
+  if (!language || language === 'en') return '';
+  return `\n\nRespond entirely in ${language}.`;
+}
+
+function buildPrompt(
   messages: Message[],
   classification: Classification,
   functionResult?: FunctionResult,
   store?: StoreConfig,
-  model?: string,  // User-selected model, defaults to Grok
-  options?: { architectureMode?: string; reasoningEnabled?: boolean; functionName?: string }
-): Promise<ResponderResult> {
-  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+  options?: ResponderOptions
+): string {
+  const storeContext = buildStoreContext(store);
+  const conversationHistory = buildConversationHistory(messages);
+  const functionContext = buildFunctionContext(functionResult, options?.functionName);
+  const languageInstruction = buildLanguageInstruction(classification.user_language);
 
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY not configured');
-  }
+  return `You are a helpful business assistant for ${store?.name || 'this store'}.
 
-  // Build conversation history (last 3 turns for context windowing)
-  const recentMessages = messages.slice(-6);
-  const conversationHistory = recentMessages
-    .map(m => `${m.role}: ${m.content}`)
-    .join('\n');
-
-  // Build store context
-  const storeContext = `
-Store Name: ${store?.name || 'Unknown'}
-Store Type: ${store?.type || 'general'}
-${store?.description ? `Description: ${store.description}` : ''}
-`;
-
-  // Build function result context
-  let functionContext = '';
-  if (functionResult) {
-    if (functionResult.success) {
-      // Handle both wrapped {success, data} and direct data formats
-      const resultData = functionResult.data || functionResult;
-      functionContext = `FUNCTION RESULT (Use this data in your response):
-${JSON.stringify(resultData, null, 2)}
-
-IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
-    } else if (functionResult.needs_clarification) {
-      // Handle clarification needed (not an error!)
-      functionContext = `FUNCTION NEEDS MORE INFO:
-${functionResult.message || 'Need more information to proceed'}
-
-IMPORTANT: Ask for the missing information naturally and conversationally. This is NOT an error - just ask what you need to know.`;
-    } else {
-      functionContext = `FUNCTION ERROR:
-${functionResult.error || 'Unknown error occurred'}
-
-IMPORTANT: Apologize politely and guide the user on what to do next.`;
-    }
-  }
-
-  // Determine response language from classification
-  const responseLanguage = classification.user_language || 'en';
-  const languageInstruction = responseLanguage !== 'en' 
-    ? `\n\nIMPORTANT: The user is communicating in ${responseLanguage}. You MUST respond in the same language (${responseLanguage}). All text in your response, including suggestions, should be in ${responseLanguage}.`
-    : '';
-
-  // Build response generation prompt
-  const responsePrompt = `You are a helpful, friendly business assistant for this store.
-
-STORE CONTEXT:
+CONTEXT:
 ${storeContext}
+Tool: ${classification.function_to_call || 'none'} | Language: ${classification.user_language || 'en'}
 
-CONVERSATION HISTORY (recent turns only):
+CONVERSATION:
 ${conversationHistory}
+${functionContext}${languageInstruction}
 
-USER INTENT: ${classification.intent}
-CONFIDENCE: ${classification.confidence}
-USER LANGUAGE: ${responseLanguage}${languageInstruction}
-
-${functionContext}
-
-Generate a helpful, natural, conversational response based on the above context.
-
-RESPONSE GUIDELINES:
-- Be warm, friendly, and professional
-- Keep responses concise (under 200 words unless explaining complex details)
-- If function data is available, USE IT and present it in a natural, engaging way
-- If there was an error, apologize and guide the user
-- For low confidence or needs_clarification, ask the clarification question naturally
+INSTRUCTIONS:
+- Be warm, concise (<200 words), and professional
+- Present any data naturally; guide user to next steps
+- If error occurred, apologize and help recover
+- Never mention system internals (tools, functions)
+- When listing services/products, show 3-4 highlights maximum, not the full list
+- DO NOT include image URLs or markdown images in your response
 - Use emojis sparingly and appropriately
-- Don't mention internal system details (intents, functions, confidence scores)
-- When availability/booking data is provided, present it clearly and guide the user to next steps
 
-${classification.needs_clarification ? `CLARIFICATION NEEDED: ${classification.clarification_question}` : ''}
-
-IMPORTANT: You must respond in JSON format with the following structure:
-{
-  "response": "Your natural conversational response here",
-  "suggestions": ["2-4 short follow-up prompts the user might want to ask next"]
+Respond in JSON only:
+{"response": "...", "suggestions": ["3-5 word follow-up", "another option", "third option"]}`;
 }
 
-The suggestions should be:
-- Brief (3-7 words each)
-- Contextually relevant to your response and the conversation
-- Actionable prompts that help the user continue the conversation
-- Examples: "Show me more options", "What are the prices?", "Book this service", "Tell me about availability"
+// ----------------------------------------------------------------------------
+// REQUEST BUILDING
+// ----------------------------------------------------------------------------
 
-RESPOND WITH JSON ONLY:`;
+function buildRequestBody(
+  prompt: string,
+  model: string,
+  reasoningEnabled?: boolean
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: MAX_TOKENS,
+    temperature: DEFAULT_TEMPERATURE,
+  };
 
-  // Call OpenRouter API
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://heysheets.com',
-      'X-Title': 'HeySheets MVP'
-    },
-    body: JSON.stringify({
-      // Use user-selected model or default to Grok for cost-effectiveness
-      model: model || 'x-ai/grok-4.1-fast',
-      messages: [{ role: 'user', content: responsePrompt }],
-      max_tokens: 600,
-      temperature: 0.7 // Higher temperature for more natural, varied responses
-    })
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('[Responder] OpenRouter API error:', error);
-    throw new Error(`Response generation failed: ${response.statusText}`);
+  // Enable extended reasoning for supported models (adds latency but improves quality)
+  // See: https://openrouter.ai/docs/use-cases/reasoning
+  if (reasoningEnabled) {
+    body.reasoning = {
+      effort: 'low', // 'low' | 'medium' | 'high'
+    };
   }
 
-  const result = await response.json();
-  const rawContent = result.choices[0].message.content;
+  return body;
+}
 
-  // Parse the JSON response
-  let responseText = '';
+// ----------------------------------------------------------------------------
+// RESPONSE PARSING
+// ----------------------------------------------------------------------------
+
+function parseResponse(result: Record<string, unknown>): ResponderResult {
+  const choices = result.choices as Array<{ message: { content: string } }> | undefined;
+  const rawContent = choices?.[0]?.message?.content || '';
+
+  let text = rawContent;
   let suggestions: string[] = [];
 
+  // Try JSON parse; extract from markdown fence if needed
   try {
-    // Try to parse as JSON
-    const parsed = JSON.parse(rawContent);
-    responseText = parsed.response || rawContent;
-    suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [];
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      text = parsed.response || rawContent;
+      suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [];
+    }
   } catch {
-    // If JSON parsing fails, use raw content as response
-    console.warn('[Responder] Failed to parse JSON response, using raw content');
-    responseText = rawContent;
-    // Generate default suggestions based on intent
-    suggestions = getDefaultSuggestions(classification.intent);
+    // Use raw content as fallback
   }
 
-  // Extract token usage from OpenRouter response
-  const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
-  console.log('[Responder] Generated response');
-  console.log('[Responder] Token usage:', usage);
-  console.log('[Responder] Suggestions:', suggestions);
+  const usage = (result.usage as { prompt_tokens?: number; completion_tokens?: number }) || {};
 
   return {
-    text: responseText,
+    text,
     suggestions,
     usage: {
       input: usage.prompt_tokens || 0,
@@ -171,22 +180,55 @@ RESPOND WITH JSON ONLY:`;
   };
 }
 
+// ----------------------------------------------------------------------------
+// MAIN FUNCTION
+// ----------------------------------------------------------------------------
+
 /**
- * Get default suggestions based on intent when JSON parsing fails
+ * Generates a conversational response based on context and function results.
+ * @param messages - Conversation history
+ * @param classification - User intent classification
+ * @param functionResult - Optional result from executed function
+ * @param store - Store configuration for context
+ * @param model - AI model to use (defaults to DEFAULT_MODEL)
+ * @param options - Additional options (reasoning, function name)
  */
-function getDefaultSuggestions(intent: string): string[] {
-  switch (intent) {
-    case 'SERVICE_INQUIRY':
-      return ['Book this service', 'Show pricing', 'Check availability'];
-    case 'PRODUCT_INQUIRY':
-      return ['Show more products', 'Check availability', 'Add to cart'];
-    case 'INFO_REQUEST':
-      return ['Show services', 'Contact information', 'Operating hours'];
-    case 'BOOKING_REQUEST':
-      return ['See available times', 'Change date', 'Confirm booking'];
-    case 'GREETING':
-      return ['Show me products', 'Show me services', 'Operating hours', 'Store information'];
-    default:
-      return ['Show products', 'Show services', 'Store information'];
+export async function generateResponse(
+  messages: Message[],
+  classification: Classification,
+  functionResult?: FunctionResult,
+  store?: StoreConfig,
+  model?: string,
+  options?: ResponderOptions
+): Promise<ResponderResult> {
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not configured');
   }
+
+  // Build prompt components
+  const prompt = buildPrompt(messages, classification, functionResult, store, options);
+  const selectedModel = model || DEFAULT_MODEL;
+
+  // Build request body with optional reasoning
+  const requestBody = buildRequestBody(prompt, selectedModel, options?.reasoningEnabled);
+
+  // Call OpenRouter API
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[Responder] API error:', error);
+    throw new Error(`Response generation failed: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return parseResponse(result);
 }

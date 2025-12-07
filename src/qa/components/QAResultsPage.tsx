@@ -17,17 +17,66 @@ const formatDuration = (ms: number | null | undefined) => {
   return `${(num / 1000).toFixed(2)}s`
 }
 
-const formatStepDurationFromStep = (step: any) => {
+const formatStepDurationFromStep = (step: any, totalMs?: number) => {
   if (!step) return '-'
+
+  // Try to get a canonical millisecond value from several possible fields
+  let ms: number | null = null
   const msValue = step?.technical?.timeMs ?? step?.timeMs ?? step?.durationMs
   if (msValue != null && !Number.isNaN(Number(msValue))) {
-    return formatDuration(msValue)
+    ms = Number(msValue)
+  } else {
+    const raw = step?.duration ?? step?.time ?? null
+    if (raw == null || Number.isNaN(Number(raw))) return '-'
+    const num = Number(raw)
+    // Heuristic: if value looks like milliseconds (large number) use as-is,
+    // otherwise if it's small assume seconds and convert to ms
+    if (num > 1000) {
+      ms = num
+    } else {
+      // treat as seconds
+      ms = Math.round(num * 1000)
+    }
   }
-  const raw = step?.duration ?? step?.time ?? null
-  if (raw == null || Number.isNaN(Number(raw))) return '-'
-  const num = Number(raw)
-  if (num > 1000) return `${(num / 1000).toFixed(2)}s`
-  return `${num.toFixed(2)}s`
+
+  if (ms == null || Number.isNaN(ms)) return '-'
+
+  // If total duration is provided, clamp unrealistic step durations
+  if (totalMs && ms > totalMs * 5) {
+    // suspiciously large (more than 5x total) - clamp to total and mark
+    return `${formatDuration(totalMs)} (clamped)`
+  }
+
+  return formatDuration(ms)
+}
+
+// Helper: pick first defined timing key from timings object
+const pickTiming = (timings: Record<string, any> | undefined, ...keys: string[]) => {
+  if (!timings) return null
+  for (const k of keys) {
+    const v = (timings as any)[k]
+    if (v !== undefined && v !== null) return v
+  }
+  return null
+}
+
+// Helper: produce compact abbreviation for step names
+const stepAbbrev = (stepName: string, step: any) => {
+  if (!stepName) return ''
+  if (stepName.startsWith('Tool Selection')) return 'Tool'
+  if (stepName === 'Function Execution') return `Fn:${step?.functionCalled || 'exec'}`
+  if (stepName === 'LLM Response' || stepName === 'Response Generation') return 'LLM'
+  if (stepName === 'Intent Classification') return 'Tool'
+  if (stepName === 'Native Tool Calling') return 'Native'
+  return stepName.slice(0, 6)
+}
+
+// Helper: return display duration for a step (uses intentDur for tool-selection)
+const stepDisplayDuration = (step: any, intentDur: number | null | undefined, totalMs?: number) => {
+  const stepName = step?.name || step?.function || ''
+  const isToolSelection = stepName.startsWith('Tool Selection') || step?.function === 'classifier'
+  if (isToolSelection && intentDur != null) return formatDuration(intentDur)
+  return formatStepDurationFromStep(step, totalMs)
 }
 
 export function QAResultsPage() {
@@ -261,26 +310,28 @@ export function QAResultsPage() {
                   const stepsCount = stepsArray.length
                   const durationMs = r.timings?.totalDuration || r.timings?.duration || null
                   const cost = r.cost?.total ?? null
-                  const intent = r.intent?.detected || r.metadata?.intent || (stepsArray[0]?.result?.intent) || ''
+                  // Get tool/function from toolSelection, steps, or function_calls
+                  const toolSelected = r.toolSelection?.function || 
+                    stepsArray[0]?.result?.function_to_call || 
+                    r.function_calls?.[0]?.name || 
+                    ''
                   const mode = r?.metadata?.architecture ?? (
                     r?.metadata?.nativeMode === true ? 'native' : r?.metadata?.nativeMode === false ? 'classifier' : '-'
                   )
                   const isExpanded = expandedRows[r.id]
-                  // Pick common timing fields with fallbacks
-                  const pickTiming = (...keys: string[]) => {
-                    for (const k of keys) {
-                      const v = (r.timings && (r.timings as any)[k])
-                      if (v !== undefined && v !== null) return v
-                    }
-                    return null
-                  }
+                  // Bind top-level pickTiming to this request's timings
+                  const pickTimingLocal = (...keys: string[]) => pickTiming(r.timings, ...keys)
 
-                  const intentDurRaw = pickTiming('intentDuration', 'intent_duration', 'intentMs', 'intent_ms', 'intent')
-                  const functionDurRaw = pickTiming('functionDuration', 'function_duration', 'functionMs', 'function_ms', 'function')
-                  const responseDurRaw = pickTiming('responseDuration', 'response_duration', 'responseMs', 'response_ms', 'response')
+                  const intentDurRaw = pickTimingLocal('intentDuration', 'intent_duration', 'intentMs', 'intent_ms', 'intent')
+                  const functionDurRaw = pickTimingLocal('functionDuration', 'function_duration', 'functionMs', 'function_ms', 'function')
+                  const responseDurRaw = pickTimingLocal('responseDuration', 'response_duration', 'responseMs', 'response_ms', 'response')
                   const intentDur = intentDurRaw != null ? Number(intentDurRaw) : null
                   const functionDur = functionDurRaw != null ? Number(functionDurRaw) : null
                   const responseDur = responseDurRaw != null ? Number(responseDurRaw) : null
+
+                  // Extract total tokens for summary display
+                  const totalInputTokens = r.tokens?.total?.input ?? null
+                  const totalOutputTokens = r.tokens?.total?.output ?? null
 
                   return (
                     <div 
@@ -330,13 +381,13 @@ export function QAResultsPage() {
                                 <span className="break-words">{r.user_message}</span>
                               </div>
                             )}
-                            {intent && (
+                            {toolSelected && (
                               <div className="flex items-center gap-1 mt-1">
                                 <Zap className="h-3 w-3 text-amber-500 shrink-0" />
-                                <span className="text-[10px] text-muted-foreground truncate">{intent}</span>
+                                <span className="text-[10px] text-muted-foreground truncate">{toolSelected}</span>
                               </div>
                             )}
-                            {/* Functions moved below intent for condensed view */}
+                            {/* Functions list */}
                             {functionsList.length > 0 && (
                               <div className="mt-1 flex items-center gap-2 flex-wrap">
                                 <span className="text-[10px] text-muted-foreground">Functions:</span>
@@ -369,26 +420,28 @@ export function QAResultsPage() {
                                   {cost !== null ? `${Number(cost).toFixed(4)}` : '-'}
                                 </span>
                               </div>
+                              {/* Total Tokens - Compact */}
+                              {(totalInputTokens !== null || totalOutputTokens !== null) && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <span className="font-mono">
+                                    {totalInputTokens ?? 0}↓ {totalOutputTokens ?? 0}↑
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             {/* Step timing breakdown - Smaller */}
                             {stepsCount > 0 && (
                               <div className="flex items-center gap-1 mt-1 flex-wrap">
                                 <span className="text-[10px] text-muted-foreground">{stepsCount} steps:</span>
                                 {stepsArray.slice(0, 4).map((step, idx) => {
-                                  // Abbreviate step names for compact display
-                                  const stepName = step?.name || step?.function || '';
-                                  const abbrev = stepName.startsWith('Tool Selection') ? 'Tool'
-                                    : stepName === 'Function Execution' ? `Fn:${step?.functionCalled || 'exec'}`
-                                    : stepName === 'LLM Response' ? 'LLM'
-                                    : stepName === 'Intent Classification' ? 'Tool'  // Legacy fallback
-                                    : stepName === 'Response Generation' ? 'LLM'     // Legacy fallback
-                                    : stepName === 'Native Tool Calling' ? 'Native'  // Old native single-step fallback
-                                    : stepName.slice(0, 6);
+                                  const stepName = step?.name || step?.function || ''
+                                  const abbrev = stepAbbrev(stepName, step)
+                                  const durationText = stepDisplayDuration(step, intentDur, durationMs)
                                   return (
                                     <Badge key={idx} variant="secondary" className="text-[9px] px-1 py-0 h-4">
-                                      {abbrev} {formatStepDurationFromStep(step)}
+                                      {abbrev} {durationText}
                                     </Badge>
-                                  );
+                                  )
                                 })}
                                 {stepsCount > 4 && (
                                   <span className="text-[9px] text-muted-foreground">+{stepsCount - 4}</span>
@@ -431,12 +484,36 @@ export function QAResultsPage() {
                             <div>
                               <div className="text-xs font-semibold text-muted-foreground mb-1">Timing Breakdown</div>
                               <div className="text-xs bg-background rounded p-2 space-y-1">
-                                {r.timings ? Object.entries(r.timings).map(([key, val]) => (
-                                  <div key={key} className="flex justify-between">
-                                    <span className="text-muted-foreground">{key}:</span>
-                                    <span className="font-mono">{typeof val === 'number' ? formatDuration(val) : String(val)}</span>
-                                  </div>
-                                )) : <span className="text-muted-foreground">No timing data</span>}
+                                {r.timings ? (() => {
+                                  // Define the preferred order for timing fields
+                                  const orderedKeys = [
+                                    'totalDuration',
+                                    'intentDuration', 
+                                    'functionDuration',
+                                    'responseDuration',
+                                    'reasoningDuration',
+                                  ];
+                                  // Fields to hide from display (timestamps, not durations)
+                                  const hiddenKeys = ['requestStart', 'requestStartMs', 'requestStartSeconds', 'requestStartIso'];
+                                  
+                                  const entries = Object.entries(r.timings)
+                                    .filter(([key]) => !hiddenKeys.includes(key))
+                                    .sort((a, b) => {
+                                      const aIdx = orderedKeys.indexOf(a[0]);
+                                      const bIdx = orderedKeys.indexOf(b[0]);
+                                      if (aIdx === -1 && bIdx === -1) return 0;
+                                      if (aIdx === -1) return 1;
+                                      if (bIdx === -1) return -1;
+                                      return aIdx - bIdx;
+                                    });
+                                  
+                                  return entries.map(([key, val]) => (
+                                    <div key={key} className="flex justify-between">
+                                      <span className="text-muted-foreground">{key}:</span>
+                                      <span className="font-mono">{typeof val === 'number' ? formatDuration(val) : String(val)}</span>
+                                    </div>
+                                  ));
+                                })() : <span className="text-muted-foreground">No timing data</span>}
                               </div>
                             </div>
                           </div>
@@ -447,7 +524,8 @@ export function QAResultsPage() {
                               <div className="text-xs font-semibold text-muted-foreground mb-2">Steps Detail ({stepsArray.length} steps)</div>
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                 {stepsArray.map((step, sidx) => {
-                                  const ms = formatStepDurationFromStep(step)
+                                  // Prefer canonical intent/tool timing for Tool Selection steps
+                                  const ms = stepDisplayDuration(step, intentDur, durationMs)
                                   const stepName = step?.name || step?.function || `Step ${sidx + 1}`
                                   const stepStatus = step?.status || 'unknown'
                                   const functionCalled = step?.functionCalled || step?.result?.function || null
@@ -477,8 +555,8 @@ export function QAResultsPage() {
                                         )}
                                         {stepIntent && (
                                           <div>
-                                            <span className="text-muted-foreground">Intent: </span>
-                                            <span>{stepIntent}{stepConfidence ? ` (${stepConfidence}%)` : ''}</span>
+                                            <span className="text-muted-foreground">Tool: </span>
+                                            <span>{stepIntent}</span>
                                           </div>
                                         )}
                                         {stepTokens && (
@@ -592,7 +670,7 @@ export function QAResultsPage() {
 
                         <div className="flex gap-4 text-xs text-muted-foreground">
                           <span>⏱️ {formatDuration(step.technical.timeMs)}</span>
-                          <span>Intent: {step.technical.intentActual}</span>
+                          <span>Tool: {step.technical.intentActual}</span>
                           {step.technical.functionsActual.length > 0 && (
                             <span>Functions: {step.technical.functionsActual.join(', ')}</span>
                           )}

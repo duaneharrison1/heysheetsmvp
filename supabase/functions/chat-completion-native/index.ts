@@ -793,6 +793,7 @@ serve(async (req) => {
     const totalCost = (totalInputTokens / 1_000_000) * pricing.input +
                      (totalOutputTokens / 1_000_000) * pricing.output;
 
+    log(requestId, `⏱️ Timing breakdown: intent=${intentDuration.toFixed(0)}ms, function=${totalFunctionDuration.toFixed(0)}ms, response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
     log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`, {
       llmCalls: totalCalls,
       functionCalls: functionCalls.length,
@@ -887,9 +888,7 @@ serve(async (req) => {
         status: 'success',
         duration: intentDuration,
         result: {
-          intent: detectedIntent,
-          confidence: 90,
-          reasoning: reasoning || 'Native tool calling - model selected tool directly',
+          function_to_call: detectedIntent,
           tokens: classificationTokens,
         },
       });
@@ -946,8 +945,6 @@ serve(async (req) => {
     // Build response with classifier-compatible debug schema
     const responsePayload = {
       text: finalResponse,
-      intent: detectedIntent,
-      confidence: 90, // Native tool calling has high confidence
       functionCalled: functionCalls[functionCalls.length - 1]?.name || null,
       functionResult: functionResult,
       debug: {
@@ -964,16 +961,11 @@ serve(async (req) => {
         // Reasoning content (if available)
         reasoning,             // Simple text version
         reasoningDetails,      // Full structured version (if available)
-        // Intent/Tool Selection object matching classifier schema
-        intent: {
-          detected: detectedIntent,
-          confidence: 90,
+        // Tool Selection info
+        toolSelection: {
+          function: detectedIntent,
           duration: intentDuration,
-          reasoning: reasoning || 'Native tool calling - model selected tool directly',
         },
-        // Renamed timing fields for clarity
-        toolSelectionDuration: intentDuration,   // Time for LLM to select tool(s)
-        llmResponseDuration: responseDuration,   // Time for final LLM response
         // Function calls array (existing format)
         functionCalls: functionCalls.map(fc => ({
           name: fc.name,

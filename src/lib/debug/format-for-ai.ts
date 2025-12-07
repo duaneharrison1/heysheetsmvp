@@ -52,9 +52,9 @@ export function formatRequestForAI(
   lines.push(`User: "${request.userMessage}"`)
   lines.push('')
 
-  // Intent
-  if (request.intent) {
-    lines.push(`INTENT: ${request.intent.detected} (${Math.round(request.intent.confidence)}% confidence)`)
+  // Tool Selection
+  if (request.toolSelection?.function) {
+    lines.push(`TOOL SELECTED: ${request.toolSelection.function}`)
     lines.push(`Duration: ${(request.timings.intentDuration! / 1000).toFixed(2)}s`)
     lines.push('')
   }
@@ -107,7 +107,7 @@ export function formatRequestForAI(
   lines.push(`TIMING:`)
   lines.push(`Total: ${(request.timings.totalDuration! / 1000).toFixed(2)}s`)
   if (request.timings.intentDuration) {
-    lines.push(`  Intent: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
+    lines.push(`  Tool Selection: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
   }
   if (request.timings.functionDuration) {
     lines.push(`  Functions: ${(request.timings.functionDuration / 1000).toFixed(2)}s`)
@@ -206,9 +206,9 @@ export function formatAllRequestsForAI(
     lines.push(`User: "${request.userMessage}"`)
     lines.push('')
 
-    // Intent with duration
-    if (request.intent) {
-      lines.push(`INTENT: ${request.intent.detected} (${Math.round(request.intent.confidence)}% confidence)`)
+    // Tool Selection
+    if (request.toolSelection?.function) {
+      lines.push(`TOOL SELECTED: ${request.toolSelection.function}`)
       if (request.timings.intentDuration) {
         lines.push(`Duration: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
       }
@@ -265,7 +265,7 @@ export function formatAllRequestsForAI(
     lines.push(`TIMING:`)
     lines.push(`Total: ${(request.timings.totalDuration! / 1000).toFixed(2)}s`)
     if (request.timings.intentDuration) {
-      lines.push(`  Intent: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
+      lines.push(`  Tool Selection: ${(request.timings.intentDuration / 1000).toFixed(2)}s`)
     }
     if (request.timings.functionDuration) {
       lines.push(`  Functions: ${(request.timings.functionDuration / 1000).toFixed(2)}s`)

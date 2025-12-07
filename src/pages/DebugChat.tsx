@@ -338,21 +338,30 @@ export default function DebugChat() {
 
       const totalDuration = requestTimer.end(requestId, 'total');
 
+      // Normalize requestStart: store ms, epoch seconds (float), and ISO string
+      const requestStartMs = requestStart;
+      const requestStartSeconds = Number((requestStartMs / 1000).toFixed(3));
+      const requestStartIso = new Date(requestStartMs).toISOString();
+
+      const timingsPayload: any = {
+        requestStartMs,
+        requestStartSeconds,
+        requestStartIso,
+        totalDuration,
+        intentDuration: data.debug?.intentDuration,
+        functionDuration: data.debug?.functionDuration,
+        responseDuration: data.debug?.responseDuration,
+        reasoningDuration: data.debug?.reasoningDuration,
+      };
+
       updateRequest(requestId, {
         response: {
           text: aiResponse,
           richContent: data.richContent,
           duration: 0,
         },
-        timings: {
-          requestStart,
-          totalDuration,
-          intentDuration: data.debug?.intentDuration,
-          functionDuration: data.debug?.functionDuration,
-          responseDuration: data.debug?.responseDuration,
-          reasoningDuration: data.debug?.reasoningDuration,
-        },
-        intent: data.debug?.intent,
+        timings: timingsPayload,
+        toolSelection: data.debug?.toolSelection,
         functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,
@@ -377,7 +386,9 @@ export default function DebugChat() {
           response_text: aiResponse,
           status: 'complete',
           timings: {
-            requestStart,
+            requestStartMs,
+            requestStartSeconds,
+            requestStartIso,
             totalDuration,
             intentDuration: data.debug?.intentDuration,
             functionDuration: data.debug?.functionDuration,
@@ -711,18 +722,18 @@ export default function DebugChat() {
   }
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-background flex flex-col">
       {/* Main Content: Responsive Layout */}
       <div className="flex-1 flex w-full min-h-0">
-        {/* Debug Panel Side Panel - LEFT side, Hidden on mobile, visible on md+ */}
-        <div className="hidden md:block w-96 flex-shrink-0 overflow-hidden">
+        {/* Debug Panel Side Panel - LEFT side, Hidden on mobile, visible on md+ - sticky with internal scroll */}
+        <div className="hidden md:flex md:flex-col w-96 flex-shrink-0 h-full overflow-y-auto">
           <DebugPanel embedded={true} topContent={debugPanelTopContent} showAdvancedOptions={true} />
         </div>
 
         {/* Chat Section - RIGHT side, Full width on mobile */}
-        <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
-          {/* Chat header (bot profile) */}
-          <div className="flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
+        <div className="flex-1 flex flex-col bg-muted min-w-0 h-full">
+          {/* Chat header (bot profile) - fixed at top, never scrolls */}
+          <div className="flex-shrink-0 flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
             <Avatar className="w-10 h-10" variant="bot">
               <AvatarFallback className="avatar-fallback">
                 <Bot className="w-4 h-4" />
@@ -751,7 +762,8 @@ export default function DebugChat() {
             )}
           </div>
 
-          <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
+          {/* Messages area - this is the ONLY thing that scrolls */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}
@@ -796,7 +808,8 @@ export default function DebugChat() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+          {/* Input footer - fixed at bottom, never scrolls */}
+          <div className="flex-shrink-0 p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
             {/* Suggestions area - shows follow-up prompts AND test scenarios */}
             {(currentSuggestions.length > 0 || true) && !isTyping && (
               <div className="mb-3">

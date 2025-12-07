@@ -3,17 +3,12 @@
 // ============================================================================
 
 /**
- * Classification result from intent classifier
+ * Classification result from tool selector
  */
 export interface Classification {
-  intent: 'SERVICE_INQUIRY' | 'PRODUCT_INQUIRY' | 'INFO_REQUEST' | 'BOOKING_REQUEST' | 'LEAD_GENERATION' | 'RECOMMENDATION_REQUEST' | 'GREETING' | 'OTHER';
-  confidence: number; // 0-100
-  needs_clarification: boolean;
-  clarification_question?: string;
   function_to_call: string | null;
   extracted_params: Record<string, any>;
-  reasoning: string;
-  user_language?: string; // Detected language of user input (e.g., 'en', 'es', 'fr', 'ja')
+  user_language: string; // Detected language of user input (e.g., 'en', 'es', 'fr', 'ja')
 }
 
 /**
@@ -152,8 +147,6 @@ export interface ChatCompletionRequest {
  */
 export interface ChatCompletionResponse {
   text: string;
-  intent: string;
-  confidence: number;
   functionCalled?: string;
   functionResult?: FunctionResult;
   // Dynamic suggestions for follow-up prompts

@@ -268,7 +268,7 @@ export class TestRunner {
           functionDuration: data.debug?.functionDuration,
           responseDuration: data.debug?.responseDuration,
         },
-        intent: data.debug?.intent,
+        toolSelection: data.debug?.toolSelection,
         functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,
@@ -819,7 +819,7 @@ export class TestRunner {
           functionDuration: data.debug?.functionDuration,
           responseDuration: data.debug?.responseDuration,
         },
-        intent: data.debug?.intent,
+        toolSelection: data.debug?.toolSelection,
         functionCalls: data.debug?.functionCalls,
         tokens: data.debug?.tokens,
         cost: data.debug?.cost,
@@ -839,8 +839,8 @@ export class TestRunner {
         botResponse: data.text || '',
         correlationId,
         technical: {
-          intent: data.debug?.intent?.detected || data.intent || 'UNKNOWN',
-          confidence: data.debug?.intent?.confidence || data.confidence || 0,
+          intent: data.debug?.toolSelection?.function || data.debug?.functionCalls?.[0]?.name || 'UNKNOWN',
+          confidence: 90, // Classifier mode always 90
           functions: data.debug?.functionCalls?.map((f: any) => f.name) || [],
           timeMs,
           performanceScore

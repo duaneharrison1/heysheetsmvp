@@ -334,28 +334,11 @@ function RequestCard({
         </Badge>
       </div>
 
-      {/* Intent - SIMPLE YELLOW TEXT */}
-      {request.intent && (
-        request.intent.reasoning ? (
-          <HoverTooltip
-            side="right"
-            allowOverflow={true}
-            content={
-              <div className="space-y-1">
-                <div className="font-semibold text-gray-100">AI Reasoning</div>
-                <div className="text-gray-300">{request.intent.reasoning}</div>
-              </div>
-            }
-          >
-            <div className="text-xs text-yellow-400 mb-2 cursor-help">
-              🎯 {request.intent.detected} ({request.intent.confidence.toFixed(0)})
-            </div>
-          </HoverTooltip>
-        ) : (
-          <div className="text-xs text-yellow-400 mb-2">
-            🎯 {request.intent.detected} ({request.intent.confidence.toFixed(0)})
-          </div>
-        )
+      {/* Tool Selection - SIMPLE YELLOW TEXT */}
+      {request.toolSelection?.function && (
+        <div className="text-xs text-yellow-400 mb-2">
+          🎯 {request.toolSelection.function}
+        </div>
       )}
 
       {/* 🆕 GOAL-BASED TEST: Turn & Simulated badges */}
@@ -435,10 +418,10 @@ function RequestCard({
                 Timeline:
               </div>
               <div className="space-y-1">
-                {/* Intent Classification */}
+                {/* Tool Selection (classifier duration) */}
                 {request.timings.intentDuration !== undefined && (
                   <div className="text-gray-400">
-                    📊 Intent: {(request.timings.intentDuration / 1000).toFixed(2)}s
+                    📊 Tool Selection: {(request.timings.intentDuration / 1000).toFixed(2)}s
                   </div>
                 )}
 
