@@ -113,7 +113,7 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
 
 function parseClassificationResponse(rawContent: string): Classification {
   
-  // Clean up response - remove markdown code blocks if present
+  // Clean up response
   let content = rawContent.trim();
 
   // Parse JSON
@@ -126,9 +126,9 @@ function parseClassificationResponse(rawContent: string): Classification {
   }
 
   // Default user_language to 'en' if not detected
-  if (!classification.user_language) {
-    classification.user_language = 'en';
-  }
+  // if (!classification.user_language) {
+  //   classification.user_language = 'en';
+  // }
 
   // Validate required fields
   if (!('function_to_call' in classification) || !('extracted_params' in classification)) {
@@ -214,15 +214,11 @@ export async function classifyIntent(
 
   const result = await response.json();
 
-  // Validate response structure
-  if (!result.choices?.[0]?.message?.content) {
-    console.error('[Classifier] Invalid API response structure:', JSON.stringify(result, null, 2));
-    throw new Error('OpenRouter API returned unexpected response format');
-  }
-
-  const rawContent = result.choices[0].message.content;
-  if (!rawContent) {
-    throw new Error('OpenRouter API returned empty response');
+  // Minimal structural validation: ensure `content` exists and is non-empty
+  const rawContent = result?.choices?.[0]?.message?.content;
+  if (typeof rawContent !== 'string' || rawContent.trim().length === 0) {
+    console.error('[Classifier] Missing or empty content in API response:', JSON.stringify(result?.choices?.[0] ?? result, null, 2));
+    throw new Error('OpenRouter API returned unexpected or empty response');
   }
 
   console.log('[Classifier] Raw LLM response (first 200 chars):', rawContent.substring(0, 200));
@@ -233,7 +229,7 @@ export async function classifyIntent(
 
   // Extract token usage
   const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
-  console.log('[Classifier] Token usage:', usage);
+  //console.log('[Classifier] Token usage:', usage);
 
   return {
     classification,
