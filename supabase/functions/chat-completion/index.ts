@@ -1,7 +1,13 @@
+/**
+ * CHAT COMPLETION ORCHESTRATOR
+ * ============================
+ * Main entry point for chat completion requests.
+ * Orchestrates: Classifier → Function Execution → Responder
+ */
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
-  Classification,
   Message,
   StoreData,
   StoreConfig,
@@ -9,21 +15,18 @@ import {
   ChatCompletionRequest,
   ChatCompletionResponse
 } from '../_shared/types.ts';
+import { corsHeaders } from '../_shared/cors.ts';
+import {
+  DEFAULT_MODEL,
+  getModelPricing,
+  calculateCost,
+} from '../_shared/config.ts';
 import { classifyIntent } from '../classifier/index.ts';
 import { generateResponse } from '../responder/index.ts';
 import { executeFunction } from '../tools/index.ts';
 
 // ============================================================================
-// CORS HEADERS
-// ============================================================================
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
-};
-
-// ============================================================================
-// LOGGING HELPER
+// LOGGING
 // ============================================================================
 
 function log(requestId: string, message: string, data?: any) {
@@ -33,468 +36,10 @@ function log(requestId: string, message: string, data?: any) {
 }
 
 // ============================================================================
-// MAIN HANDLER
+// DATA LOADING
 // ============================================================================
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  // 🆕 EXTRACT CORRELATION ID & START TIMING
-  const requestId = req.headers.get('X-Request-ID') || crypto.randomUUID();
-  const requestStart = performance.now();
-
-  log(requestId, '📨 Chat completion started');
-
-  try {
-    // Parse request
-    const body: ChatCompletionRequest = await req.json();
-    const { messages, storeId, model, simpleMode, cachedData, reasoningEnabled = false } = body as ChatCompletionRequest & { cachedData?: { services?: any[]; products?: any[]; hours?: any[] }; reasoningEnabled?: boolean };
-
-    // Log endpoint and settings for verification
-    log(requestId, '==========================================');
-    log(requestId, 'Endpoint called: chat-completion');
-    log(requestId, 'This is the CLASSIFIER + RESPONDER endpoint');
-    log(requestId, '==========================================');
-    log(requestId, 'Received settings:', {
-      model: model || 'x-ai/grok-4.1-fast (default)',
-      reasoningEnabled,
-      storeId,
-    });
-
-    // 🆕 SIMPLE MODE: Just do a raw LLM call, no chatbot logic
-    if (simpleMode) {
-      log(requestId, '🔧 Simple mode - raw LLM call');
-
-      const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-      if (!OPENROUTER_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://heysheets.com',
-          'X-Title': 'HeySheets QA'
-        },
-        body: JSON.stringify({
-          model: model || 'x-ai/grok-4.1-fast',
-          messages: messages,
-          temperature: 0.7,
-          max_tokens: 500,
-          // Disable reasoning to save tokens and time
-          reasoning: { enabled: false },
-        })
-      });
-
-      if (!openRouterResponse.ok) {
-        const errorText = await openRouterResponse.text();
-        log(requestId, '❌ OpenRouter error', { status: openRouterResponse.status, error: errorText });
-        return new Response(
-          JSON.stringify({ error: 'LLM call failed', details: errorText }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const openRouterData = await openRouterResponse.json();
-      const text = openRouterData.choices?.[0]?.message?.content || '';
-
-      log(requestId, '✅ Simple mode complete', { textLength: text.length });
-
-      return new Response(
-        JSON.stringify({ text }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
-      );
-    }
-
-    if (!messages || messages.length === 0 || !storeId) {
-      log(requestId, '❌ Missing required fields');
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: messages or storeId' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
-      );
-    }
-
-    log(requestId, '💬 User message', { messageCount: messages.length, storeId, model: model || 'x-ai/grok-4.1-fast (default)' });
-
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-    // Load store configuration (including detected_schema)
-    const { data: store, error: storeError } = await supabase
-      .from('stores')
-      .select('*')
-      .eq('id', storeId)
-      .single();
-
-    if (storeError || !store) {
-      return new Response(
-        JSON.stringify({ error: 'Store not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Parse detected_schema if it's a string
-    const storeConfig: StoreConfig = {
-      ...store,
-      detected_schema: typeof store.detected_schema === 'string'
-        ? JSON.parse(store.detected_schema)
-        : store.detected_schema
-    };
-
-    console.log('[Orchestrator] Store config:', {
-      id: storeConfig.id,
-      name: storeConfig.name,
-      hasDetectedSchema: !!storeConfig.detected_schema,
-      schemaKeys: storeConfig.detected_schema ? Object.keys(storeConfig.detected_schema) : []
-    });
-
-    // Pre-load store data for classification context (using detected schema)
-    // Use cached data from client if available (avoids refetching)
-    let storeData: StoreData = {
-      services: [],
-      products: [],
-      hours: []
-    };
-
-    // Check if client passed cached data
-    const hasCachedServices = cachedData?.services && cachedData.services.length > 0;
-    const hasCachedProducts = cachedData?.products && cachedData.products.length > 0;
-    const hasCachedHours = cachedData?.hours && cachedData.hours.length > 0;
-
-    if (hasCachedServices || hasCachedProducts || hasCachedHours) {
-      log(requestId, '📦 Using client-provided cached data', {
-        services: cachedData?.services?.length || 0,
-        products: cachedData?.products?.length || 0,
-        hours: cachedData?.hours?.length || 0,
-      });
-    }
-
-    try {
-      const detectedSchema = storeConfig.detected_schema || {};
-
-      // Find actual tab names using fuzzy matching
-      const servicesTab = findActualTabName('services', detectedSchema);
-      const productsTab = findActualTabName('products', detectedSchema);
-      const hoursTab = findActualTabName('hours', detectedSchema);
-
-      // Load data in parallel using SERVICE_ROLE_KEY for authentication
-      // Skip loading if client provided valid cached data
-      const [services, products, hours] = await Promise.all([
-        hasCachedServices ? Promise.resolve(cachedData!.services!) :
-          (servicesTab ? loadTab(servicesTab, storeId, serviceRoleKey, requestId) : Promise.resolve([])),
-        hasCachedProducts ? Promise.resolve(cachedData!.products!) :
-          (productsTab ? loadTab(productsTab, storeId, serviceRoleKey, requestId) : Promise.resolve([])),
-        hasCachedHours ? Promise.resolve(cachedData!.hours!) :
-          (hoursTab ? loadTab(hoursTab, storeId, serviceRoleKey, requestId) : Promise.resolve([]))
-      ]);
-
-      storeData = { services, products, hours };
-    } catch (error) {
-      console.error('[Orchestrator] Error pre-loading data:', error);
-    }
-
-    // Step 1: Classify intent and extract parameters
-    log(requestId, '🎯 Classifying intent...');
-    const classifyStart = performance.now();
-
-    const { classification, usage: classifyUsage } = await classifyIntent(
-      messages,
-      { storeData },
-      model,
-      {
-        reasoningEnabled,         // Pass reasoning setting from request
-        includeStoreData: true,   // Enhanced mode: include store overview (set to false for lean mode)
-      }
-    );
-
-    const classifyDuration = performance.now() - classifyStart;
-    log(requestId, `✅ Tool selected: ${classification.function_to_call || 'none'} (${classifyDuration.toFixed(0)}ms)`);
-
-    // Step 2: Execute function if classified
-    let functionResult: FunctionResult | undefined;
-    let functionDuration = 0;
-
-    if (classification.function_to_call && classification.function_to_call !== 'null') {
-      log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
-      const functionStart = performance.now();
-
-      // Get the last user message for form data parsing
-      const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
-
-      functionResult = await executeFunction(
-        classification.function_to_call,
-        classification.extracted_params,
-        {
-          storeId,
-          userId: 'anonymous', // Public access, no user ID
-          authToken: serviceRoleKey,  // Use SERVICE_ROLE_KEY for internal function calls
-          store: storeConfig,
-          requestId,  // Pass correlation ID for tracing
-          lastUserMessage,  // Pass last message for form data parsing
-          storeData  // Pass pre-loaded data to avoid refetching in handlers
-        }
-      );
-
-      functionDuration = performance.now() - functionStart;
-      log(requestId, `✅ Function complete (${functionDuration.toFixed(0)}ms)`, {
-        success: functionResult?.success
-      });
-    }
-
-    // Get pricing based on actual model used (fallback to Grok 4.1 Fast if not found)
-    const modelPricing: Record<string, { input: number; output: number }> = {
-      'anthropic/claude-sonnet-4.5': { input: 3.0, output: 15.0 },
-      'google/gemini-3-pro-preview': { input: 2.0, output: 12.0 },
-      'anthropic/claude-haiku-4.5': { input: 1.0, output: 5.0 },
-      'openai/gpt-5.1': { input: 0.30, output: 1.20 },
-      'openai/gpt-5.1-chat': { input: 0.30, output: 1.20 },
-      'google/gemini-2.5-flash': { input: 0.30, output: 2.50 },
-      'deepseek/deepseek-chat-v3.1': { input: 0.27, output: 1.10 },
-      'minimax/minimax-m2': { input: 0.26, output: 1.02 },
-      'qwen/qwen3-235b-a22b-2507': { input: 0.22, output: 0.95 },
-      'x-ai/grok-4.1-fast': { input: 0.20, output: 0.50 },
-      'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
-    };
-    const pricing = model ? (modelPricing[model] ?? modelPricing['x-ai/grok-4.1-fast']) : modelPricing['x-ai/grok-4.1-fast'];
-
-    // Check if function wants to bypass LLM responder (deterministic response)
-    // This is the demo-dh "OrderAgent" pattern for critical responses
-    if (functionResult?.skipResponder && functionResult?.message) {
-      log(requestId, '🎯 Using deterministic response (skipResponder)');
-      const totalDuration = performance.now() - requestStart;
-
-      // Build response without calling LLM responder
-      const response: ChatCompletionResponse = {
-        text: functionResult.message,
-        functionCalled: classification.function_to_call || undefined,
-        functionResult,
-        debug: {
-          intentDuration: classifyDuration,  // Classifier duration (for frontend compatibility)
-          functionDuration,
-          responseDuration: 0, // No responder call
-          totalDuration,
-          toolSelection: {
-            function: classification.function_to_call,
-            duration: classifyDuration,
-          },
-          functionCalls: [{
-            name: classification.function_to_call || '',
-            arguments: classification.extracted_params || {},
-            result: {
-              success: functionResult.success,
-              data: functionResult.data,
-              error: functionResult.error,
-            },
-            duration: functionDuration,
-          }],
-          tokens: {
-            classification: { input: classifyUsage.input, output: classifyUsage.output },
-            response: { input: 0, output: 0 }, // No responder tokens
-            total: { input: classifyUsage.input, output: classifyUsage.output, cached: 0 },
-          },
-          cost: {
-            classification: (classifyUsage.input / 1_000_000) * pricing.input + (classifyUsage.output / 1_000_000) * pricing.output,
-            response: 0,
-            total: (classifyUsage.input / 1_000_000) * pricing.input + (classifyUsage.output / 1_000_000) * pricing.output,
-          },
-          steps: [
-            {
-              name: 'Tool Selection',
-              function: 'classifier',
-              status: 'success',
-              duration: classifyDuration,
-              result: {
-                function_to_call: classification.function_to_call,
-                params: classification.extracted_params,
-                tokens: { input: classifyUsage.input, output: classifyUsage.output },
-              },
-            },
-            {
-              name: 'Function Execution',
-              function: 'tools',
-              status: functionResult.success ? 'success' : 'error',
-              duration: functionDuration,
-              functionCalled: classification.function_to_call,
-              result: functionResult.success ? functionResult.data : undefined,
-            },
-            {
-              name: 'Response Generation',
-              function: 'skipResponder',
-              status: 'success',
-              duration: 0,
-              result: {
-                length: functionResult.message.length,
-                note: 'Deterministic response - LLM bypassed',
-              },
-            },
-          ],
-        },
-      };
-
-      log(requestId, `⏱️ Timing breakdown: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=0ms (skipResponder), total=${totalDuration.toFixed(0)}ms`);
-      log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
-
-      return new Response(JSON.stringify(response), {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-          'X-Request-ID': requestId,
-          'Server-Timing': `total;dur=${totalDuration}`,
-        }
-      });
-    }
-
-    // Step 3: Generate response using LLM
-    log(requestId, '💬 Generating response...');
-    const responseStart = performance.now();
-
-    const { text: responseText, suggestions, usage: responseUsage } = await generateResponse(
-      messages,
-      classification,
-      functionResult,
-      storeConfig,
-      model,  // Pass user-selected model to responder
-      {
-        architectureMode: 'enhanced',  // Use enhanced mode by default (slim results, no pretty-print)
-        reasoningEnabled,              // Pass reasoning setting from request
-        functionName: classification.function_to_call || undefined,
-      }
-    );
-
-    const responseDuration = performance.now() - responseStart;
-    const totalDuration = performance.now() - requestStart;
-
-    // Aggregate token usage and calculate cost
-    const totalInputTokens = classifyUsage.input + responseUsage.input;
-    const totalOutputTokens = classifyUsage.output + responseUsage.output;
-
-    const inputCost = (totalInputTokens / 1_000_000) * pricing.input;
-    const outputCost = (totalOutputTokens / 1_000_000) * pricing.output;
-    const totalCost = inputCost + outputCost;
-
-    log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
-    log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
-    log(requestId, `⏱️ Timing breakdown: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
-    log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
-
-    // Step 4: Return response
-    const response: ChatCompletionResponse = {
-      text: responseText,
-      functionCalled: classification.function_to_call || undefined,
-      functionResult,
-      suggestions, // Dynamic suggestions from responder
-      // 🆕 ADD DEBUG METADATA (frontend will filter in production)
-      debug: {
-        endpoint: 'chat-completion',    // Confirm which endpoint was used
-        reasoningEnabled,               // Confirm reasoning setting
-        intentDuration: classifyDuration,  // Classifier duration (for frontend compatibility)
-        functionDuration,
-        responseDuration,
-        totalDuration,
-        toolSelection: {
-          function: classification.function_to_call,
-          duration: classifyDuration,
-        },
-        functionCalls: functionResult ? [{
-          name: classification.function_to_call || '',
-          arguments: classification.extracted_params || {},
-          result: {
-            success: functionResult.success,
-            data: functionResult.data,
-            error: functionResult.error,
-          },
-          duration: functionDuration,
-        }] : [],
-        tokens: {
-          classification: { input: classifyUsage.input, output: classifyUsage.output },
-          response: { input: responseUsage.input, output: responseUsage.output },
-          total: { input: totalInputTokens, output: totalOutputTokens, cached: 0 },
-        },
-        cost: {
-          classification: (classifyUsage.input / 1_000_000) * pricing.input + (classifyUsage.output / 1_000_000) * pricing.output,
-          response: (responseUsage.input / 1_000_000) * pricing.input + (responseUsage.output / 1_000_000) * pricing.output,
-          total: totalCost,
-        },
-        // 🆕 ADD: Step-by-step breakdown for enhanced debugging
-        steps: [
-          {
-            name: 'Tool Selection',
-            function: 'classifier',
-            status: 'success',
-            duration: classifyDuration,
-            result: {
-              function_to_call: classification.function_to_call,
-              params: classification.extracted_params,
-              tokens: { input: classifyUsage.input, output: classifyUsage.output },
-            },
-          },
-          ...(classification.function_to_call && classification.function_to_call !== 'null' ? [{
-            name: 'Function Execution',
-            function: 'tools',
-            status: functionResult?.success ? 'success' : 'error',
-            duration: functionDuration,
-            functionCalled: classification.function_to_call,
-            result: functionResult?.success ? functionResult.data : undefined,
-            error: !functionResult?.success ? {
-              message: functionResult?.error || 'Function execution failed',
-              args: classification.extracted_params,
-            } : undefined,
-          }] : []),
-          {
-            name: 'Response Generation',
-            function: 'responder',
-            status: 'success',
-            duration: responseDuration,
-            result: {
-              length: responseText?.length || 0,
-              tokens: { input: responseUsage.input, output: responseUsage.output },
-            },
-          },
-        ],
-      },
-    };
-
-    return new Response(JSON.stringify(response), {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json',
-        'X-Request-ID': requestId,
-        'Server-Timing': `total;dur=${totalDuration}`,
-      }
-    });
-
-  } catch (error) {
-    log(requestId, '❌ Error', { error: error instanceof Error ? error.message : String(error) });
-    return new Response(
-      JSON.stringify({
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : String(error),
-        requestId,
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
-    );
-  }
-});
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Find actual tab name from detected schema using fuzzy matching
- */
+/** Find actual tab name from detected schema using fuzzy matching */
 function findActualTabName(
   expectedTab: string,
   detectedSchema: Record<string, any>
@@ -523,10 +68,7 @@ function findActualTabName(
   return null;
 }
 
-/**
- * Load data from Google Sheet tab via google-sheet edge function
- * Uses SERVICE_ROLE_KEY for authentication to allow internal edge function calls
- */
+/** Load data from Google Sheet tab via edge function */
 async function loadTab(
   tabName: string,
   storeId: string,
@@ -539,10 +81,9 @@ async function loadTab(
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${authToken}`,
-      'apikey': authToken
+      'apikey': authToken,
     };
 
-    // Add correlation ID if provided
     if (requestId) {
       headers['X-Request-ID'] = requestId;
     }
@@ -550,11 +91,7 @@ async function loadTab(
     const response = await fetch(`${supabaseUrl}/functions/v1/google-sheet`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        operation: 'read',
-        storeId,
-        tabName
-      })
+      body: JSON.stringify({ operation: 'read', storeId, tabName }),
     });
 
     if (!response.ok) {
@@ -569,5 +106,468 @@ async function loadTab(
     return [];
   }
 }
+
+/** Pre-load store data from sheets or use cached data */
+async function loadStoreData(
+  storeConfig: StoreConfig,
+  cachedData: { services?: any[]; products?: any[]; hours?: any[] } | undefined,
+  storeId: string,
+  serviceRoleKey: string,
+  requestId: string
+): Promise<StoreData> {
+  const storeData: StoreData = { services: [], products: [], hours: [] };
+
+  const hasCachedServices = cachedData?.services && cachedData.services.length > 0;
+  const hasCachedProducts = cachedData?.products && cachedData.products.length > 0;
+  const hasCachedHours = cachedData?.hours && cachedData.hours.length > 0;
+
+  if (hasCachedServices || hasCachedProducts || hasCachedHours) {
+    log(requestId, '📦 Using client-provided cached data', {
+      services: cachedData?.services?.length || 0,
+      products: cachedData?.products?.length || 0,
+      hours: cachedData?.hours?.length || 0,
+    });
+  }
+
+  try {
+    const detectedSchema = storeConfig.detected_schema || {};
+    const servicesTab = findActualTabName('services', detectedSchema);
+    const productsTab = findActualTabName('products', detectedSchema);
+    const hoursTab = findActualTabName('hours', detectedSchema);
+
+    const [services, products, hours] = await Promise.all([
+      hasCachedServices
+        ? Promise.resolve(cachedData!.services!)
+        : servicesTab
+          ? loadTab(servicesTab, storeId, serviceRoleKey, requestId)
+          : Promise.resolve([]),
+      hasCachedProducts
+        ? Promise.resolve(cachedData!.products!)
+        : productsTab
+          ? loadTab(productsTab, storeId, serviceRoleKey, requestId)
+          : Promise.resolve([]),
+      hasCachedHours
+        ? Promise.resolve(cachedData!.hours!)
+        : hoursTab
+          ? loadTab(hoursTab, storeId, serviceRoleKey, requestId)
+          : Promise.resolve([]),
+    ]);
+
+    return { services, products, hours };
+  } catch (error) {
+    console.error('[Orchestrator] Error pre-loading data:', error);
+    return storeData;
+  }
+}
+
+// ============================================================================
+// RESPONSE BUILDERS
+// ============================================================================
+
+/** Build debug response for skipResponder mode */
+function buildSkipResponderResponse(
+  functionResult: FunctionResult,
+  classification: any,
+  classifyUsage: { input: number; output: number },
+  classifyDuration: number,
+  functionDuration: number,
+  totalDuration: number,
+  model?: string
+): ChatCompletionResponse {
+  const pricing = getModelPricing(model);
+
+  return {
+    text: functionResult.message!,
+    functionCalled: classification.function_to_call || undefined,
+    functionResult,
+    debug: {
+      intentDuration: classifyDuration,
+      functionDuration,
+      responseDuration: 0,
+      totalDuration,
+      toolSelection: {
+        function: classification.function_to_call,
+        duration: classifyDuration,
+      },
+      functionCalls: [{
+        name: classification.function_to_call || '',
+        arguments: classification.extracted_params || {},
+        result: {
+          success: functionResult.success,
+          data: functionResult.data,
+          error: functionResult.error,
+        },
+        duration: functionDuration,
+      }],
+      tokens: {
+        classification: { input: classifyUsage.input, output: classifyUsage.output },
+        response: { input: 0, output: 0 },
+        total: { input: classifyUsage.input, output: classifyUsage.output, cached: 0 },
+      },
+      cost: {
+        classification: calculateCost(classifyUsage.input, classifyUsage.output, model),
+        response: 0,
+        total: calculateCost(classifyUsage.input, classifyUsage.output, model),
+      },
+      steps: [
+        {
+          name: 'Tool Selection',
+          function: 'classifier',
+          status: 'success',
+          duration: classifyDuration,
+          result: {
+            function_to_call: classification.function_to_call,
+            params: classification.extracted_params,
+            tokens: { input: classifyUsage.input, output: classifyUsage.output },
+          },
+        },
+        {
+          name: 'Function Execution',
+          function: 'tools',
+          status: functionResult.success ? 'success' : 'error',
+          duration: functionDuration,
+          functionCalled: classification.function_to_call,
+          result: functionResult.success ? functionResult.data : undefined,
+        },
+        {
+          name: 'Response Generation',
+          function: 'skipResponder',
+          status: 'success',
+          duration: 0,
+          result: {
+            length: functionResult.message!.length,
+            note: 'Deterministic response - LLM bypassed',
+          },
+        },
+      ],
+    },
+  };
+}
+
+/** Build full debug response with responder */
+function buildFullResponse(
+  responseText: string,
+  suggestions: string[],
+  classification: any,
+  functionResult: FunctionResult | undefined,
+  classifyUsage: { input: number; output: number },
+  responseUsage: { input: number; output: number },
+  classifyDuration: number,
+  functionDuration: number,
+  responseDuration: number,
+  totalDuration: number,
+  reasoningEnabled: boolean,
+  model?: string
+): ChatCompletionResponse {
+  const pricing = getModelPricing(model);
+  const totalInputTokens = classifyUsage.input + responseUsage.input;
+  const totalOutputTokens = classifyUsage.output + responseUsage.output;
+  const totalCost = calculateCost(totalInputTokens, totalOutputTokens, model);
+
+  return {
+    text: responseText,
+    functionCalled: classification.function_to_call || undefined,
+    functionResult,
+    suggestions,
+    debug: {
+      endpoint: 'chat-completion',
+      reasoningEnabled,
+      intentDuration: classifyDuration,
+      functionDuration,
+      responseDuration,
+      totalDuration,
+      toolSelection: {
+        function: classification.function_to_call,
+        duration: classifyDuration,
+      },
+      functionCalls: functionResult
+        ? [{
+            name: classification.function_to_call || '',
+            arguments: classification.extracted_params || {},
+            result: {
+              success: functionResult.success,
+              data: functionResult.data,
+              error: functionResult.error,
+            },
+            duration: functionDuration,
+          }]
+        : [],
+      tokens: {
+        classification: { input: classifyUsage.input, output: classifyUsage.output },
+        response: { input: responseUsage.input, output: responseUsage.output },
+        total: { input: totalInputTokens, output: totalOutputTokens, cached: 0 },
+      },
+      cost: {
+        classification: calculateCost(classifyUsage.input, classifyUsage.output, model),
+        response: calculateCost(responseUsage.input, responseUsage.output, model),
+        total: totalCost,
+      },
+      steps: [
+        {
+          name: 'Tool Selection',
+          function: 'classifier',
+          status: 'success',
+          duration: classifyDuration,
+          result: {
+            function_to_call: classification.function_to_call,
+            params: classification.extracted_params,
+            tokens: { input: classifyUsage.input, output: classifyUsage.output },
+          },
+        },
+        ...(classification.function_to_call && classification.function_to_call !== 'null'
+          ? [{
+              name: 'Function Execution',
+              function: 'tools',
+              status: functionResult?.success ? 'success' : 'error',
+              duration: functionDuration,
+              functionCalled: classification.function_to_call,
+              result: functionResult?.success ? functionResult.data : undefined,
+              error: !functionResult?.success
+                ? {
+                    message: functionResult?.error || 'Function execution failed',
+                    args: classification.extracted_params,
+                  }
+                : undefined,
+            }]
+          : []),
+        {
+          name: 'Response Generation',
+          function: 'responder',
+          status: 'success',
+          duration: responseDuration,
+          result: {
+            length: responseText?.length || 0,
+            tokens: { input: responseUsage.input, output: responseUsage.output },
+          },
+        },
+      ],
+    },
+  };
+}
+
+// ============================================================================
+// MAIN HANDLER
+// ============================================================================
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  const requestId = req.headers.get('X-Request-ID') || crypto.randomUUID();
+  const requestStart = performance.now();
+
+  log(requestId, '📨 Chat completion started');
+
+  try {
+    // Parse request
+    const body: ChatCompletionRequest = await req.json();
+    const {
+      messages,
+      storeId,
+      model,
+      cachedData,
+      reasoningEnabled = false,
+    } = body as ChatCompletionRequest & {
+      cachedData?: { services?: any[]; products?: any[]; hours?: any[] };
+      reasoningEnabled?: boolean;
+    };
+
+    log(requestId, 'Received settings:', {
+      model: model || `${DEFAULT_MODEL} (default)`,
+      reasoningEnabled,
+      storeId,
+    });
+
+    // Validate required fields
+    if (!messages || messages.length === 0 || !storeId) {
+      log(requestId, '❌ Missing required fields');
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: messages or storeId' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
+      );
+    }
+
+    log(requestId, '💬 User message', {
+      messageCount: messages.length,
+      storeId,
+      model: model || `${DEFAULT_MODEL} (default)`,
+    });
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // Load store configuration
+    const { data: store, error: storeError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', storeId)
+      .single();
+
+    if (storeError || !store) {
+      return new Response(
+        JSON.stringify({ error: 'Store not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const storeConfig: StoreConfig = {
+      ...store,
+      detected_schema:
+        typeof store.detected_schema === 'string'
+          ? JSON.parse(store.detected_schema)
+          : store.detected_schema,
+    };
+
+    console.log('[Orchestrator] Store config:', {
+      id: storeConfig.id,
+      name: storeConfig.name,
+      hasDetectedSchema: !!storeConfig.detected_schema,
+      schemaKeys: storeConfig.detected_schema ? Object.keys(storeConfig.detected_schema) : [],
+    });
+
+    // Pre-load store data
+    const storeData = await loadStoreData(storeConfig, cachedData, storeId, serviceRoleKey, requestId);
+
+    // Step 1: Classify intent
+    log(requestId, '🎯 Classifying intent...');
+    const classifyStart = performance.now();
+
+    const { classification, usage: classifyUsage } = await classifyIntent(
+      messages,
+      { storeData },
+      model,
+      { reasoningEnabled, includeStoreData: true }
+    );
+
+    const classifyDuration = performance.now() - classifyStart;
+    log(requestId, `✅ Tool selected: ${classification.function_to_call || 'none'} (${classifyDuration.toFixed(0)}ms)`);
+
+    // Step 2: Execute function if classified
+    let functionResult: FunctionResult | undefined;
+    let functionDuration = 0;
+
+    if (classification.function_to_call && classification.function_to_call !== 'null') {
+      log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
+      const functionStart = performance.now();
+
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+
+      functionResult = await executeFunction(
+        classification.function_to_call,
+        classification.extracted_params,
+        {
+          storeId,
+          userId: 'anonymous',
+          authToken: serviceRoleKey,
+          store: storeConfig,
+          requestId,
+          lastUserMessage,
+          storeData,
+        }
+      );
+
+      functionDuration = performance.now() - functionStart;
+      log(requestId, `✅ Function complete (${functionDuration.toFixed(0)}ms)`, {
+        success: functionResult?.success,
+      });
+    }
+
+    // Check for skipResponder (deterministic response)
+    if (functionResult?.skipResponder && functionResult?.message) {
+      log(requestId, '🎯 Using deterministic response (skipResponder)');
+      const totalDuration = performance.now() - requestStart;
+
+      const response = buildSkipResponderResponse(
+        functionResult,
+        classification,
+        classifyUsage,
+        classifyDuration,
+        functionDuration,
+        totalDuration,
+        model
+      );
+
+      log(requestId, `⏱️ Timing: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=0ms, total=${totalDuration.toFixed(0)}ms`);
+      log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
+
+      return new Response(JSON.stringify(response), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
+          'Server-Timing': `total;dur=${totalDuration}`,
+        },
+      });
+    }
+
+    // Step 3: Generate response using LLM
+    log(requestId, '💬 Generating response...');
+    const responseStart = performance.now();
+
+    const { text: responseText, suggestions, usage: responseUsage } = await generateResponse(
+      messages,
+      classification,
+      functionResult,
+      storeConfig,
+      model,
+      {
+        architectureMode: 'enhanced',
+        reasoningEnabled,
+        functionName: classification.function_to_call || undefined,
+      }
+    );
+
+    const responseDuration = performance.now() - responseStart;
+    const totalDuration = performance.now() - requestStart;
+
+    const totalInputTokens = classifyUsage.input + responseUsage.input;
+    const totalOutputTokens = classifyUsage.output + responseUsage.output;
+    const totalCost = calculateCost(totalInputTokens, totalOutputTokens, model);
+
+    log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
+    log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
+    log(requestId, `⏱️ Timing: intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms, response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+    log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
+
+    // Step 4: Return response
+    const response = buildFullResponse(
+      responseText,
+      suggestions,
+      classification,
+      functionResult,
+      classifyUsage,
+      responseUsage,
+      classifyDuration,
+      functionDuration,
+      responseDuration,
+      totalDuration,
+      reasoningEnabled,
+      model
+    );
+
+    return new Response(JSON.stringify(response), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'X-Request-ID': requestId,
+        'Server-Timing': `total;dur=${totalDuration}`,
+      },
+    });
+  } catch (error) {
+    log(requestId, '❌ Error', { error: error instanceof Error ? error.message : String(error) });
+    return new Response(
+      JSON.stringify({
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : String(error),
+        requestId,
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-ID': requestId } }
+    );
+  }
+});
 
 console.log('Chat completion function started (modular architecture)');

@@ -132,14 +132,14 @@ YOUR RESPONSE (just the customer message OR [GOAL_COMPLETE]):`
 }
 
 /**
- * Call the LLM via edge function in simple mode (bypasses chatbot flow)
+ * Call the LLM via qa-llm edge function (raw LLM call for QA testing)
  */
 async function callEvaluatorModel(model: string, prompt: string, _storeId: string): Promise<string> {
   try {
-    console.log('[UserSimulator] Calling edge function in simple mode with model:', model)
+    console.log('[UserSimulator] Calling qa-llm edge function with model:', model)
 
     const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qa-llm`,
       {
         method: 'POST',
         headers: {
@@ -148,8 +148,7 @@ async function callEvaluatorModel(model: string, prompt: string, _storeId: strin
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
-          model: model,
-          simpleMode: true  // Skip chatbot logic, just do raw LLM call
+          model: model
         })
       }
     )

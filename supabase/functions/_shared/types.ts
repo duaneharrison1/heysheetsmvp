@@ -137,9 +137,6 @@ export interface ChatCompletionRequest {
   messages: Message[];
   storeId: string;
   model?: string; // optional model override from frontend
-  // Optional runtime/debug flag to perform a raw LLM call and bypass
-  // the orchestrator's chatbot logic. Useful for QA or simple queries.
-  simpleMode?: boolean;
 }
 
 /**

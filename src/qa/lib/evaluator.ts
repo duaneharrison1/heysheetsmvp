@@ -41,9 +41,9 @@ Scoring guide:
 Be fair but critical.`
 
   try {
-    // Use Supabase Edge Function instead of calling OpenRouter directly
+    // Use qa-llm Edge Function for raw LLM evaluation
     const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qa-llm`,
       {
         method: 'POST',
         headers: {
@@ -52,8 +52,7 @@ Be fair but critical.`
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
-          model,
-          simpleMode: true  // Use simple mode for raw LLM evaluation
+          model
         })
       }
     )
@@ -208,9 +207,9 @@ Be thorough, specific, and constructive.`
   }
 
   try {
-    // Use Supabase Edge Function instead of calling OpenRouter directly
+    // Use qa-llm Edge Function for raw LLM evaluation
     const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-completion`,
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qa-llm`,
       {
         method: 'POST',
         headers: {
@@ -219,8 +218,7 @@ Be thorough, specific, and constructive.`
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: prompt }],
-          model: evaluatorModel,
-          simpleMode: true  // Use simple mode for raw LLM evaluation
+          model: evaluatorModel
         })
       }
     )

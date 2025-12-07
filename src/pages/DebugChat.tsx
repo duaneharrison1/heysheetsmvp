@@ -174,11 +174,11 @@ export default function DebugChat() {
 
     const timer1 = setTimeout(() => {
       setCurrentTaskStep(1);
-    }, 3000);
+    }, 800);
 
     const timer2 = setTimeout(() => {
       setCurrentTaskStep(2);
-    }, 6000);
+    }, 1000);
 
     return () => {
       clearTimeout(timer1);

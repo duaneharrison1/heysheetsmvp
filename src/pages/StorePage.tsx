@@ -205,12 +205,12 @@ export default function StorePage() {
     // Progress to step 2 after 1.5s
     const timer1 = setTimeout(() => {
       setCurrentTaskStep(1);
-    }, 3000);
+    }, 800);
 
     // Progress to step 3 after 3s
     const timer2 = setTimeout(() => {
       setCurrentTaskStep(2);
-    }, 6000);
+    }, 1000);
 
     return () => {
       clearTimeout(timer1);

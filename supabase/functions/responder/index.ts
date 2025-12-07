@@ -1,37 +1,28 @@
+/**
+ * RESPONDER MODULE
+ * ================
+ * Generates natural language responses based on classification and function results.
+ * Uses OpenRouter API with configurable models.
+ */
+
 import { Classification, Message, FunctionResult, StoreConfig } from '../_shared/types.ts';
+import { slimForResponder } from '../_shared/slim.ts';
+import {
+  OPENROUTER_API_URL,
+  DEFAULT_MODEL,
+  RESPONDER_MAX_TOKENS,
+  RESPONDER_TEMPERATURE,
+  RESPONDER_MAX_CONTEXT_MESSAGES,
+} from '../_shared/config.ts';
 
 // ============================================================================
-// RESPONDER FUNCTION
-// Generates natural language responses using OpenRouter API
-// ============================================================================
-
-// ----------------------------------------------------------------------------
-// CONFIGURATION
-// ----------------------------------------------------------------------------
-
-/** Default model for response generation (cost-effective, fast) */
-export const DEFAULT_MODEL = 'x-ai/grok-4.1-fast';
-
-/** Max recent messages to include (≈3 conversation turns) */
-const MAX_CONTEXT_MESSAGES = 6;
-
-/** Response token limit */
-const MAX_TOKENS = 600;
-
-/** Temperature for natural, varied responses */
-const DEFAULT_TEMPERATURE = 0.5;
-
-/** OpenRouter API endpoint */
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
-// ----------------------------------------------------------------------------
 // TYPES
-// ----------------------------------------------------------------------------
+// ============================================================================
 
 export interface ResponderOptions {
   /** Enable extended reasoning for supported models (adds latency) */
   reasoningEnabled?: boolean;
-  /** Mode describing output formatting/architecture preferences (informational) */
+  /** Mode describing output formatting/architecture preferences */
   architectureMode?: string;
   /** Function name that was executed (for context) */
   functionName?: string;
@@ -43,10 +34,11 @@ export interface ResponderResult {
   usage: { input: number; output: number };
 }
 
-// ----------------------------------------------------------------------------
-// PROMPT BUILDING HELPERS
-// ----------------------------------------------------------------------------
+// ============================================================================
+// PROMPT BUILDERS
+// ============================================================================
 
+/** Build store context string for prompt */
 function buildStoreContext(store?: StoreConfig): string {
   if (!store) return 'Store: Unknown';
   const parts = [`Store: ${store.name || 'Unknown'}`, `Type: ${store.type || 'general'}`];
@@ -54,21 +46,27 @@ function buildStoreContext(store?: StoreConfig): string {
   return parts.join(' | ');
 }
 
+/** Build conversation history string (limited to recent messages) */
 function buildConversationHistory(messages: Message[]): string {
   return messages
-    .slice(-MAX_CONTEXT_MESSAGES)
+    .slice(-RESPONDER_MAX_CONTEXT_MESSAGES)
     .map(m => `${m.role}: ${m.content}`)
     .join('\n');
 }
 
+/** Build function result context for prompt */
 function buildFunctionContext(result?: FunctionResult, functionName?: string): string {
   if (!result) return '';
 
   const prefix = functionName ? `[${functionName}] ` : '';
 
   if (result.success) {
-    const data = result.data || result;
-    return `\n\n${prefix}DATA:\n${JSON.stringify(data, null, 2)}`;
+    // Use shared slim function for consistent token reduction
+    const slimmedData = functionName
+      ? slimForResponder(functionName, result.data || result)
+      : result.data || result;
+    // Compact JSON to save tokens
+    return `\n\n${prefix}DATA:\n${JSON.stringify(slimmedData)}`;
   }
 
   if (result.needs_clarification) {
@@ -78,11 +76,13 @@ function buildFunctionContext(result?: FunctionResult, functionName?: string): s
   return `\n\n${prefix}ERROR: ${result.error || 'Operation failed'}`;
 }
 
+/** Build language instruction if non-English */
 function buildLanguageInstruction(language?: string): string {
   if (!language || language === 'en') return '';
   return `\n\nRespond entirely in ${language}.`;
 }
 
+/** Build complete prompt for response generation */
 function buildPrompt(
   messages: Message[],
   classification: Classification,
@@ -118,37 +118,26 @@ Respond in JSON only:
 {"response": "...", "suggestions": ["3-5 word follow-up", "another option", "third option"]}`;
 }
 
-// ----------------------------------------------------------------------------
-// REQUEST BUILDING
-// ----------------------------------------------------------------------------
+// ============================================================================
+// REQUEST BUILDER
+// ============================================================================
 
-function buildRequestBody(
-  prompt: string,
-  model: string,
-  reasoningEnabled?: boolean
-): Record<string, unknown> {
-  const body: Record<string, unknown> = {
+/** Build API request body */
+function buildRequestBody(prompt: string, model: string): Record<string, unknown> {
+  return {
     model,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: MAX_TOKENS,
-    temperature: DEFAULT_TEMPERATURE,
+    max_tokens: RESPONDER_MAX_TOKENS,
+    temperature: RESPONDER_TEMPERATURE,
+    reasoning: { enabled: false },
   };
-
-  // Enable extended reasoning for supported models (adds latency but improves quality)
-  // See: https://openrouter.ai/docs/use-cases/reasoning
-  if (reasoningEnabled) {
-    body.reasoning = {
-      effort: 'low', // 'low' | 'medium' | 'high'
-    };
-  }
-
-  return body;
 }
 
-// ----------------------------------------------------------------------------
-// RESPONSE PARSING
-// ----------------------------------------------------------------------------
+// ============================================================================
+// RESPONSE PARSER
+// ============================================================================
 
+/** Parse API response and extract text/suggestions */
 function parseResponse(result: Record<string, unknown>): ResponderResult {
   const choices = result.choices as Array<{ message: { content: string } }> | undefined;
   const rawContent = choices?.[0]?.message?.content || '';
@@ -180,9 +169,9 @@ function parseResponse(result: Record<string, unknown>): ResponderResult {
   };
 }
 
-// ----------------------------------------------------------------------------
+// ============================================================================
 // MAIN FUNCTION
-// ----------------------------------------------------------------------------
+// ============================================================================
 
 /**
  * Generates a conversational response based on context and function results.
@@ -206,12 +195,10 @@ export async function generateResponse(
     throw new Error('OPENROUTER_API_KEY not configured');
   }
 
-  // Build prompt components
+  // Build prompt and request
   const prompt = buildPrompt(messages, classification, functionResult, store, options);
   const selectedModel = model || DEFAULT_MODEL;
-
-  // Build request body with optional reasoning
-  const requestBody = buildRequestBody(prompt, selectedModel, options?.reasoningEnabled);
+  const requestBody = buildRequestBody(prompt, selectedModel);
 
   // Call OpenRouter API
   const response = await fetch(OPENROUTER_API_URL, {

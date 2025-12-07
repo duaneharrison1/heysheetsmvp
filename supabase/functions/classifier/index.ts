@@ -1,113 +1,49 @@
+/**
+ * CLASSIFIER MODULE
+ * =================
+ * Classifies user intent and extracts parameters for function calling.
+ * Uses structured JSON output for reliable parsing.
+ */
+
 import { Classification, Message, StoreData } from '../_shared/types.ts';
+import {
+  OPENROUTER_API_URL,
+  HTTP_REFERER,
+  APP_TITLE,
+  DEFAULT_MODEL,
+  CLASSIFIER_MAX_TOKENS,
+  CLASSIFIER_TEMPERATURE,
+  CLASSIFIER_TIMEOUT_MS,
+  CLASSIFIER_MAX_CONTEXT_MESSAGES,
+} from '../_shared/config.ts';
 
 // ============================================================================
-// STRUCTURED OUTPUT SCHEMA
+// TYPES
 // ============================================================================
 
-const ClassificationSchema = {
-  type: "object",
-  properties: {
-    needs_clarification: {
-      type: "boolean",
-      description: "True if confidence < 70 or missing required info"
-    },
-    clarification_question: {
-      type: "string",
-      description: "Specific question to ask if needs_clarification is true"
-    },
-    function_to_call: {
-      type: "string",
-      enum: ["get_store_info", "get_services", "get_products", "search_services", "search_products", "submit_lead", "get_misc_data", "check_availability", "create_booking", "get_booking_slots", "get_recommendations", "null"],
-      description: "Function to execute based on intent"
-    },
-    extracted_params: {
-      type: "object",
-      properties: {
-        info_type: { type: "string" },
-        query: { type: "string" },
-        category: { type: "string" },
-        tab_name: { type: "string" },
-        name: { type: "string" },
-        email: { type: "string" },
-        phone: { type: "string" },
-        message: { type: "string" },
-        service_name: { type: "string" },
-        date: { type: "string" },
-        time: { type: "string" },
-        customer_name: { type: "string" },
-        customer_email: { type: "string" },
-        customer_phone: { type: "string" },
-        // Prefill parameters for get_booking_slots
-        prefill_date: { type: "string" },
-        prefill_time: { type: "string" },
-        prefill_name: { type: "string" },
-        prefill_email: { type: "string" },
-        prefill_phone: { type: "string" },
-        // Recommendation parameters
-        offering_type: { type: "string" },
-        budget: { type: "string" },
-        budget_max: { type: "number" },
-        experience_level: { type: "string" },
-        time_preference: { type: "string" },
-        day_preference: { type: "string" },
-        duration_preference: { type: "string" },
-        goal: { type: "string" }
-      },
-      description: "Parameters extracted from user message for function calling"
-    },
-    
-    user_language: {
-      type: "string",
-      description: "ISO 639-1 language code detected from user input (e.g., 'en', 'es', 'fr', 'ja', 'zh', 'de', 'pt', 'ko')"
-    }
-  },
-  required: ["needs_clarification", "function_to_call", "extracted_params", "user_language"],
-  additionalProperties: false
-} as const;
+export interface ClassifierOptions {
+  /** Enable extended reasoning for supported models (adds latency) */
+  reasoningEnabled?: boolean;
+  /** Include store data in prompt (false for lean mode) */
+  includeStoreData?: boolean;
+}
+
+export interface ClassifierResult {
+  classification: Classification;
+  usage: { input: number; output: number };
+}
 
 // ============================================================================
-// CLASSIFIER FUNCTION
+// PROMPT BUILDER
 // ============================================================================
 
-export async function classifyIntent(
-  messages: Message[],
-  context?: { storeData?: StoreData },
-  model?: string,
-  options?: {
-    reasoningEnabled?: boolean;
-    includeStoreData?: boolean;  // For lean mode: false = don't include store overview in prompt
-  }
-): Promise<{ classification: Classification; usage: { input: number; output: number } }> {
-  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY not configured');
-  }
-
-  // Log reasoning setting
-  console.log(`[Classifier] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
-
-  // Get last message
-  const lastMessage = messages[messages.length - 1]?.content || '';
-
-  // Build conversation history (last 3 turns for context windowing)
-  const recentMessages = messages.slice(-6); // Last 3 user + 3 assistant messages
-  const conversationHistory = recentMessages
-    .map(m => `${m.role}: ${m.content}`)
-    .join('\n');
-
-  // NOTE: Classifier no longer receives store data to keep prompts lean
-  // All matching is done by function execution (get_services, search_services, etc.)
-
-  // Get today's date
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-  // Build classification prompt
-  const classificationPrompt = `You are a tool classifier for a business chat assistant.
+function buildClassificationPrompt(
+  conversationHistory: string,
+  lastMessage: string,
+  todayStr: string,
+  tomorrowStr: string
+): string {
+  return `You are a tool classifier for a business chat assistant.
 
 CONVERSATION HISTORY (recent turns only):
 ${conversationHistory}
@@ -152,7 +88,6 @@ EXTRACTION RULES:
 - Never hallucinate - only extract what user actually said
 - For greetings ("hi", "hello"), respond conversationally without tools
 
-
 LANGUAGE DETECTION:
 - Detect the language of the user's CURRENT MESSAGE
 - Use ISO 639-1 language codes (e.g., 'en' for English, 'es' for Spanish, 'fr' for French, 'ja' for Japanese, 'zh' for Chinese, 'de' for German, 'pt' for Portuguese, 'ko' for Korean)
@@ -170,32 +105,117 @@ REQUIRED OUTPUT FORMAT (exact field names):
 CRITICAL: Use "function_to_call" NOT "function", and "extracted_params" NOT "parameters"!
 
 RESPOND WITH JSON ONLY (no markdown, no explanations):`;
+}
 
-  // Call OpenRouter API with JSON object mode (more reliable than strict schema)
-  // Strict json_schema mode can cause gibberish responses with OpenRouter
+// ============================================================================
+// RESPONSE PARSER
+// ============================================================================
+
+function parseClassificationResponse(rawContent: string): Classification {
+  // Clean up response - remove markdown code blocks if present
+  let content = rawContent.trim();
+  if (content.startsWith('```json')) {
+    content = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (content.startsWith('```')) {
+    content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+
+  // Parse JSON
+  let classification;
+  try {
+    classification = JSON.parse(content);
+  } catch (parseError) {
+    console.error('[Classifier] Failed to parse JSON response');
+    console.error('[Classifier] Raw content:', content);
+
+    if (content.length < 50 || !content.includes('{')) {
+      throw new Error(`LLM returned invalid response: ${content.substring(0, 100)}`);
+    }
+    throw new Error(`Invalid JSON from LLM: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+  }
+
+  // Normalize field names (handle legacy format)
+  if (!classification.extracted_params && classification.parameters) {
+    classification.extracted_params = classification.parameters;
+    delete classification.parameters;
+  }
+
+  // Default user_language to 'en' if not detected
+  if (!classification.user_language) {
+    classification.user_language = 'en';
+  }
+
+  // Validate required fields
+  if (!('function_to_call' in classification) || !('extracted_params' in classification)) {
+    console.error('[Classifier] Invalid classification format:', classification);
+    throw new Error('Classification missing required fields: function_to_call or extracted_params');
+  }
+
+  return classification as Classification;
+}
+
+// ============================================================================
+// MAIN FUNCTION
+// ============================================================================
+
+/**
+ * Classifies user intent and extracts parameters for function calling.
+ * @param messages - Conversation history
+ * @param context - Optional context with store data
+ * @param model - AI model to use (defaults to DEFAULT_MODEL)
+ * @param options - Additional options (reasoning, includeStoreData)
+ */
+export async function classifyIntent(
+  messages: Message[],
+  context?: { storeData?: StoreData },
+  model?: string,
+  options?: ClassifierOptions
+): Promise<ClassifierResult> {
+  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not configured');
+  }
+
+  console.log(`[Classifier] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
+
+  // Build conversation context
+  const lastMessage = messages[messages.length - 1]?.content || '';
+  const recentMessages = messages.slice(-CLASSIFIER_MAX_CONTEXT_MESSAGES);
+  const conversationHistory = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+
+  // Get date context
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+  // Build prompt
+  const prompt = buildClassificationPrompt(conversationHistory, lastMessage, todayStr, tomorrowStr);
+
+  // Call OpenRouter API
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), CLASSIFIER_TIMEOUT_MS);
 
   let response;
   try {
-    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://heysheets.com',
-        'X-Title': 'HeySheets MVP'
+        'HTTP-Referer': HTTP_REFERER,
+        'X-Title': APP_TITLE,
       },
       body: JSON.stringify({
-        model: model || 'x-ai/grok-4.1-fast', // Use selected model or default to Grok
-        messages: [{ role: 'user', content: classificationPrompt }],
-        response_format: { type: "json_object" }, // Looser mode - more reliable with OpenRouter
-        temperature: 0.1, // Very low temp for consistency
-        max_tokens: 500, // Limit response size
-        // Pass reasoning setting from options (defaults to disabled)
-        reasoning: { enabled: options?.reasoningEnabled ?? false },
+        model: model || DEFAULT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: CLASSIFIER_TEMPERATURE,
+        max_tokens: CLASSIFIER_MAX_TOKENS,
+        reasoning: { enabled: false },
       }),
-      signal: controller.signal
+      signal: controller.signal,
     });
   } finally {
     clearTimeout(timeoutId);
@@ -209,75 +229,29 @@ RESPOND WITH JSON ONLY (no markdown, no explanations):`;
 
   const result = await response.json();
 
-  // Validate API response structure
-  if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+  // Validate response structure
+  if (!result.choices?.[0]?.message?.content) {
     console.error('[Classifier] Invalid API response structure:', JSON.stringify(result, null, 2));
     throw new Error('OpenRouter API returned unexpected response format');
   }
 
-  let rawContent = result.choices[0].message.content;
-
-  // Check for empty or null content
+  const rawContent = result.choices[0].message.content;
   if (!rawContent) {
-    console.error('[Classifier] Empty response from API');
     throw new Error('OpenRouter API returned empty response');
   }
 
   console.log('[Classifier] Raw LLM response (first 200 chars):', rawContent.substring(0, 200));
 
-  // Clean up response - remove markdown code blocks if present
-  rawContent = rawContent.trim();
-  if (rawContent.startsWith('```json')) {
-    rawContent = rawContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-  } else if (rawContent.startsWith('```')) {
-    rawContent = rawContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
-  }
-
-  let classification;
-  try {
-    classification = JSON.parse(rawContent);
-  } catch (parseError) {
-    console.error('[Classifier] Failed to parse JSON response');
-    console.error('[Classifier] Raw content:', rawContent);
-    console.error('[Classifier] Parse error:', parseError);
-
-    // Check if response is completely garbled
-    if (rawContent.length < 50 || !rawContent.includes('{')) {
-      throw new Error(`LLM returned invalid response (possible API issue): ${rawContent.substring(0, 100)}`);
-    }
-
-    throw new Error(`Invalid JSON from LLM: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-  }
-
-  // Fallback: Transform old field names to new ones if needed
-  if (!classification.function_to_call && classification.function) {
-    console.warn('[Classifier] Detected old schema format, transforming...');
-    classification.function_to_call = classification.function;
-    delete classification.function;
-  }
-  if (!classification.extracted_params && classification.parameters) {
-    classification.extracted_params = classification.parameters;
-    delete classification.parameters;
-  }
-  // Default user_language to 'en' if not detected
-  if (!classification.user_language) {
-    classification.user_language = 'en';
-  }
-
-  // Validate required fields exist (function_to_call can be null for greetings, extracted_params can be empty {})
-  if (!('function_to_call' in classification) || !('extracted_params' in classification)) {
-    console.error('[Classifier] Invalid classification format:', classification);
-    throw new Error('Classification missing required fields: function_to_call or extracted_params');
-  }
-
+  // Parse and validate classification
+  const classification = parseClassificationResponse(rawContent);
   console.log('[Classifier] Result:', JSON.stringify(classification, null, 2));
 
-  // Extract token usage from OpenRouter response
+  // Extract token usage
   const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
   console.log('[Classifier] Token usage:', usage);
 
   return {
-    classification: classification as Classification,
+    classification,
     usage: {
       input: usage.prompt_tokens || 0,
       output: usage.completion_tokens || 0,
