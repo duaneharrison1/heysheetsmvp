@@ -374,11 +374,22 @@ export function QAResultsPage() {
                             {stepsCount > 0 && (
                               <div className="flex items-center gap-1 mt-1 flex-wrap">
                                 <span className="text-[10px] text-muted-foreground">{stepsCount} steps:</span>
-                                {stepsArray.slice(0, 4).map((step, idx) => (
-                                  <Badge key={idx} variant="secondary" className="text-[9px] px-1 py-0 h-4">
-                                    {formatStepDurationFromStep(step)}
-                                  </Badge>
-                                ))}
+                                {stepsArray.slice(0, 4).map((step, idx) => {
+                                  // Abbreviate step names for compact display
+                                  const stepName = step?.name || step?.function || '';
+                                  const abbrev = stepName.startsWith('Tool Selection') ? 'Tool'
+                                    : stepName === 'Function Execution' ? `Fn:${step?.functionCalled || 'exec'}`
+                                    : stepName === 'LLM Response' ? 'LLM'
+                                    : stepName === 'Intent Classification' ? 'Tool'  // Legacy fallback
+                                    : stepName === 'Response Generation' ? 'LLM'     // Legacy fallback
+                                    : stepName === 'Native Tool Calling' ? 'Native'  // Old native single-step fallback
+                                    : stepName.slice(0, 6);
+                                  return (
+                                    <Badge key={idx} variant="secondary" className="text-[9px] px-1 py-0 h-4">
+                                      {abbrev} {formatStepDurationFromStep(step)}
+                                    </Badge>
+                                  );
+                                })}
                                 {stepsCount > 4 && (
                                   <span className="text-[9px] text-muted-foreground">+{stepsCount - 4}</span>
                                 )}
@@ -433,27 +444,55 @@ export function QAResultsPage() {
                           {/* Steps Detail */}
                           {stepsArray.length > 0 && (
                             <div>
-                              <div className="text-xs font-semibold text-muted-foreground mb-2">Steps Detail</div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Steps Detail ({stepsArray.length} steps)</div>
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                 {stepsArray.map((step, sidx) => {
                                   const ms = formatStepDurationFromStep(step)
-                                  const user = step?.userMessage ?? step?.input ?? step?.prompt ?? step?.text ?? '-'
-                                  const result = step?.result?.summary ?? step?.result?.output ?? step?.botResponse ?? step?.output ?? '-'
+                                  const stepName = step?.name || step?.function || `Step ${sidx + 1}`
+                                  const stepStatus = step?.status || 'unknown'
+                                  const functionCalled = step?.functionCalled || step?.result?.function || null
+                                  const stepIntent = step?.result?.intent || null
+                                  const stepConfidence = step?.result?.confidence || null
+                                  const stepError = step?.error?.message || step?.error || null
+                                  const stepTokens = step?.result?.tokens || null
                                   return (
                                     <div key={sidx} className="bg-background rounded p-2 text-xs">
                                       <div className="flex justify-between items-center mb-1">
-                                        <Badge variant="secondary" className="text-[10px]">Step {sidx + 1}</Badge>
+                                        <div className="flex items-center gap-1.5">
+                                          <Badge 
+                                            variant={stepStatus === 'success' ? 'default' : stepStatus === 'error' ? 'destructive' : 'secondary'} 
+                                            className="text-[10px]"
+                                          >
+                                            {stepName}
+                                          </Badge>
+                                        </div>
                                         <span className="text-[10px] font-mono text-muted-foreground">{ms}</span>
                                       </div>
-                                      <div className="space-y-1">
-                                        <div>
-                                          <span className="text-muted-foreground">User: </span>
-                                          <span className="line-clamp-2">{user}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Result: </span>
-                                          <span className="line-clamp-2">{result}</span>
-                                        </div>
+                                      <div className="space-y-0.5 text-[10px]">
+                                        {functionCalled && (
+                                          <div>
+                                            <span className="text-muted-foreground">Function: </span>
+                                            <span className="font-mono">{functionCalled}</span>
+                                          </div>
+                                        )}
+                                        {stepIntent && (
+                                          <div>
+                                            <span className="text-muted-foreground">Intent: </span>
+                                            <span>{stepIntent}{stepConfidence ? ` (${stepConfidence}%)` : ''}</span>
+                                          </div>
+                                        )}
+                                        {stepTokens && (
+                                          <div>
+                                            <span className="text-muted-foreground">Tokens: </span>
+                                            <span className="font-mono">{stepTokens.input || 0}↓ {stepTokens.output || 0}↑</span>
+                                          </div>
+                                        )}
+                                        {stepError && (
+                                          <div className="text-destructive">
+                                            <span>Error: </span>
+                                            <span className="line-clamp-2">{stepError}</span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )

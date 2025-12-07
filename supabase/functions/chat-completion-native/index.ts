@@ -535,6 +535,28 @@ serve(async (req) => {
     let totalFunctionDuration = 0;  // Sum of all function executions
     let responseDuration = 0;    // Final LLM call (response generation)
 
+    // Granular step tracking for QA parity with classifier mode
+    const llmCallSteps: Array<{
+      callNumber: number;
+      duration: number;
+      inputTokens: number;
+      outputTokens: number;
+      hasToolCalls: boolean;
+      toolCallName?: string;
+      contentLength: number;
+    }> = [];
+    const functionExecutionSteps: Array<{
+      name: string;
+      arguments: any;
+      duration: number;
+      success: boolean;
+      error?: string;
+    }> = [];
+
+    // Token tracking per stage (for classifier parity)
+    let classificationTokens = { input: 0, output: 0 };  // First LLM call (intent/tool decision)
+    let responseTokens = { input: 0, output: 0 };        // Final LLM call (response generation)
+
     // Reasoning tracking
     let reasoning: string | null = null;
     let reasoningDetails: any[] | null = null;
@@ -623,7 +645,7 @@ serve(async (req) => {
         if (message.reasoning && !reasoning) {
           reasoning = message.reasoning;
           reasoningDuration += llmDuration; // Attribute LLM time to reasoning
-          log(requestId, '🧠 Got reasoning (simple):', { length: reasoning.length });
+          log(requestId, '🧠 Got reasoning (simple):', { length: reasoning?.length });
         }
 
         // Check for detailed reasoning_details array
@@ -638,7 +660,7 @@ serve(async (req) => {
               .join('\n\n');
             reasoningDuration += llmDuration;
           }
-          log(requestId, '🧠 Got reasoning_details:', { count: reasoningDetails.length });
+          log(requestId, '🧠 Got reasoning_details:', { count: reasoningDetails?.length });
         }
       }
 
@@ -647,6 +669,30 @@ serve(async (req) => {
         contentLength: message.content?.length || 0,
         hasReasoning: !!message.reasoning || !!message.reasoning_details
       });
+
+      // Track this LLM call for granular step logging
+      const callInputTokens = result.usage?.prompt_tokens || 0;
+      const callOutputTokens = result.usage?.completion_tokens || 0;
+      llmCallSteps.push({
+        callNumber: totalCalls,
+        duration: llmDuration,
+        inputTokens: callInputTokens,
+        outputTokens: callOutputTokens,
+        hasToolCalls: !!message.tool_calls?.length,
+        toolCallName: message.tool_calls?.[0]?.function?.name,
+        contentLength: message.content?.length || 0,
+      });
+
+      // Track tokens per stage: first call with tool = classification, final call without tool = response
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        // This is a tool-decision call (like classifier)
+        if (classificationTokens.input === 0) {
+          classificationTokens = { input: callInputTokens, output: callOutputTokens };
+        }
+      } else {
+        // This is the final response call (like responder)
+        responseTokens = { input: callInputTokens, output: callOutputTokens };
+      }
 
       // Check if AI wants to call a tool
       if (message.tool_calls && message.tool_calls.length > 0) {
@@ -676,6 +722,15 @@ serve(async (req) => {
           args: functionArgs,
           result: functionResult,
           duration: functionDuration
+        });
+
+        // Track function execution step for granular logging
+        functionExecutionSteps.push({
+          name: functionName,
+          arguments: functionArgs,
+          duration: functionDuration,
+          success: functionResult?.success ?? false,
+          error: functionResult?.error,
         });
 
         // Accumulate function duration for timeline
@@ -745,10 +800,153 @@ serve(async (req) => {
       cost: totalCost.toFixed(4)
     });
 
-    // Build response
+    // Build granular steps array with proper naming:
+    // Tool Selection (LLM picks tool) → Function Execution → ... → LLM Response
+    // For native loop, we track each Tool Selection + Function Execution pair
+    const detectedIntent = functionCalls.length > 0 
+      ? functionCalls[functionCalls.length - 1]?.name || 'FUNCTION_CALL'
+      : 'GREETING';
+    
+    const steps: Array<{
+      name: string;
+      function: string;
+      status: 'success' | 'error';
+      duration: number;
+      functionCalled?: string;
+      result?: any;
+      error?: any;
+    }> = [];
+
+    // Build interleaved Tool Selection + Function Execution steps from the loop
+    // Each llmCallStep with hasToolCalls=true is followed by a functionExecutionStep
+    let funcIdx = 0;
+    for (const llmCall of llmCallSteps) {
+      if (llmCall.hasToolCalls && funcIdx < functionExecutionSteps.length) {
+        // Tool Selection step (LLM call that selected a tool)
+        steps.push({
+          name: llmCallSteps.length > 2 ? `Tool Selection #${llmCall.callNumber}` : 'Tool Selection',
+          function: 'native-tool-calling',
+          status: 'success',
+          duration: llmCall.duration,
+          functionCalled: llmCall.toolCallName,
+          result: {
+            toolSelected: llmCall.toolCallName,
+            llmCallNumber: llmCall.callNumber,
+            tokens: { input: llmCall.inputTokens, output: llmCall.outputTokens },
+          },
+        });
+
+        // Corresponding Function Execution step
+        const funcStep = functionExecutionSteps[funcIdx];
+        steps.push({
+          name: 'Function Execution',
+          function: 'tools',
+          status: funcStep.success ? 'success' : 'error',
+          duration: funcStep.duration,
+          functionCalled: funcStep.name,
+          result: funcStep.success ? { function: funcStep.name, args: funcStep.arguments } : undefined,
+          error: !funcStep.success ? { message: funcStep.error || 'Function execution failed', args: funcStep.arguments } : undefined,
+        });
+        funcIdx++;
+      } else if (!llmCall.hasToolCalls && llmCall.contentLength > 0) {
+        // This is the final LLM Response call (no tool, has content)
+        steps.push({
+          name: 'LLM Response',
+          function: 'native-responder',
+          status: 'success',
+          duration: llmCall.duration,
+          result: {
+            length: llmCall.contentLength,
+            llmCallNumber: llmCall.callNumber,
+            tokens: { input: llmCall.inputTokens, output: llmCall.outputTokens },
+          },
+        });
+      }
+    }
+
+    // Handle skipResponder case (deterministic response, no final LLM call)
+    if (functionResult?.skipResponder && !steps.some(s => s.name === 'LLM Response')) {
+      steps.push({
+        name: 'LLM Response',
+        function: 'skipResponder',
+        status: 'success',
+        duration: 0,
+        result: {
+          length: finalResponse?.length || 0,
+          note: 'Deterministic response - LLM bypassed',
+        },
+      });
+    }
+
+    // Fallback: if no Tool Selection steps but we have function calls, add them the old way
+    // (shouldn't happen, but safety net)
+    if (steps.length === 0 && functionExecutionSteps.length > 0) {
+      steps.push({
+        name: 'Tool Selection',
+        function: 'native-tool-calling',
+        status: 'success',
+        duration: intentDuration,
+        result: {
+          intent: detectedIntent,
+          confidence: 90,
+          reasoning: reasoning || 'Native tool calling - model selected tool directly',
+          tokens: classificationTokens,
+        },
+      });
+      for (const funcStep of functionExecutionSteps) {
+        steps.push({
+          name: 'Function Execution',
+          function: 'tools',
+          status: funcStep.success ? 'success' : 'error',
+          duration: funcStep.duration,
+          functionCalled: funcStep.name,
+          result: funcStep.success ? { function: funcStep.name, args: funcStep.arguments } : undefined,
+          error: !funcStep.success ? { message: funcStep.error || 'Function execution failed', args: funcStep.arguments } : undefined,
+        });
+      }
+      if (responseDuration > 0) {
+        steps.push({
+          name: 'LLM Response',
+          function: 'native-responder',
+          status: 'success',
+          duration: responseDuration,
+          result: { length: finalResponse?.length || 0, tokens: responseTokens },
+        });
+      }
+    }
+
+    // Handle simple greeting (no tools called)
+    if (steps.length === 0 && functionCalls.length === 0) {
+      steps.push({
+        name: 'LLM Response',
+        function: 'native-responder',
+        status: 'success',
+        duration: intentDuration, // For greetings, intentDuration holds the full response time
+        result: {
+          length: finalResponse?.length || 0,
+          note: 'Direct response - no tool selection',
+          tokens: classificationTokens,
+        },
+      });
+    }
+
+    // Log steps array for QA verification
+    log(requestId, `📊 Built ${steps.length} steps for QA:`, steps.map(s => ({
+      name: s.name,
+      duration: s.duration,
+      functionCalled: s.functionCalled,
+    })));
+
+    // Calculate per-stage costs for classifier parity
+    const classificationCost = (classificationTokens.input / 1_000_000) * pricing.input +
+                               (classificationTokens.output / 1_000_000) * pricing.output;
+    const responseCost = (responseTokens.input / 1_000_000) * pricing.input +
+                         (responseTokens.output / 1_000_000) * pricing.output;
+
+    // Build response with classifier-compatible debug schema
     const responsePayload = {
       text: finalResponse,
-      intent: functionCalls.length > 0 ? 'FUNCTION_CALL' : 'GREETING',
+      intent: detectedIntent,
       confidence: 90, // Native tool calling has high confidence
       functionCalled: functionCalls[functionCalls.length - 1]?.name || null,
       functionResult: functionResult,
@@ -766,6 +964,17 @@ serve(async (req) => {
         // Reasoning content (if available)
         reasoning,             // Simple text version
         reasoningDetails,      // Full structured version (if available)
+        // Intent/Tool Selection object matching classifier schema
+        intent: {
+          detected: detectedIntent,
+          confidence: 90,
+          duration: intentDuration,
+          reasoning: reasoning || 'Native tool calling - model selected tool directly',
+        },
+        // Renamed timing fields for clarity
+        toolSelectionDuration: intentDuration,   // Time for LLM to select tool(s)
+        llmResponseDuration: responseDuration,   // Time for final LLM response
+        // Function calls array (existing format)
         functionCalls: functionCalls.map(fc => ({
           name: fc.name,
           arguments: fc.args,
@@ -776,24 +985,22 @@ serve(async (req) => {
           },
           duration: fc.duration
         })),
+        // Token breakdown matching classifier schema (per-stage + total)
         tokens: {
+          classification: classificationTokens,
+          response: responseTokens,
           total: { input: totalInputTokens, output: totalOutputTokens, cached: 0 }
         },
+        // Cost breakdown matching classifier schema (per-stage + total)
         cost: {
+          classification: classificationCost,
+          response: responseCost,
           total: totalCost
         },
-        steps: [
-          {
-            name: 'Native Tool Calling',
-            function: 'chat-completion-native',
-            status: 'success',
-            duration: totalDuration,
-            result: {
-              llmCalls: totalCalls,
-              functionsExecuted: functionCalls.map(fc => fc.name)
-            }
-          }
-        ]
+        // Granular steps array matching classifier schema
+        steps,
+        // Additional native-specific debug info (LLM call details)
+        llmCallDetails: llmCallSteps,
       }
     };
 

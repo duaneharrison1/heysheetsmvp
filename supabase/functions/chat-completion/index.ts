@@ -318,7 +318,7 @@ serve(async (req) => {
           },
           steps: [
             {
-              name: 'Intent Classification',
+              name: 'Tool Selection',
               function: 'classifier',
               status: 'success',
               duration: classifyDuration,
@@ -338,7 +338,7 @@ serve(async (req) => {
               result: functionResult.success ? functionResult.data : undefined,
             },
             {
-              name: 'Response Generation',
+              name: 'LLM Response',
               function: 'skipResponder',
               status: 'success',
               duration: 0,
@@ -440,7 +440,7 @@ serve(async (req) => {
         // 🆕 ADD: Step-by-step breakdown for enhanced debugging
         steps: [
           {
-            name: 'Intent Classification',
+            name: 'Tool Selection',
             function: 'classifier',
             status: 'success',
             duration: classifyDuration,
@@ -464,7 +464,7 @@ serve(async (req) => {
             } : undefined,
           }] : []),
           {
-            name: 'Response Generation',
+            name: 'LLM Response',
             function: 'responder',
             status: 'success',
             duration: responseDuration,
