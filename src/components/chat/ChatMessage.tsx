@@ -21,9 +21,8 @@ import RecommendationList from './RecommendationList';
 // Calendar booking UI component - renders date/time picker for service bookings
 import { BookingCalendar } from './BookingCalendar';
 
-// Markdown parser for bot responses - renders bold, line breaks, horizontal rules
-// Currently disabled - uncomment to enable formatted bot messages
-// import { parseMarkdown } from '@/lib/markdown';
+// Markdown parser for bot responses - renders bold, italic, lists, links
+import { formatBotMessage } from '@/lib/markdown';
 
 interface TaskStep {
   label: string;
@@ -350,8 +349,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, storeLogo, st
 
       <div className={`max-w-[85%] min-w-0 overflow-hidden box-border ${message.type === 'user' ? 'max-w-[70%]' : ''}`}>
         <ChatBubble type={message.type} timestamp={message.timestamp}>
-          {/* To enable markdown formatting, uncomment the import above and change to: {parseMarkdown(message.content)} */}
-          <div className="text-sm leading-relaxed">{message.content}</div>
+          <div className="text-sm leading-relaxed space-y-1">
+            {message.type === 'bot' ? formatBotMessage(message.content) : message.content}
+          </div>
         </ChatBubble>
         
         {/* AI Task list showing work progress */}
