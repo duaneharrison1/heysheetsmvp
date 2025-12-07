@@ -362,6 +362,44 @@ export default function DebugChat() {
         status: 'complete',
       });
 
+      // Persist debug request to DB for historical QA / analysis
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id ?? null;
+
+        await supabase.from('debug_requests').insert([{
+          id: requestId,
+          user_id: userId,
+          store_id: selectedStoreId,
+          model: selectedModel,
+          // architecture is recorded inside `metadata` (avoid top-level column to match DB schema)
+          user_message: content.trim(),
+          response_text: aiResponse,
+          status: 'complete',
+          timings: {
+            requestStart,
+            totalDuration,
+            intentDuration: data.debug?.intentDuration,
+            functionDuration: data.debug?.functionDuration,
+            responseDuration: data.debug?.responseDuration,
+            reasoningDuration: data.debug?.reasoningDuration,
+          },
+          function_calls: data.debug?.functionCalls || null,
+          steps: data.debug?.steps || null,
+          tokens: data.debug?.tokens || null,
+          cost: data.debug?.cost || null,
+          reasoning: data.debug?.reasoning || null,
+          reasoning_details: data.debug?.reasoningDetails || null,
+          metadata: {
+            endpoint: endpoint,
+            nativeMode: useNativeToolCalling,
+            architecture: useNativeToolCalling ? 'native' : 'classifier',
+          }
+        }]);
+      } catch (dbErr) {
+        console.error('[DebugChat] Failed to persist debug request:', dbErr);
+      }
+
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',

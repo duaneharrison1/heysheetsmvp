@@ -1,6 +1,4 @@
 import { Classification, Message, FunctionResult, StoreConfig } from '../_shared/types.ts';
-import { slimForResponder } from '../_shared/slim.ts';
-import { ArchitectureMode, getArchitectureConfig } from '../_shared/architecture.ts';
 
 // ============================================================================
 // RESPONDER FUNCTION
@@ -13,18 +11,13 @@ export interface ResponderResult {
 }
 
 // Added model parameter to allow user selection of AI model
-// Added architecture options for optimization
 export async function generateResponse(
   messages: Message[],
   classification: Classification,
   functionResult?: FunctionResult,
   store?: StoreConfig,
   model?: string,  // User-selected model, defaults to Grok
-  options?: {
-    architectureMode?: ArchitectureMode;
-    reasoningEnabled?: boolean;
-    functionName?: string;  // For slimming results
-  }
+  options?: { architectureMode?: string; reasoningEnabled?: boolean; functionName?: string }
 ): Promise<ResponderResult> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
 
@@ -45,31 +38,14 @@ Store Type: ${store?.type || 'general'}
 ${store?.description ? `Description: ${store.description}` : ''}
 `;
 
-  // Get architecture config
-  const archConfig = getArchitectureConfig(options?.architectureMode || 'enhanced');
-
-  // Log reasoning setting
-  console.log(`[Responder] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
-
   // Build function result context
   let functionContext = '';
   if (functionResult) {
     if (functionResult.success) {
       // Handle both wrapped {success, data} and direct data formats
-      let resultData = functionResult.data || functionResult;
-
-      // Slim the data if not in 'current' mode (removes imageURL, tags, etc.)
-      if (archConfig.slimResults && options?.functionName) {
-        resultData = slimForResponder(options.functionName, resultData);
-      }
-
-      // Use compact JSON (no pretty-printing) unless in 'current' mode
-      const jsonString = archConfig.prettyPrint
-        ? JSON.stringify(resultData, null, 2)
-        : JSON.stringify(resultData);
-
+      const resultData = functionResult.data || functionResult;
       functionContext = `FUNCTION RESULT (Use this data in your response):
-${jsonString}
+${JSON.stringify(resultData, null, 2)}
 
 IMPORTANT: Present this data naturally and conversationally. Don't just list it - weave it into helpful dialogue.`;
     } else if (functionResult.needs_clarification) {
@@ -135,34 +111,23 @@ The suggestions should be:
 
 RESPOND WITH JSON ONLY:`;
 
-  // Call OpenRouter API with timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-  let response;
-  try {
-    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://heysheets.com',
-        'X-Title': 'HeySheets MVP'
-      },
-      body: JSON.stringify({
-        // Use user-selected model or default to Grok for cost-effectiveness
-        model: model || 'x-ai/grok-4.1-fast',
-        messages: [{ role: 'user', content: responsePrompt }],
-        max_tokens: 600,
-        temperature: 0.7, // Higher temperature for more natural, varied responses
-        // Pass reasoning setting from options (defaults to disabled)
-        reasoning: { enabled: options?.reasoningEnabled ?? false },
-      }),
-      signal: controller.signal
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  // Call OpenRouter API
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://heysheets.com',
+      'X-Title': 'HeySheets MVP'
+    },
+    body: JSON.stringify({
+      // Use user-selected model or default to Grok for cost-effectiveness
+      model: model || 'x-ai/grok-4.1-fast',
+      messages: [{ role: 'user', content: responsePrompt }],
+      max_tokens: 600,
+      temperature: 0.7 // Higher temperature for more natural, varied responses
+    })
+  });
 
   if (!response.ok) {
     const error = await response.text();
