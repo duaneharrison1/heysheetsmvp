@@ -18,9 +18,8 @@ import {
   Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink,
   MessageCircle, ShoppingBag, Sparkles, CheckCircle2, Search, Database, Info, X
 } from "lucide-react";
-import { useDebugStore } from "@/stores/useDebugStore";
-import { generateCorrelationId } from "@/lib/debug/correlation-id";
-import { requestTimer } from "@/lib/debug/timing";
+// Debugging intentionally disabled on this page to avoid showing
+// the global debug panel or toggle here.
 import { precacheStoreData, getCachedStoreData, getCacheStats } from "@/lib/storeDataCache";
 
 interface Message {
@@ -101,13 +100,52 @@ export default function StorePage() {
     'Store information'
   ];
 
-  // Debug store
-  const addRequest = useDebugStore((state) => state.addRequest);
-  const updateRequest = useDebugStore((state) => state.updateRequest);
-  const addDebugMessage = useDebugStore((state) => state.addMessage);
-  const selectedModel = useDebugStore((state) => state.selectedModel);
-  // A/B Test: Native tool calling mode
-  const useNativeToolCalling = useDebugStore((state) => state.useNativeToolCalling);
+  // Debug store (disabled on StorePage) — no-ops to avoid rendering or
+  // toggling the global debug panel from this page.
+  // Signatures mirror the real store so calls in this file remain valid.
+  const addRequest = (_req?: any) => {};
+  const updateRequest = (_id?: any, _payload?: any) => {};
+  const addDebugMessage = (_msg?: any) => {};
+  const selectedModel: string | undefined = undefined;
+  // A/B Test: Native tool calling mode (disabled here)
+  const useNativeToolCalling = false;
+
+  // Hide global debug UI elements while on the Store page (DOM-only, restored on unmount)
+  useEffect(() => {
+    const hiddenEls: { el: Element; previousDisplay: string | null }[] = [];
+
+    // Helper to hide elements and remember previous display
+    const hide = (el: Element | null) => {
+      if (!el) return;
+      const previous = (el as HTMLElement).style?.display || null;
+      (el as HTMLElement).style.display = 'none';
+      hiddenEls.push({ el, previousDisplay: previous });
+    };
+
+    // Hide the floating debug toggle (common container in App.tsx)
+    hide(document.querySelector('.fixed.bottom-4.left-4.z-50'));
+
+    // Hide any element containing the "Debug Panel" heading
+    const panels = Array.from(document.querySelectorAll('div')).filter(d => d.textContent?.includes('Debug Panel'));
+    panels.forEach(p => {
+      // Walk up to the nearest fixed container to hide the full panel
+      let node: Element | null = p;
+      while (node && !(node instanceof HTMLElement && getComputedStyle(node).position === 'fixed')) {
+        node = node.parentElement;
+      }
+      hide(node || p);
+    });
+
+    // Also hide any button explicitly labelled for opening the debug panel
+    hide(document.querySelector('button[title*="Open debug panel"]'));
+
+    return () => {
+      // Restore previous display values
+      hiddenEls.forEach(({ el, previousDisplay }) => {
+        (el as HTMLElement).style.display = previousDisplay || '';
+      });
+    };
+  }, []);
 
   useEffect(() => {
     if (storeId) {
@@ -238,11 +276,10 @@ export default function StorePage() {
   const sendMessage = async (content: string) => {
     if (!content.trim() || !storeId) return;
 
-    // 🆕 START DEBUG TRACKING
-    const requestId = generateCorrelationId();
+    // Debug tracking (lightweight on this page)
+    const requestId = Date.now().toString();
     const requestStart = Date.now();
 
-    requestTimer.start(requestId, 'total');
     addRequest({
       id: requestId,
       timestamp: requestStart,
@@ -251,7 +288,6 @@ export default function StorePage() {
       timings: { requestStart },
       status: 'pending',
     });
-    // 🆕 END DEBUG TRACKING
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -336,8 +372,8 @@ export default function StorePage() {
       // Update current suggestions for display above input
       setCurrentSuggestions(suggestions);
 
-      // 🆕 UPDATE DEBUG TRACKING
-      const totalDuration = requestTimer.end(requestId, 'total');
+      // Update lightweight timing
+      const totalDuration = Date.now() - requestStart;
 
       updateRequest(requestId, {
         response: {
@@ -734,7 +770,7 @@ export default function StorePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="fixed inset-0 bg-background flex flex-col">
 
       {/* Warning if no sheet */}
       {!hasSheet && isAuthenticated && (
@@ -758,15 +794,15 @@ export default function StorePage() {
 
       {/* Main Content: Responsive Layout */}
       <div className="flex-1 flex w-full min-h-0">
-        {/* Store Profile Side Panel - Hidden on mobile, visible on md+ */}
-        <div className="hidden md:block w-96 flex-shrink-0 bg-card border-r border-border overflow-y-auto">
+        {/* Store Profile Side Panel - Hidden on mobile, visible on md+ - sticky with internal scroll */}
+        <div className="hidden md:flex md:flex-col w-96 flex-shrink-0 bg-card border-r border-border h-full overflow-y-auto">
           <StoreInfoContent />
         </div>
 
         {/* Chat Section - Full width on mobile */}
-        <div className="flex-1 flex flex-col bg-muted min-w-0 min-h-0 overflow-hidden">
-          {/* Chat header (bot profile) */}
-          <div className="flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
+        <div className="flex-1 flex flex-col bg-muted min-w-0 h-full">
+          {/* Chat header (bot profile) - fixed at top, never scrolls */}
+          <div className="flex-shrink-0 flex items-center gap-3 px-4 md:px-6 py-3 bg-card border-b border-border/10 shadow-[var(--shadow-card-sm)]">
             <Avatar className="w-10 h-10" variant="bot">
               <AvatarFallback className="avatar-fallback">
                 <Bot className="w-4 h-4" />
@@ -790,7 +826,8 @@ export default function StorePage() {
             )}
           </div>
 
-          <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
+          {/* Messages area - this is the ONLY thing that scrolls */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}
@@ -837,7 +874,8 @@ export default function StorePage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
+          {/* Input footer - fixed at bottom, never scrolls */}
+          <div className="flex-shrink-0 p-4 md:p-6 bg-card border-t border-border/10 shadow-[var(--shadow-card-sm)]">
             {/* Suggestions area - shows follow-up prompts only */}
             {currentSuggestions.length > 0 && !isTyping && (
               <div className="mb-3">
