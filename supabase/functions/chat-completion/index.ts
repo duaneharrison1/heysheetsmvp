@@ -24,15 +24,22 @@ import {
 import { classifyIntent } from '../classifier/index.ts';
 import { generateResponse } from '../responder/index.ts';
 import { executeFunction } from '../tools/index.ts';
+import { buildSkipResponderResponse, buildFullResponse } from '../debug/response-builder.ts';
 
 // ============================================================================
 // LOGGING
 // ============================================================================
 
-function log(requestId: string, message: string, data?: any) {
-  const timestamp = new Date().toISOString();
-  const logData = data ? JSON.stringify(data) : '';
-  console.log(`[${timestamp}] [REQUEST_ID:${requestId}] ${message}`, logData);
+function log(requestId: string, message: string, data?: any, debugMode: boolean = false) {
+  if (!debugMode) return; // Only log in debug mode
+  // const timestamp = new Date().toISOString();
+  // const logData = data ? JSON.stringify(data) : '';
+  // console.log(`[${timestamp}] [REQUEST_ID:${requestId}] ${message}`, logData);
+}
+
+function logDuration(message: string, duration: number) {
+  // Always log duration to browser console, regardless of debug mode
+  console.log(`⏱️ ${message}: ${duration.toFixed(0)}ms`);
 }
 
 // ============================================================================
@@ -129,7 +136,8 @@ async function loadStoreData(
   cachedData: { services?: any[]; products?: any[]; hours?: any[] } | undefined,
   storeId: string,
   serviceRoleKey: string,
-  requestId: string
+  requestId: string,
+  debugMode: boolean = false
 ): Promise<LoadStoreDataResult> {
   const startTime = performance.now();
   const timing: Record<string, number> = {};
@@ -140,11 +148,13 @@ async function loadStoreData(
   const hasCachedHours = cachedData?.hours && cachedData.hours.length > 0;
 
   if (hasCachedServices || hasCachedProducts || hasCachedHours) {
-    log(requestId, '📦 Using client-provided cached data', {
-      services: cachedData?.services?.length || 0,
-      products: cachedData?.products?.length || 0,
-      hours: cachedData?.hours?.length || 0,
-    });
+    logCachedDataUsage(
+      requestId,
+      cachedData?.services?.length || 0,
+      cachedData?.products?.length || 0,
+      cachedData?.hours?.length || 0,
+      debugMode
+    );
   }
 
   try {
@@ -177,16 +187,17 @@ async function loadStoreData(
     timing.parallelFetch = performance.now() - fetchStart;
 
     const duration = performance.now() - startTime;
-    log(requestId, `📊 Store data loaded (${duration.toFixed(0)}ms)`, {
-      services: services.length,
-      products: products.length,
-      hours: hours.length,
-      timing: {
-        schemaLookup: timing.schemaLookup.toFixed(0),
-        parallelFetch: timing.parallelFetch.toFixed(0),
-        fromCache: { services: hasCachedServices, products: hasCachedProducts, hours: hasCachedHours },
-      },
-    });
+    logStoreDataLoaded(
+      requestId,
+      duration,
+      services.length,
+      products.length,
+      hours.length,
+      timing.schemaLookup,
+      timing.parallelFetch,
+      { services: hasCachedServices, products: hasCachedProducts, hours: hasCachedHours },
+      debugMode
+    );
 
     return { storeData: { services, products, hours }, duration, timing };
   } catch (error) {
@@ -196,197 +207,214 @@ async function loadStoreData(
   }
 }
 
+
+
 // ============================================================================
-// RESPONSE BUILDERS
+// DEBUG LOGGING FUNCTIONS
 // ============================================================================
 
-/** Build debug response for skipResponder mode */
-function buildSkipResponderResponse(
-  functionResult: FunctionResult,
-  classification: any,
-  classifyUsage: { input: number; output: number },
-  classifyDuration: number,
-  functionDuration: number,
-  totalDuration: number,
-  model?: string,
-  dataLoadDuration?: number,
-  dataLoadSource?: 'orchestrator' | 'function' | 'both'
-): ChatCompletionResponse {
-  const pricing = getModelPricing(model);
-
-  return {
-    text: functionResult.message!,
-    functionCalled: classification.function_to_call || undefined,
-    functionResult,
-    debug: {
-      intentDuration: classifyDuration,
-      functionDuration,
-      responseDuration: 0,
-      totalDuration,
-      dataLoadDuration,
-      dataLoadSource,
-      toolSelection: {
-        function: classification.function_to_call,
-        duration: classifyDuration,
-      },
-      functionCalls: [{
-        name: classification.function_to_call || '',
-        arguments: classification.extracted_params || {},
-        result: {
-          success: functionResult.success,
-          data: functionResult.data,
-          error: functionResult.error,
-        },
-        duration: functionDuration,
-      }],
-      tokens: {
-        classification: { input: classifyUsage.input, output: classifyUsage.output },
-        response: { input: 0, output: 0 },
-        total: { input: classifyUsage.input, output: classifyUsage.output, cached: 0 },
-      },
-      cost: {
-        classification: calculateCost(classifyUsage.input, classifyUsage.output, model),
-        response: 0,
-        total: calculateCost(classifyUsage.input, classifyUsage.output, model),
-      },
-      steps: [
-        {
-          name: 'Tool Selection',
-          function: 'classifier',
-          status: 'success',
-          duration: classifyDuration,
-          result: {
-            function_to_call: classification.function_to_call,
-            params: classification.extracted_params,
-            tokens: { input: classifyUsage.input, output: classifyUsage.output },
-          },
-        },
-        {
-          name: 'Function Execution',
-          function: 'tools',
-          status: functionResult.success ? 'success' : 'error',
-          duration: functionDuration,
-          functionCalled: classification.function_to_call,
-          result: functionResult.success ? functionResult.data : undefined,
-        },
-        {
-          name: 'Response Generation',
-          function: 'skipResponder',
-          status: 'success',
-          duration: 0,
-          result: {
-            length: functionResult.message!.length,
-            note: 'Deterministic response - LLM bypassed',
-          },
-        },
-      ],
-    },
-  };
+/** Log request initialization */
+function logRequestStart(requestId: string, debugMode: boolean): void {
+  log(requestId, '📨 Chat completion started', undefined, debugMode);
 }
 
-/** Build full debug response with responder */
-function buildFullResponse(
-  responseText: string,
-  suggestions: string[],
-  classification: any,
-  functionResult: FunctionResult | undefined,
-  classifyUsage: { input: number; output: number },
-  responseUsage: { input: number; output: number },
+/** Log request settings */
+function logRequestSettings(
+  requestId: string,
+  model: string | undefined,
+  reasoningEnabled: boolean,
+  storeId: string,
+  parseTime: number,
+  debugMode: boolean
+): void {
+  log(requestId, `⏱️ Request parsed (${parseTime.toFixed(0)}ms)`, undefined, debugMode);
+  log(requestId, 'Received settings:', {
+    model: model || `${DEFAULT_MODEL} (default)`,
+    reasoningEnabled,
+    storeId,
+  }, debugMode);
+}
+
+/** Log user message details */
+function logUserMessage(
+  requestId: string,
+  messageCount: number,
+  storeId: string,
+  model: string | undefined,
+  debugMode: boolean
+): void {
+  log(requestId, '💬 User message', {
+    messageCount,
+    storeId,
+    model: model || `${DEFAULT_MODEL} (default)`,
+  }, debugMode);
+}
+
+/** Log Supabase initialization timing */
+function logSupabaseInit(requestId: string, duration: number, debugMode: boolean): void {
+  log(requestId, `⏱️ Supabase client init (${duration.toFixed(0)}ms)`, undefined, debugMode);
+}
+
+/** Log store config fetch timing */
+function logStoreConfigFetch(requestId: string, duration: number, debugMode: boolean): void {
+  log(requestId, `⏱️ Store config fetched from DB (${duration.toFixed(0)}ms)`, undefined, debugMode);
+}
+
+/** Log store configuration details */
+function logStoreConfigDetails(requestId: string, storeConfig: StoreConfig, debugMode: boolean): void {
+  if (!debugMode) return;
+  console.log('[Orchestrator] Store config:', {
+    id: storeConfig.id,
+    name: storeConfig.name,
+    hasDetectedSchema: !!storeConfig.detected_schema,
+    schemaKeys: storeConfig.detected_schema ? Object.keys(storeConfig.detected_schema) : [],
+  });
+}
+
+/** Log cached data usage */
+function logCachedDataUsage(
+  requestId: string,
+  cachedServices: number,
+  cachedProducts: number,
+  cachedHours: number,
+  debugMode: boolean
+): void {
+  log(requestId, '📦 Using client-provided cached data', {
+    services: cachedServices,
+    products: cachedProducts,
+    hours: cachedHours,
+  }, debugMode);
+}
+
+/** Log store data loaded */
+function logStoreDataLoaded(
+  requestId: string,
+  duration: number,
+  servicesCount: number,
+  productsCount: number,
+  hoursCount: number,
+  schemaLookupTime: number | undefined,
+  parallelFetchTime: number | undefined,
+  fromCache: { services: boolean | undefined; products: boolean | undefined; hours: boolean | undefined },
+  debugMode: boolean
+): void {
+  log(requestId, `📊 Store data loaded (${duration.toFixed(0)}ms)`, {
+    services: servicesCount,
+    products: productsCount,
+    hours: hoursCount,
+    timing: {
+      schemaLookup: schemaLookupTime?.toFixed(0),
+      parallelFetch: parallelFetchTime?.toFixed(0),
+      fromCache,
+    },
+  }, debugMode);
+}
+
+/** Log intent classification */
+function logIntentClassified(
+  requestId: string,
+  functionToCall: string | null,
+  duration: number,
+  debugMode: boolean
+): void {
+  log(requestId, `✅ Tool selected: ${functionToCall || 'none'} (${duration.toFixed(0)}ms)`, undefined, debugMode);
+}
+
+/** Log function execution start */
+function logFunctionExecuting(
+  requestId: string,
+  functionName: string,
+  debugMode: boolean
+): void {
+  log(requestId, '🔧 Executing function:', { function: functionName }, debugMode);
+}
+
+/** Log function execution complete */
+function logFunctionComplete(
+  requestId: string,
+  duration: number,
+  success: boolean,
+  dataLoadDuration?: number,
+  debugMode?: boolean
+): void {
+  log(requestId, `✅ Function complete (${duration.toFixed(0)}ms)`, {
+    success,
+    dataLoadDuration: dataLoadDuration || undefined,
+  }, debugMode || false);
+}
+
+/** Log skipResponder mode */
+function logSkipResponder(requestId: string, debugMode: boolean): void {
+  log(requestId, '🎯 Using deterministic response (skipResponder)', undefined, debugMode);
+}
+
+/** Log response generation */
+function logResponseGenerating(requestId: string, debugMode: boolean): void {
+  log(requestId, '💬 Generating response...', undefined, debugMode);
+}
+
+/** Log response generated */
+function logResponseGenerated(
+  requestId: string,
+  duration: number,
+  totalInputTokens: number,
+  totalOutputTokens: number,
+  totalCost: number,
+  debugMode: boolean
+): void {
+  log(requestId, `✅ Response generated (${duration.toFixed(0)}ms)`, undefined, debugMode);
+  log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`, undefined, debugMode);
+}
+
+/** Log full timing breakdown */
+function logTimingBreakdown(
+  requestId: string,
+  timing: Record<string, number>,
+  orchestratorDataLoadDuration: number,
   classifyDuration: number,
   functionDuration: number,
+  functionDataLoadDuration: number,
   responseDuration: number,
   totalDuration: number,
-  reasoningEnabled: boolean,
-  model?: string,
-  dataLoadDuration?: number,
-  dataLoadSource?: 'orchestrator' | 'function' | 'both'
-): ChatCompletionResponse {
-  const pricing = getModelPricing(model);
-  const totalInputTokens = classifyUsage.input + responseUsage.input;
-  const totalOutputTokens = classifyUsage.output + responseUsage.output;
-  const totalCost = calculateCost(totalInputTokens, totalOutputTokens, model);
+  debugMode: boolean
+): void {
+  const accountedTime =
+    (timing.requestParse || 0) +
+    (timing.supabaseInit || 0) +
+    (timing.storeConfigFetch || 0) +
+    (timing.schemaParse || 0) +
+    orchestratorDataLoadDuration +
+    classifyDuration +
+    functionDuration +
+    responseDuration;
+  const overhead = totalDuration - accountedTime;
 
-  return {
-    text: responseText,
-    functionCalled: classification.function_to_call || undefined,
-    functionResult,
-    suggestions,
-    debug: {
-      endpoint: 'chat-completion',
-      reasoningEnabled,
-      intentDuration: classifyDuration,
-      functionDuration,
-      responseDuration,
-      totalDuration,
-      dataLoadDuration,
-      dataLoadSource,
-      toolSelection: {
-        function: classification.function_to_call,
-        duration: classifyDuration,
-      },
-      functionCalls: functionResult
-        ? [{
-            name: classification.function_to_call || '',
-            arguments: classification.extracted_params || {},
-            result: {
-              success: functionResult.success,
-              data: functionResult.data,
-              error: functionResult.error,
-            },
-            duration: functionDuration,
-          }]
-        : [],
-      tokens: {
-        classification: { input: classifyUsage.input, output: classifyUsage.output },
-        response: { input: responseUsage.input, output: responseUsage.output },
-        total: { input: totalInputTokens, output: totalOutputTokens, cached: 0 },
-      },
-      cost: {
-        classification: calculateCost(classifyUsage.input, classifyUsage.output, model),
-        response: calculateCost(responseUsage.input, responseUsage.output, model),
-        total: totalCost,
-      },
-      steps: [
-        {
-          name: 'Tool Selection',
-          function: 'classifier',
-          status: 'success',
-          duration: classifyDuration,
-          result: {
-            function_to_call: classification.function_to_call,
-            params: classification.extracted_params,
-            tokens: { input: classifyUsage.input, output: classifyUsage.output },
-          },
-        },
-        ...(classification.function_to_call && classification.function_to_call !== null
-          ? [{
-              name: 'Function Execution',
-              function: 'tools',
-              status: functionResult?.success ? 'success' : 'error',
-              duration: functionDuration,
-              functionCalled: classification.function_to_call,
-              result: functionResult?.success ? functionResult.data : undefined,
-              error: !functionResult?.success
-                ? {
-                    message: functionResult?.error || 'Function execution failed',
-                    args: classification.extracted_params,
-                  }
-                : undefined,
-            }]
-          : []),
-        {
-          name: 'Response Generation',
-          function: 'responder',
-          status: 'success',
-          duration: responseDuration,
-          result: {
-            length: responseText?.length || 0,
-            tokens: { input: responseUsage.input, output: responseUsage.output },
-          },
-        },
-      ],
-    },
-  };
+  log(requestId, `⏱️ FULL TIMING BREAKDOWN:`, undefined, debugMode);
+  log(requestId, `   requestParse: ${(timing.requestParse || 0).toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   supabaseInit: ${(timing.supabaseInit || 0).toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   storeConfigFetch: ${(timing.storeConfigFetch || 0).toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   schemaParse: ${(timing.schemaParse || 0).toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   dataPreload: ${orchestratorDataLoadDuration.toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   classifier: ${classifyDuration.toFixed(0)}ms`, undefined, debugMode);
+  log(
+    requestId,
+    `   function: ${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms)`,
+    undefined,
+    debugMode
+  );
+  log(requestId, `   responder: ${responseDuration.toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   overhead/unaccounted: ${overhead.toFixed(0)}ms`, undefined, debugMode);
+  log(requestId, `   TOTAL: ${totalDuration.toFixed(0)}ms`, undefined, debugMode);
+}
+
+/** Log request completion */
+function logRequestComplete(requestId: string, totalDuration: number, debugMode: boolean): void {
+  log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`, undefined, debugMode);
+}
+
+/** Log skipResponder completion */
+function logSkipResponderComplete(requestId: string, totalDuration: number, debugMode: boolean): void {
+  log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`, undefined, debugMode);
 }
 
 // ============================================================================
@@ -400,12 +428,13 @@ serve(async (req) => {
   }
 
   const requestId = req.headers.get('X-Request-ID') || crypto.randomUUID();
+  const debugMode = req.headers.get('X-Debug-Mode') === 'true';
   const requestStart = performance.now();
 
   // Timing tracking object
   const timing: Record<string, number> = {};
 
-  log(requestId, '📨 Chat completion started');
+  logRequestStart(requestId, debugMode);
 
   try {
     // Parse request (with timing)
@@ -422,13 +451,7 @@ serve(async (req) => {
       reasoningEnabled?: boolean;
     };
     timing.requestParse = performance.now() - parseStart;
-    log(requestId, `⏱️ Request parsed (${timing.requestParse.toFixed(0)}ms)`);
-
-    log(requestId, 'Received settings:', {
-      model: model || `${DEFAULT_MODEL} (default)`,
-      reasoningEnabled,
-      storeId,
-    });
+    logRequestSettings(requestId, model, reasoningEnabled, storeId, timing.requestParse, debugMode);
 
     // Validate required fields
     if (!messages || messages.length === 0 || !storeId) {
@@ -439,11 +462,7 @@ serve(async (req) => {
       );
     }
 
-    log(requestId, '💬 User message', {
-      messageCount: messages.length,
-      storeId,
-      model: model || `${DEFAULT_MODEL} (default)`,
-    });
+    logUserMessage(requestId, messages.length, storeId, model, debugMode);
 
     // Initialize Supabase client (with timing)
     const supabaseInitStart = performance.now();
@@ -451,7 +470,7 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     timing.supabaseInit = performance.now() - supabaseInitStart;
-    log(requestId, `⏱️ Supabase client init (${timing.supabaseInit.toFixed(0)}ms)`);
+    logSupabaseInit(requestId, timing.supabaseInit, debugMode);
 
     // Load store configuration (with timing)
     const storeConfigStart = performance.now();
@@ -461,7 +480,7 @@ serve(async (req) => {
       .eq('id', storeId)
       .single();
     timing.storeConfigFetch = performance.now() - storeConfigStart;
-    log(requestId, `⏱️ Store config fetched from DB (${timing.storeConfigFetch.toFixed(0)}ms)`);
+    logStoreConfigFetch(requestId, timing.storeConfigFetch, debugMode);
 
     if (storeError || !store) {
       return new Response(
@@ -480,30 +499,23 @@ serve(async (req) => {
           : store.detected_schema,
     };
     timing.schemaParse = performance.now() - schemaParseStart;
-
-    console.log('[Orchestrator] Store config:', {
-      id: storeConfig.id,
-      name: storeConfig.name,
-      hasDetectedSchema: !!storeConfig.detected_schema,
-      schemaKeys: storeConfig.detected_schema ? Object.keys(storeConfig.detected_schema) : [],
-    });
+    logStoreConfigDetails(requestId, storeConfig, debugMode);
 
     // Pre-load store data
-    const { storeData, duration: orchestratorDataLoadDuration } = await loadStoreData(storeConfig, cachedData, storeId, serviceRoleKey, requestId);
+    const { storeData, duration: orchestratorDataLoadDuration } = await loadStoreData(storeConfig, cachedData, storeId, serviceRoleKey, requestId, debugMode);
 
     // Step 1: Classify intent
-    log(requestId, '🎯 Classifying intent...');
     const classifyStart = performance.now();
 
     const { classification, usage: classifyUsage } = await classifyIntent(
       messages,
       { storeData },
       model,
-      { reasoningEnabled, includeStoreData: true }
+      { reasoningEnabled, includeStoreData: true, debugMode }
     );
 
     const classifyDuration = performance.now() - classifyStart;
-    log(requestId, `✅ Tool selected: ${classification.function_to_call || 'none'} (${classifyDuration.toFixed(0)}ms)`);
+    logIntentClassified(requestId, classification.function_to_call || null, classifyDuration, debugMode);
 
     // Step 2: Execute function if classified
     let functionResult: FunctionResult | undefined;
@@ -511,7 +523,7 @@ serve(async (req) => {
     let functionDataLoadDuration = 0;
 
     if (classification.function_to_call && classification.function_to_call !== null) {
-      log(requestId, '🔧 Executing function:', { function: classification.function_to_call });
+      logFunctionExecuting(requestId, classification.function_to_call, debugMode);
       const functionStart = performance.now();
 
       const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
@@ -535,16 +547,14 @@ serve(async (req) => {
       if (functionResult?.data?.dataLoadDuration) {
         functionDataLoadDuration = functionResult.data.dataLoadDuration;
       }
-      log(requestId, `✅ Function complete (${functionDuration.toFixed(0)}ms)`, {
-        success: functionResult?.success,
-        dataLoadDuration: functionDataLoadDuration || undefined,
-      });
+      logFunctionComplete(requestId, functionDuration, functionResult?.success || false, functionDataLoadDuration, debugMode);
     }
 
     // Check for skipResponder (deterministic response)
     if (functionResult?.skipResponder && functionResult?.message) {
-      log(requestId, '🎯 Using deterministic response (skipResponder)');
+      logSkipResponder(requestId, debugMode);
       const totalDuration = performance.now() - requestStart;
+      logDuration('Total request duration', totalDuration);
 
       // Calculate total data load duration and source
       const totalDataLoadDuration = orchestratorDataLoadDuration + functionDataLoadDuration;
@@ -568,22 +578,18 @@ serve(async (req) => {
         dataLoadSource
       );
 
-      // Calculate overhead (time not accounted for in main phases)
-      const accountedTime = (timing.requestParse || 0) + (timing.supabaseInit || 0) + (timing.storeConfigFetch || 0) + (timing.schemaParse || 0) + orchestratorDataLoadDuration + classifyDuration + functionDuration;
-      const overhead = totalDuration - accountedTime;
-
-      log(requestId, `⏱️ FULL TIMING BREAKDOWN (skipResponder):`);
-      log(requestId, `   requestParse: ${(timing.requestParse || 0).toFixed(0)}ms`);
-      log(requestId, `   supabaseInit: ${(timing.supabaseInit || 0).toFixed(0)}ms`);
-      log(requestId, `   storeConfigFetch: ${(timing.storeConfigFetch || 0).toFixed(0)}ms`);
-      log(requestId, `   schemaParse: ${(timing.schemaParse || 0).toFixed(0)}ms`);
-      log(requestId, `   dataPreload: ${orchestratorDataLoadDuration.toFixed(0)}ms`);
-      log(requestId, `   classifier: ${classifyDuration.toFixed(0)}ms`);
-      log(requestId, `   function: ${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms)`);
-      log(requestId, `   responder: 0ms (skipped)`);
-      log(requestId, `   overhead/unaccounted: ${overhead.toFixed(0)}ms`);
-      log(requestId, `   TOTAL: ${totalDuration.toFixed(0)}ms`);
-      log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
+      logTimingBreakdown(
+        requestId,
+        timing,
+        orchestratorDataLoadDuration,
+        classifyDuration,
+        functionDuration,
+        functionDataLoadDuration,
+        0,
+        totalDuration,
+        debugMode
+      );
+      logSkipResponderComplete(requestId, totalDuration, debugMode);
 
       return new Response(JSON.stringify(response), {
         headers: {
@@ -596,7 +602,7 @@ serve(async (req) => {
     }
 
     // Step 3: Generate response using LLM
-    log(requestId, '💬 Generating response...');
+    logResponseGenerating(requestId, debugMode);
     const responseStart = performance.now();
 
     const { text: responseText, suggestions, usage: responseUsage } = await generateResponse(
@@ -609,11 +615,13 @@ serve(async (req) => {
         architectureMode: 'enhanced',
         reasoningEnabled,
         functionName: classification.function_to_call || undefined,
+        debugMode,
       }
     );
 
     const responseDuration = performance.now() - responseStart;
     const totalDuration = performance.now() - requestStart;
+    logDuration('Total request duration', totalDuration);
 
     const totalInputTokens = classifyUsage.input + responseUsage.input;
     const totalOutputTokens = classifyUsage.output + responseUsage.output;
@@ -629,25 +637,20 @@ serve(async (req) => {
       ? 'function'
       : undefined;
 
-    log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
-    log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
+    logResponseGenerated(requestId, responseDuration, totalInputTokens, totalOutputTokens, totalCost, debugMode);
 
-    // Calculate overhead (time not accounted for in main phases)
-    const accountedTime = (timing.requestParse || 0) + (timing.supabaseInit || 0) + (timing.storeConfigFetch || 0) + (timing.schemaParse || 0) + orchestratorDataLoadDuration + classifyDuration + functionDuration + responseDuration;
-    const overhead = totalDuration - accountedTime;
-
-    log(requestId, `⏱️ FULL TIMING BREAKDOWN:`);
-    log(requestId, `   requestParse: ${(timing.requestParse || 0).toFixed(0)}ms`);
-    log(requestId, `   supabaseInit: ${(timing.supabaseInit || 0).toFixed(0)}ms`);
-    log(requestId, `   storeConfigFetch: ${(timing.storeConfigFetch || 0).toFixed(0)}ms`);
-    log(requestId, `   schemaParse: ${(timing.schemaParse || 0).toFixed(0)}ms`);
-    log(requestId, `   dataPreload: ${orchestratorDataLoadDuration.toFixed(0)}ms`);
-    log(requestId, `   classifier: ${classifyDuration.toFixed(0)}ms`);
-    log(requestId, `   function: ${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms)`);
-    log(requestId, `   responder: ${responseDuration.toFixed(0)}ms`);
-    log(requestId, `   overhead/unaccounted: ${overhead.toFixed(0)}ms`);
-    log(requestId, `   TOTAL: ${totalDuration.toFixed(0)}ms`);
-    log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
+    logTimingBreakdown(
+      requestId,
+      timing,
+      orchestratorDataLoadDuration,
+      classifyDuration,
+      functionDuration,
+      functionDataLoadDuration,
+      responseDuration,
+      totalDuration,
+      debugMode
+    );
+    logRequestComplete(requestId, totalDuration, debugMode);
 
     // Step 4: Return response
     const response = buildFullResponse(

@@ -22,7 +22,7 @@ import { getReasoningConfig } from '../_shared/model-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-request-id, x-debug-mode',
 };
 
 // ============================================================================

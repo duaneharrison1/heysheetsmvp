@@ -275,6 +275,7 @@ export default function DebugChat() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         'X-Request-ID': requestId,
+        'X-Debug-Mode': 'true',
       };
 
       updateRequest(requestId, { status: 'classifying' });
@@ -319,6 +320,11 @@ export default function DebugChat() {
 
       const data = await response.json();
       console.log('Chat response data:', data);
+
+      // Log server-side total duration to browser console
+      if (data.debug?.totalDuration) {
+        console.log(`⏱️ Server-side total duration: ${data.debug.totalDuration.toFixed(0)}ms`);
+      }
 
       // Debug: Log reasoning info specifically
       if (shouldEnableReasoning) {

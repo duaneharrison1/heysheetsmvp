@@ -26,6 +26,8 @@ export interface ResponderOptions {
   architectureMode?: string;
   /** Function name that was executed (for context) */
   functionName?: string;
+  /** Debug mode flag for logging */
+  debugMode?: boolean;
 }
 
 export interface ResponderResult {
@@ -230,7 +232,9 @@ export async function generateResponse(
   timing.responseParse = performance.now() - responseParseStart;
 
   const totalDuration = performance.now() - responderStart;
-  console.log(`[Responder] ⏱️ TIMING: promptBuild=${timing.promptBuild.toFixed(0)}ms, apiCall=${timing.apiCall.toFixed(0)}ms, jsonParse=${timing.jsonParse.toFixed(0)}ms, responseParse=${timing.responseParse.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+  if (options?.debugMode) {
+    console.log(`[Responder] ⏱️ TIMING: promptBuild=${timing.promptBuild.toFixed(0)}ms, apiCall=${timing.apiCall.toFixed(0)}ms, jsonParse=${timing.jsonParse.toFixed(0)}ms, responseParse=${timing.responseParse.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+  }
 
   return parsedResponse;
 }

@@ -28,6 +28,8 @@ export interface ClassifierOptions {
   reasoningEnabled?: boolean;
   /** Include store data in prompt (false for lean mode) */
   includeStoreData?: boolean;
+  /** Debug mode flag for logging */
+  debugMode?: boolean;
 }
 
 export interface ClassifierResult {
@@ -92,7 +94,9 @@ export async function classifyIntent(
     throw new Error('OPENROUTER_API_KEY not configured');
   }
 
-  console.log(`[Classifier] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
+  if (options?.debugMode) {
+    console.log(`[Classifier] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
+  }
 
   // Build conversation context (with timing)
   const promptBuildStart = performance.now();
@@ -171,7 +175,9 @@ export async function classifyIntent(
   const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
 
   const totalDuration = performance.now() - classifierStart;
-  console.log(`[Classifier] ⏱️ TIMING: promptBuild=${timing.promptBuild.toFixed(0)}ms, apiCall=${timing.apiCall.toFixed(0)}ms, jsonParse=${timing.jsonParse.toFixed(0)}ms, classificationParse=${timing.classificationParse.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+  if (options?.debugMode) {
+    console.log(`[Classifier] ⏱️ TIMING: promptBuild=${timing.promptBuild.toFixed(0)}ms, apiCall=${timing.apiCall.toFixed(0)}ms, jsonParse=${timing.jsonParse.toFixed(0)}ms, classificationParse=${timing.classificationParse.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+  }
 
   return {
     classification,
