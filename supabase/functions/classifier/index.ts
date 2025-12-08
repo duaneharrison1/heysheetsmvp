@@ -16,7 +16,7 @@ import {
   CLASSIFIER_TIMEOUT_MS,
   CLASSIFIER_MAX_CONTEXT_MESSAGES,
 } from '../_shared/config.ts';
-import { SLIM_PROMPT, VERBOSE_PROMPT } from './CLASSIFIER_PROMPT.ts';
+import { buildClassificationPrompt } from './CLASSIFIER_PROMPT.ts';
 
 // ============================================================================
 // TYPES
@@ -35,19 +35,10 @@ export interface ClassifierResult {
 }
 
 // ============================================================================
-// CLASSIFIER PROMPT MANAGEMENT
+// CLASSIFIER PROMPT
 // ============================================================================
-//
-// Prompts are defined in CLASSIFIER_PROMPT.ts (single source of truth)
-// Editing: modify CLASSIFIER_PROMPT.ts directly - no code changes needed
-//
-// Available versions:
-// - SLIM_PROMPT: Production (60% smaller, ~625 tokens saved per request)
-// - VERBOSE_PROMPT: Reference documentation
-//
-// To switch versions:
-// Change classifyIntent() call below from SLIM_PROMPT to VERBOSE_PROMPT()
-//
+// Defined in CLASSIFIER_PROMPT.ts (single source of truth)
+// Edit prompt there directly - no code changes needed here
 
 // ============================================================================
 // RESPONSE PARSER
@@ -121,8 +112,8 @@ export async function classifyIntent(
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-  // Build prompt from CLASSIFIER_PROMPT.ts (single source of truth)
-  const prompt = SLIM_PROMPT(conversationHistory, lastMessage, todayStr, tomorrowStr);
+  // Build prompt from CLASSIFIER_PROMPT.ts
+  const prompt = buildClassificationPrompt(conversationHistory, lastMessage, todayStr, tomorrowStr);
   timing.promptBuild = performance.now() - promptBuildStart;
 
   // Call OpenRouter API (with timing)

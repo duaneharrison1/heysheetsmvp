@@ -2,96 +2,17 @@
  * CLASSIFIER PROMPT - SINGLE SOURCE OF TRUTH
  * ==========================================
  *
- * This file defines the classification prompt used to determine user intent
- * and extract parameters. It's separated from the classifier logic for easy
- * editing and maintenance.
- *
- * To modify the prompt:
- * 1. Edit the SLIM_PROMPT constant below
- * 2. Save the file
- * 3. No code changes needed - index.ts imports from here
- *
- * Token metrics (slim version):
- * - Static text: ~248 tokens
- * - With context: ~408 tokens total
- * - Savings vs verbose: ~625 tokens per request (-60%)
- * - Cost savings: ~$0.125 per 1,000 requests (Grok 4.1 Fast)
+ * This file contains the classification prompt. Edit here directly.
+ * No code changes needed - index.ts imports from here.
  */
 
-/**
- * Slim prompt for intent classification (PRODUCTION VERSION)
- * Optimized for cost/latency while maintaining accuracy.
- * Removes verbose explanations, keeps essential decision logic.
- */
-export const SLIM_PROMPT = (
+export function buildClassificationPrompt(
   conversationHistory: string,
   lastMessage: string,
   todayStr: string,
   tomorrowStr: string
-) => `Classify user intent and extract parameters for function calling.
-
-CONVERSATION: ${conversationHistory}
-CURRENT: "${lastMessage}"
-TODAY: ${todayStr} | TOMORROW: ${tomorrowStr}
-
-FUNCTIONS:
-- get_store_info: Store details, hours, info
-- get_services: List all services
-- get_products: List all products
-- search_services: Search services (query param required)
-- search_products: Search products (query param required)
-- submit_lead: Capture contact info
-- get_misc_data: Custom tabs/FAQ/Policies
-- check_availability: Check availability at specific date/time
-- create_booking: Create booking (requires service_name, date, time, customer_name, customer_email)
-- get_booking_slots: Show booking calendar (use for booking intent)
-- get_recommendations: Suggest items based on needs
-
-BOOKING:
-- "I want to book" or "Can I book" → get_booking_slots
-- "Is X available on Y?" → check_availability
-- Complete booking from calendar UI → create_booking (needs customer_name & customer_email)
-
-PARAMS (by function):
-- get_store_info: info_type ('hours'|'services'|'products'|'all')
-- search_*: query (search term)
-- get_products: category (optional)
-- get_misc_data: tab_name (tab name)
-- check_availability/create_booking: service_name, date (YYYY-MM-DD), time (HH:MM)
-- create_booking: customer_name, customer_email, customer_phone (optional)
-- get_booking_slots: prefill_date, prefill_time, prefill_name, prefill_email
-- get_recommendations: goal, experience_level, budget, category, time_preference
-- submit_lead: name, email, phone, message
-
-EXTRACTION:
-- Parse relative dates to YYYY-MM-DD format
-- Extract only what user stated (no hallucination)
-- For greetings: respond conversationally, no function
-
-LANGUAGE: Detect user's language (ISO 639-1 code like 'en', 'es', 'fr', 'ja', etc.). Default: 'en'
-
-OUTPUT JSON:
-{
-  "needs_clarification": boolean,
-  "clarification_question": string|null,
-  "function_to_call": string|null,
-  "extracted_params": object,
-  "user_language": string
-}
-
-JSON ONLY (no markdown, no explanations):`;
-
-/**
- * Verbose prompt for reference and documentation
- * Used for understanding the original detailed specification
- * To use this instead of SLIM_PROMPT, update index.ts to call VERBOSE_PROMPT()
- */
-export const VERBOSE_PROMPT = (
-  conversationHistory: string,
-  lastMessage: string,
-  todayStr: string,
-  tomorrowStr: string
-) => `You are a tool classifier for a business chat assistant.
+): string {
+  return `You are a tool classifier for a business chat assistant.
 
 CONVERSATION HISTORY (recent turns only):
 ${conversationHistory}
@@ -153,3 +74,4 @@ REQUIRED OUTPUT FORMAT (exact field names):
 CRITICAL: Use "function_to_call" NOT "function", and "extracted_params" NOT "parameters"!
 
 RESPOND WITH JSON ONLY (no markdown, no explanations):`;
+}
