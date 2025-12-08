@@ -22,9 +22,9 @@
  *   import { usePrecacheStore } from '@/hooks/usePrecacheStore';
  *   
  *   export function StorePage() {
- *     const storeId = /* from params */;
- *     usePrecacheStore(storeId);  // Call at component level
- *     // ...
+ *     const storeId = storeIdFromParams;
+ *     usePrecacheStore(storeId);
+ *     // component renders
  *   }
  *
  * WHEN CALLED:
