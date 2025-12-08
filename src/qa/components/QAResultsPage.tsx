@@ -507,12 +507,114 @@ export function QAResultsPage() {
                                       return aIdx - bIdx;
                                     });
                                   
-                                  return entries.map(([key, val]) => (
-                                    <div key={key} className="flex justify-between">
-                                      <span className="text-muted-foreground">{key}:</span>
-                                      <span className="font-mono">{typeof val === 'number' ? formatDuration(val) : String(val)}</span>
-                                    </div>
-                                  ));
+                                  return entries.map(([key, val]) => {
+                                    const isObject = (x: any) => x && typeof x === 'object' && !Array.isArray(x)
+                                    const isEmptyObject = (x: any) => isObject(x) && Object.keys(x).length === 0
+
+                                    // Special-case `backend` to render a grouped, hierarchical view
+                                    if (key === 'backend' && isObject(val)) {
+                                      const backend: any = val
+                                      const showEmpty = Object.keys(backend).length === 0
+                                      if (showEmpty) {
+                                        return (
+                                          <div key={key} className="mb-1">
+                                            <div className="text-muted-foreground text-[11px]">backend:</div>
+                                            <div className="font-mono">—</div>
+                                          </div>
+                                        )
+                                      }
+
+                                      return (
+                                        <div key={key} className="mb-2">
+                                          <div className="text-muted-foreground text-[11px] mb-1">Backend:</div>
+                                          <div className="bg-muted p-2 rounded text-[12px]">
+                                            {/* Setup */}
+                                            {(backend.requestParse || backend.supabaseInit || backend.storeConfigFetch) && (
+                                              <div className="mb-2">
+                                                <div className="text-xs text-gray-400 font-semibold">⚙️ Setup</div>
+                                                <div className="ml-2 text-[13px]">
+                                                  {backend.requestParse !== undefined && <div>parse: <span className="font-mono">{formatDuration(backend.requestParse)}</span></div>}
+                                                  {backend.supabaseInit !== undefined && <div>supabase init: <span className="font-mono">{formatDuration(backend.supabaseInit)}</span></div>}
+                                                  {backend.storeConfigFetch !== undefined && <div>store config: <span className="font-mono">{formatDuration(backend.storeConfigFetch)}</span></div>}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Schema */}
+                                            {backend.schemaParse !== undefined && (
+                                              <div className="mb-2">
+                                                <div className="text-xs text-gray-400 font-semibold">🔎 Schema</div>
+                                                <div className="ml-2 text-[13px]">parse: <span className="font-mono">{formatDuration(backend.schemaParse)}</span></div>
+                                              </div>
+                                            )}
+
+                                            {/* Orchestrator / per-tab */}
+                                            {(backend.orchestratorDataLoadDuration !== undefined || backend.perTabTimings) && (
+                                              <div className="mb-2">
+                                                <div className="text-xs text-gray-400 font-semibold">📦 Orchestrator</div>
+                                                <div className="ml-2 text-[13px]">
+                                                  {backend.orchestratorDataLoadDuration !== undefined && <div>pre-load: <span className="font-mono">{formatDuration(backend.orchestratorDataLoadDuration)}</span></div>}
+                                                  {backend.perTabTimings && (
+                                                    <div className="mt-1">
+                                                      <div className="text-[11px] text-gray-300">Per-tab timings:</div>
+                                                      <pre className="text-xs text-gray-200 whitespace-pre-wrap bg-gray-800 p-2 rounded mt-1">{JSON.stringify(backend.perTabTimings, null, 2)}</pre>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Classifier */}
+                                            {backend.classifier && !isEmptyObject(backend.classifier) && (
+                                              <div className="mb-2">
+                                                <div className="text-xs text-gray-400 font-semibold">🧭 Classifier</div>
+                                                <div className="ml-2 text-[13px]">
+                                                  <div>promptBuild: <span className="font-mono">{formatDuration(backend.classifier.promptBuild || 0)}</span></div>
+                                                  <div>apiCall: <span className="font-mono">{formatDuration(backend.classifier.apiCall || 0)}</span></div>
+                                                  <div>jsonParse: <span className="font-mono">{formatDuration(backend.classifier.jsonParse || 0)}</span></div>
+                                                  <div>classificationParse: <span className="font-mono">{formatDuration(backend.classifier.classificationParse || 0)}</span></div>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Responder */}
+                                            {backend.responder && !isEmptyObject(backend.responder) && (
+                                              <div className="mb-2">
+                                                <div className="text-xs text-gray-400 font-semibold">🤖 Responder</div>
+                                                <div className="ml-2 text-[13px]">
+                                                  <div>promptBuild: <span className="font-mono">{formatDuration(backend.responder.promptBuild || 0)}</span></div>
+                                                  <div>apiCall: <span className="font-mono">{formatDuration(backend.responder.apiCall || 0)}</span></div>
+                                                  <div>jsonParse: <span className="font-mono">{formatDuration(backend.responder.jsonParse || 0)}</span></div>
+                                                  <div>responseParse: <span className="font-mono">{formatDuration(backend.responder.responseParse || 0)}</span></div>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Function data loads + overhead */}
+                                            <div className="mb-1">
+                                              {backend.functionDataLoadDuration !== undefined && <div>🔧 Function data load: <span className="font-mono">{formatDuration(backend.functionDataLoadDuration)}</span></div>}
+                                              {backend.overhead !== undefined && <div>⏱️ Overhead: <span className="font-mono">{formatDuration(backend.overhead)}</span></div>}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+
+                                    // Fallback for other keys
+                                    const renderVal = (v: any) => {
+                                      if (v == null) return <span className="font-mono">-</span>
+                                      if (typeof v === 'number') return <span className="font-mono">{formatDuration(v)}</span>
+                                      if (typeof v === 'object') return <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(v, null, 2)}</pre>
+                                      return <span className="font-mono">{String(v)}</span>
+                                    }
+
+                                    return (
+                                      <div key={key} className="mb-1">
+                                        <div className="text-muted-foreground text-[11px]">{key}:</div>
+                                        {renderVal(val)}
+                                      </div>
+                                    )
+                                  });
                                 })() : <span className="text-muted-foreground">No timing data</span>}
                               </div>
                             </div>

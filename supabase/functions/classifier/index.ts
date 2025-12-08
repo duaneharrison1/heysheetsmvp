@@ -16,6 +16,7 @@ import {
   CLASSIFIER_TIMEOUT_MS,
   CLASSIFIER_MAX_CONTEXT_MESSAGES,
 } from '../_shared/config.ts';
+import { buildSlimClassificationPrompt } from '../_shared/prompts/classifier-slim.ts';
 
 // ============================================================================
 // TYPES
@@ -34,8 +35,18 @@ export interface ClassifierResult {
 }
 
 // ============================================================================
-// PROMPT BUILDER
+// PROMPT BUILDER (VERBOSE - SEE classifier-slim.ts FOR PRODUCTION VERSION)
 // ============================================================================
+// 
+// This verbose version is kept as reference and documentation.
+// The slim version in prompts/classifier-slim.ts is used in production.
+// 
+// To revert to verbose version:
+// - Import buildClassificationPrompt (below)
+// - Change classifyIntent() to use buildClassificationPrompt() instead of buildSlimClassificationPrompt()
+//
+// Savings with slim: ~625 tokens per request (-60%) = $0.125 per 1k requests
+//
 
 function buildClassificationPrompt(
   conversationHistory: string,
@@ -156,6 +167,9 @@ export async function classifyIntent(
   model?: string,
   options?: ClassifierOptions
 ): Promise<ClassifierResult> {
+  const classifierStart = performance.now();
+  const timing: Record<string, number> = {};
+
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!OPENROUTER_API_KEY) {
     throw new Error('OPENROUTER_API_KEY not configured');
@@ -163,7 +177,8 @@ export async function classifyIntent(
 
   console.log(`[Classifier] reasoningEnabled: ${options?.reasoningEnabled ?? false}`);
 
-  // Build conversation context
+  // Build conversation context (with timing)
+  const promptBuildStart = performance.now();
   const lastMessage = messages[messages.length - 1]?.content || '';
   const recentMessages = messages.slice(-CLASSIFIER_MAX_CONTEXT_MESSAGES);
   const conversationHistory = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
@@ -175,13 +190,15 @@ export async function classifyIntent(
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-  // Build prompt
-  const prompt = buildClassificationPrompt(conversationHistory, lastMessage, todayStr, tomorrowStr);
+  // Build slim prompt (optimized for cost/latency)
+  const prompt = buildSlimClassificationPrompt(conversationHistory, lastMessage, todayStr, tomorrowStr);
+  timing.promptBuild = performance.now() - promptBuildStart;
 
-  // Call OpenRouter API
+  // Call OpenRouter API (with timing)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CLASSIFIER_TIMEOUT_MS);
 
+  const apiCallStart = performance.now();
   let response;
   try {
     response = await fetch(OPENROUTER_API_URL, {
@@ -205,6 +222,7 @@ export async function classifyIntent(
   } finally {
     clearTimeout(timeoutId);
   }
+  timing.apiCall = performance.now() - apiCallStart;
 
   if (!response.ok) {
     const error = await response.text();
@@ -212,7 +230,9 @@ export async function classifyIntent(
     throw new Error(`Classification failed: ${response.statusText}`);
   }
 
+  const parseStart = performance.now();
   const result = await response.json();
+  timing.jsonParse = performance.now() - parseStart;
 
   // Minimal structural validation: ensure `content` exists and is non-empty
   const rawContent = result?.choices?.[0]?.message?.content;
@@ -223,13 +243,16 @@ export async function classifyIntent(
 
   console.log('[Classifier] Raw LLM response (first 200 chars):', rawContent.substring(0, 200));
 
-  // Parse and validate classification
+  // Parse and validate classification (with timing)
+  const classificationParseStart = performance.now();
   const classification = parseClassificationResponse(rawContent);
-  //console.log('[Classifier] Result:', JSON.stringify(classification, null, 2));
+  timing.classificationParse = performance.now() - classificationParseStart;
 
   // Extract token usage
   const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0 };
-  //console.log('[Classifier] Token usage:', usage);
+
+  const totalDuration = performance.now() - classifierStart;
+  console.log(`[Classifier] ⏱️ TIMING: promptBuild=${timing.promptBuild.toFixed(0)}ms, apiCall=${timing.apiCall.toFixed(0)}ms, jsonParse=${timing.jsonParse.toFixed(0)}ms, classificationParse=${timing.classificationParse.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
 
   return {
     classification,

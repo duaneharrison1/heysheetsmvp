@@ -65,6 +65,11 @@ export interface DebugRequest {
     responseDuration?: number
     reasoningDuration?: number
     totalDuration?: number
+    // Extended timings added for backend breakdown
+    dataLoadDuration?: number
+    dataLoadSource?: string
+    // `backend` contains detailed per-step timing info returned from server
+    backend?: Record<string, any>
   }
 
   // Reasoning content (Native Tool Calling mode)

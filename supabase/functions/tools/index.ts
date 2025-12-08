@@ -24,41 +24,60 @@ export async function executeFunction(
   params: any,
   context: FunctionContext
 ): Promise<FunctionResult> {
+  const executorStart = performance.now();
   console.log(`[Executor] Calling ${functionName} with params:`, params);
 
   try {
+    let result: FunctionResult;
+
     switch (functionName) {
       case 'get_store_info':
-        return await getStoreInfo(params, context);
+        result = await getStoreInfo(params, context);
+        break;
       case 'get_services':
-        return await getServices(params, context);
+        result = await getServices(params, context);
+        break;
       case 'get_products':
-        return await getProducts(params, context);
+        result = await getProducts(params, context);
+        break;
       case 'search_services':
-        return await searchServices(params, context);
+        result = await searchServices(params, context);
+        break;
       case 'search_products':
-        return await searchProducts(params, context);
+        result = await searchProducts(params, context);
+        break;
       case 'submit_lead':
-        return await submitLead(params, context);
+        result = await submitLead(params, context);
+        break;
       case 'get_misc_data':
-        return await getMiscData(params, context);
+        result = await getMiscData(params, context);
+        break;
       case 'check_availability':
-        return await checkAvailability(params, context);
+        result = await checkAvailability(params, context);
+        break;
       case 'create_booking':
-        return await createBooking(params, context);
+        result = await createBooking(params, context);
+        break;
       case 'get_booking_slots':
-        return await getBookingSlots(params, context);
+        result = await getBookingSlots(params, context);
+        break;
       case 'get_recommendations':
-        return await getRecommendations(params, context);
+        result = await getRecommendations(params, context);
+        break;
       default:
-        return {
+        result = {
           success: false,
           error: `Unknown function: ${functionName}`
         };
     }
+
+    const totalDuration = performance.now() - executorStart;
+    console.log(`[Executor] ⏱️ ${functionName} completed in ${totalDuration.toFixed(0)}ms`);
+    return result;
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[Executor] Error in ${functionName}:`, errMsg);
+    const totalDuration = performance.now() - executorStart;
+    console.error(`[Executor] Error in ${functionName} after ${totalDuration.toFixed(0)}ms:`, errMsg);
     return {
       success: false,
       error: errMsg || 'Function execution failed'

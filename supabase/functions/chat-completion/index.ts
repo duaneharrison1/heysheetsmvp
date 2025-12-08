@@ -75,6 +75,7 @@ async function loadTab(
   authToken: string,
   requestId?: string
 ): Promise<any[]> {
+  const loadTabStart = performance.now();
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
 
   try {
@@ -88,21 +89,30 @@ async function loadTab(
       headers['X-Request-ID'] = requestId;
     }
 
+    const fetchStart = performance.now();
     const response = await fetch(`${supabaseUrl}/functions/v1/google-sheet`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ operation: 'read', storeId, tabName }),
     });
+    const fetchDuration = performance.now() - fetchStart;
 
     if (!response.ok) {
-      console.error(`[loadTab] Failed to load ${tabName}:`, await response.text());
+      console.error(`[loadTab] Failed to load ${tabName} (fetch took ${fetchDuration.toFixed(0)}ms):`, await response.text());
       return [];
     }
 
+    const parseStart = performance.now();
     const result = await response.json();
+    const parseDuration = performance.now() - parseStart;
+
+    const totalDuration = performance.now() - loadTabStart;
+    log(requestId || '', `[loadTab] ${tabName}: fetch=${fetchDuration.toFixed(0)}ms, parse=${parseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms, rows=${result.data?.length || 0}`);
+
     return result.data || [];
   } catch (error) {
-    console.error(`[loadTab] Error loading ${tabName}:`, error);
+    const totalDuration = performance.now() - loadTabStart;
+    console.error(`[loadTab] Error loading ${tabName} after ${totalDuration.toFixed(0)}ms:`, error);
     return [];
   }
 }
@@ -111,6 +121,7 @@ async function loadTab(
 interface LoadStoreDataResult {
   storeData: StoreData;
   duration: number;
+  timing?: Record<string, number>;
 }
 
 async function loadStoreData(
@@ -121,6 +132,7 @@ async function loadStoreData(
   requestId: string
 ): Promise<LoadStoreDataResult> {
   const startTime = performance.now();
+  const timing: Record<string, number> = {};
   const storeData: StoreData = { services: [], products: [], hours: [] };
 
   const hasCachedServices = cachedData?.services && cachedData.services.length > 0;
@@ -136,11 +148,15 @@ async function loadStoreData(
   }
 
   try {
+    const schemaLookupStart = performance.now();
     const detectedSchema = storeConfig.detected_schema || {};
     const servicesTab = findActualTabName('services', detectedSchema);
     const productsTab = findActualTabName('products', detectedSchema);
     const hoursTab = findActualTabName('hours', detectedSchema);
+    timing.schemaLookup = performance.now() - schemaLookupStart;
 
+    // Track individual fetch times
+    const fetchStart = performance.now();
     const [services, products, hours] = await Promise.all([
       hasCachedServices
         ? Promise.resolve(cachedData!.services!)
@@ -158,19 +174,25 @@ async function loadStoreData(
           ? loadTab(hoursTab, storeId, serviceRoleKey, requestId)
           : Promise.resolve([]),
     ]);
+    timing.parallelFetch = performance.now() - fetchStart;
 
     const duration = performance.now() - startTime;
     log(requestId, `📊 Store data loaded (${duration.toFixed(0)}ms)`, {
       services: services.length,
       products: products.length,
       hours: hours.length,
+      timing: {
+        schemaLookup: timing.schemaLookup.toFixed(0),
+        parallelFetch: timing.parallelFetch.toFixed(0),
+        fromCache: { services: hasCachedServices, products: hasCachedProducts, hours: hasCachedHours },
+      },
     });
 
-    return { storeData: { services, products, hours }, duration };
+    return { storeData: { services, products, hours }, duration, timing };
   } catch (error) {
     console.error('[Orchestrator] Error pre-loading data:', error);
     const duration = performance.now() - startTime;
-    return { storeData, duration };
+    return { storeData, duration, timing };
   }
 }
 
@@ -380,10 +402,14 @@ serve(async (req) => {
   const requestId = req.headers.get('X-Request-ID') || crypto.randomUUID();
   const requestStart = performance.now();
 
+  // Timing tracking object
+  const timing: Record<string, number> = {};
+
   log(requestId, '📨 Chat completion started');
 
   try {
-    // Parse request
+    // Parse request (with timing)
+    const parseStart = performance.now();
     const body: ChatCompletionRequest = await req.json();
     const {
       messages,
@@ -395,6 +421,8 @@ serve(async (req) => {
       cachedData?: { services?: any[]; products?: any[]; hours?: any[] };
       reasoningEnabled?: boolean;
     };
+    timing.requestParse = performance.now() - parseStart;
+    log(requestId, `⏱️ Request parsed (${timing.requestParse.toFixed(0)}ms)`);
 
     log(requestId, 'Received settings:', {
       model: model || `${DEFAULT_MODEL} (default)`,
@@ -417,17 +445,23 @@ serve(async (req) => {
       model: model || `${DEFAULT_MODEL} (default)`,
     });
 
-    // Initialize Supabase client
+    // Initialize Supabase client (with timing)
+    const supabaseInitStart = performance.now();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    timing.supabaseInit = performance.now() - supabaseInitStart;
+    log(requestId, `⏱️ Supabase client init (${timing.supabaseInit.toFixed(0)}ms)`);
 
-    // Load store configuration
+    // Load store configuration (with timing)
+    const storeConfigStart = performance.now();
     const { data: store, error: storeError } = await supabase
       .from('stores')
       .select('*')
       .eq('id', storeId)
       .single();
+    timing.storeConfigFetch = performance.now() - storeConfigStart;
+    log(requestId, `⏱️ Store config fetched from DB (${timing.storeConfigFetch.toFixed(0)}ms)`);
 
     if (storeError || !store) {
       return new Response(
@@ -436,6 +470,8 @@ serve(async (req) => {
       );
     }
 
+    // Parse store config (with timing)
+    const schemaParseStart = performance.now();
     const storeConfig: StoreConfig = {
       ...store,
       detected_schema:
@@ -443,6 +479,7 @@ serve(async (req) => {
           ? JSON.parse(store.detected_schema)
           : store.detected_schema,
     };
+    timing.schemaParse = performance.now() - schemaParseStart;
 
     console.log('[Orchestrator] Store config:', {
       id: storeConfig.id,
@@ -531,7 +568,21 @@ serve(async (req) => {
         dataLoadSource
       );
 
-      log(requestId, `⏱️ Timing: dataLoad=${orchestratorDataLoadDuration.toFixed(0)}ms, intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms), response=0ms, total=${totalDuration.toFixed(0)}ms`);
+      // Calculate overhead (time not accounted for in main phases)
+      const accountedTime = (timing.requestParse || 0) + (timing.supabaseInit || 0) + (timing.storeConfigFetch || 0) + (timing.schemaParse || 0) + orchestratorDataLoadDuration + classifyDuration + functionDuration;
+      const overhead = totalDuration - accountedTime;
+
+      log(requestId, `⏱️ FULL TIMING BREAKDOWN (skipResponder):`);
+      log(requestId, `   requestParse: ${(timing.requestParse || 0).toFixed(0)}ms`);
+      log(requestId, `   supabaseInit: ${(timing.supabaseInit || 0).toFixed(0)}ms`);
+      log(requestId, `   storeConfigFetch: ${(timing.storeConfigFetch || 0).toFixed(0)}ms`);
+      log(requestId, `   schemaParse: ${(timing.schemaParse || 0).toFixed(0)}ms`);
+      log(requestId, `   dataPreload: ${orchestratorDataLoadDuration.toFixed(0)}ms`);
+      log(requestId, `   classifier: ${classifyDuration.toFixed(0)}ms`);
+      log(requestId, `   function: ${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms)`);
+      log(requestId, `   responder: 0ms (skipped)`);
+      log(requestId, `   overhead/unaccounted: ${overhead.toFixed(0)}ms`);
+      log(requestId, `   TOTAL: ${totalDuration.toFixed(0)}ms`);
       log(requestId, `✨ Complete with skipResponder (${totalDuration.toFixed(0)}ms)`);
 
       return new Response(JSON.stringify(response), {
@@ -580,7 +631,22 @@ serve(async (req) => {
 
     log(requestId, `✅ Response generated (${responseDuration.toFixed(0)}ms)`);
     log(requestId, `📊 Tokens: ${totalInputTokens} in, ${totalOutputTokens} out, $${totalCost.toFixed(4)}`);
-    log(requestId, `⏱️ Timing: dataLoad=${orchestratorDataLoadDuration.toFixed(0)}ms, intent=${classifyDuration.toFixed(0)}ms, function=${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms), response=${responseDuration.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+
+    // Calculate overhead (time not accounted for in main phases)
+    const accountedTime = (timing.requestParse || 0) + (timing.supabaseInit || 0) + (timing.storeConfigFetch || 0) + (timing.schemaParse || 0) + orchestratorDataLoadDuration + classifyDuration + functionDuration + responseDuration;
+    const overhead = totalDuration - accountedTime;
+
+    log(requestId, `⏱️ FULL TIMING BREAKDOWN:`);
+    log(requestId, `   requestParse: ${(timing.requestParse || 0).toFixed(0)}ms`);
+    log(requestId, `   supabaseInit: ${(timing.supabaseInit || 0).toFixed(0)}ms`);
+    log(requestId, `   storeConfigFetch: ${(timing.storeConfigFetch || 0).toFixed(0)}ms`);
+    log(requestId, `   schemaParse: ${(timing.schemaParse || 0).toFixed(0)}ms`);
+    log(requestId, `   dataPreload: ${orchestratorDataLoadDuration.toFixed(0)}ms`);
+    log(requestId, `   classifier: ${classifyDuration.toFixed(0)}ms`);
+    log(requestId, `   function: ${functionDuration.toFixed(0)}ms (dataLoad=${functionDataLoadDuration.toFixed(0)}ms)`);
+    log(requestId, `   responder: ${responseDuration.toFixed(0)}ms`);
+    log(requestId, `   overhead/unaccounted: ${overhead.toFixed(0)}ms`);
+    log(requestId, `   TOTAL: ${totalDuration.toFixed(0)}ms`);
     log(requestId, `✨ Complete (${totalDuration.toFixed(0)}ms)`);
 
     // Step 4: Return response

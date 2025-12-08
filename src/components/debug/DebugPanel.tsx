@@ -487,6 +487,78 @@ function RequestCard({
             </div>
           )}
 
+          {/* Backend detailed timings (if available) */}
+          {request.timings?.backend && (
+            <div className="text-xs text-gray-300">
+              <div className="text-gray-400 font-semibold mb-1">Backend Timing Breakdown:</div>
+              <div className="space-y-1">
+                {/* Setup / Request parsing */}
+                {(request.timings.backend.requestParse || request.timings.backend.supabaseInit || request.timings.backend.storeConfigFetch) && (
+                  <div className="text-gray-400">
+                    ⚙️ Setup:
+                    {request.timings.backend.requestParse !== undefined && (
+                      <span className="ml-2 text-cyan-400">parse { (request.timings.backend.requestParse/1000).toFixed(2)}s</span>
+                    )}
+                    {request.timings.backend.supabaseInit !== undefined && (
+                      <span className="ml-2 text-cyan-400">supabase init { (request.timings.backend.supabaseInit/1000).toFixed(2)}s</span>
+                    )}
+                    {request.timings.backend.storeConfigFetch !== undefined && (
+                      <span className="ml-2 text-cyan-400">store config { (request.timings.backend.storeConfigFetch/1000).toFixed(2)}s</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Schema parse */}
+                {request.timings.backend.schemaParse !== undefined && (
+                  <div className="text-gray-400">🔎 Schema parse: {(request.timings.backend.schemaParse/1000).toFixed(2)}s</div>
+                )}
+
+                {/* Orchestrator / per-tab data loads */}
+                {request.timings.backend.orchestratorDataLoadDuration !== undefined && (
+                  <div className="text-cyan-400">📦 Orchestrator data pre-load: {(request.timings.backend.orchestratorDataLoadDuration/1000).toFixed(2)}s</div>
+                )}
+                {request.timings.backend.perTabTimings && (
+                  <div className="ml-3 text-xs text-gray-300">
+                    <div className="text-gray-400 font-semibold">Per-tab loads:</div>
+                    <pre className="text-xs text-gray-200 whitespace-pre-wrap bg-gray-800 p-2 rounded">{JSON.stringify(request.timings.backend.perTabTimings, null, 2)}</pre>
+                  </div>
+                )}
+
+                {/* Classifier internals */}
+                {request.timings.backend.classifier && (
+                  <div className="text-gray-400">🧭 Classifier: {( (request.timings.backend.classifier.apiCall || 0) /1000).toFixed(2)}s total
+                    <div className="ml-3 text-xs text-gray-300">
+                      <div>promptBuild: {(request.timings.backend.classifier.promptBuild || 0)/1000}s</div>
+                      <div>apiCall: {(request.timings.backend.classifier.apiCall || 0)/1000}s</div>
+                      <div>jsonParse: {(request.timings.backend.classifier.jsonParse || 0)/1000}s</div>
+                      <div>classificationParse: {(request.timings.backend.classifier.classificationParse || 0)/1000}s</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Responder internals */}
+                {request.timings.backend.responder && (
+                  <div className="text-gray-400">🤖 Responder: {( (request.timings.backend.responder.apiCall || 0) /1000).toFixed(2)}s total
+                    <div className="ml-3 text-xs text-gray-300">
+                      <div>promptBuild: {(request.timings.backend.responder.promptBuild || 0)/1000}s</div>
+                      <div>apiCall: {(request.timings.backend.responder.apiCall || 0)/1000}s</div>
+                      <div>jsonParse: {(request.timings.backend.responder.jsonParse || 0)/1000}s</div>
+                      <div>responseParse: {(request.timings.backend.responder.responseParse || 0)/1000}s</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Function-level data load and overhead */}
+                {request.timings.backend.functionDataLoadDuration !== undefined && (
+                  <div className="text-gray-400">🔧 Function data load: {(request.timings.backend.functionDataLoadDuration/1000).toFixed(2)}s</div>
+                )}
+                {request.timings.backend.overhead !== undefined && (
+                  <div className="text-gray-400">⏱️ Overhead / unaccounted: {(request.timings.backend.overhead/1000).toFixed(2)}s</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Reasoning Content - shown when reasoning was used */}
           {request.reasoning && (
             <div className="text-xs" onClick={(e) => e.stopPropagation()}>

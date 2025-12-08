@@ -355,6 +355,44 @@ export default function DebugChat() {
         dataLoadDuration: data.debug?.dataLoadDuration,
         dataLoadSource: data.debug?.dataLoadSource,
       };
+      // Capture extended backend timing details if present
+      const backendDebug = data.debug || {};
+      const backendTimings: Record<string, any> = {
+        // request setup
+        requestParse: backendDebug.requestParse ?? backendDebug.request_parse ?? backendDebug.requestParseMs,
+        supabaseInit: backendDebug.supabaseInit ?? backendDebug.supabase_init ?? backendDebug.supabaseInitMs,
+        storeConfigFetch: backendDebug.storeConfigFetch ?? backendDebug.store_config_ms ?? backendDebug.storeConfigFetchMs,
+        schemaParse: backendDebug.schemaParse ?? backendDebug.schema_parse,
+
+        // orchestrator / prefetch
+        orchestratorDataLoadDuration: backendDebug.orchestratorDataLoadDuration ?? backendDebug.dataPreload ?? backendDebug.dataLoadDuration,
+        perTabTimings: backendDebug.perTabTimings ?? backendDebug.dataLoadPerTab ?? backendDebug.tabTimings,
+
+        // classifier internals
+        classifier: {
+          promptBuild: backendDebug.classifier?.promptBuild ?? backendDebug.classifierPromptBuild ?? backendDebug.classifier_prompt_build,
+          apiCall: backendDebug.classifier?.apiCall ?? backendDebug.classifierApiCall ?? backendDebug.classifier_api_call,
+          jsonParse: backendDebug.classifier?.jsonParse ?? backendDebug.classifierJsonParse,
+          classificationParse: backendDebug.classifier?.classificationParse ?? backendDebug.classificationParse,
+        },
+
+        // responder internals
+        responder: {
+          promptBuild: backendDebug.responder?.promptBuild ?? backendDebug.responderPromptBuild,
+          apiCall: backendDebug.responder?.apiCall ?? backendDebug.responderApiCall,
+          jsonParse: backendDebug.responder?.jsonParse ?? backendDebug.responderJsonParse,
+          responseParse: backendDebug.responder?.responseParse ?? backendDebug.responseParse,
+        },
+
+        // function-level data load
+        functionDataLoadDuration: backendDebug.functionDataLoadDuration ?? backendDebug.function_data_load_duration ?? data.functionResult?.data?.dataLoadDuration,
+
+        // overhead/unaccounted time
+        overhead: backendDebug.overhead ?? backendDebug.unaccounted ?? backendDebug.overheadMs,
+      };
+
+      // Merge into timings payload for display/storage
+      timingsPayload.backend = backendTimings;
 
       updateRequest(requestId, {
         response: {
@@ -398,6 +436,8 @@ export default function DebugChat() {
             reasoningDuration: data.debug?.reasoningDuration,
             dataLoadDuration: data.debug?.dataLoadDuration,
             dataLoadSource: data.debug?.dataLoadSource,
+            // include backend-detailed timings if present
+            backend: timingsPayload.backend,
           },
           function_calls: data.debug?.functionCalls || null,
           steps: data.debug?.steps || null,

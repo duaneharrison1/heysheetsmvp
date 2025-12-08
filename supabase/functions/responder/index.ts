@@ -190,17 +190,23 @@ export async function generateResponse(
   model?: string,
   options?: ResponderOptions
 ): Promise<ResponderResult> {
+  const responderStart = performance.now();
+  const timing: Record<string, number> = {};
+
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!OPENROUTER_API_KEY) {
     throw new Error('OPENROUTER_API_KEY not configured');
   }
 
-  // Build prompt and request
+  // Build prompt and request (with timing)
+  const promptBuildStart = performance.now();
   const prompt = buildPrompt(messages, classification, functionResult, store, options);
   const selectedModel = model || DEFAULT_MODEL;
   const requestBody = buildRequestBody(prompt, selectedModel);
+  timing.promptBuild = performance.now() - promptBuildStart;
 
-  // Call OpenRouter API
+  // Call OpenRouter API (with timing)
+  const apiCallStart = performance.now();
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {
@@ -209,6 +215,7 @@ export async function generateResponse(
     },
     body: JSON.stringify(requestBody),
   });
+  timing.apiCall = performance.now() - apiCallStart;
 
   if (!response.ok) {
     const error = await response.text();
@@ -216,6 +223,16 @@ export async function generateResponse(
     throw new Error(`Response generation failed: ${response.statusText}`);
   }
 
+  const parseStart = performance.now();
   const result = await response.json();
-  return parseResponse(result);
+  timing.jsonParse = performance.now() - parseStart;
+
+  const responseParseStart = performance.now();
+  const parsedResponse = parseResponse(result);
+  timing.responseParse = performance.now() - responseParseStart;
+
+  const totalDuration = performance.now() - responderStart;
+  console.log(`[Responder] ⏱️ TIMING: promptBuild=${timing.promptBuild.toFixed(0)}ms, apiCall=${timing.apiCall.toFixed(0)}ms, jsonParse=${timing.jsonParse.toFixed(0)}ms, responseParse=${timing.responseParse.toFixed(0)}ms, total=${totalDuration.toFixed(0)}ms`);
+
+  return parsedResponse;
 }
