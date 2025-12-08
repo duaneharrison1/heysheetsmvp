@@ -17,6 +17,31 @@ import {
 import { useDebugStore } from "@/stores/useDebugStore";
 import { generateCorrelationId } from "@/lib/debug/correlation-id";
 import { requestTimer } from "@/lib/debug/timing";
+
+// ============================================================================
+// CACHING STRATEGY: DATABASE CACHE (Backend/Supabase)
+// ============================================================================
+// 
+// OLD APPROACH (DEPRECATED - Still in imports, to be removed):
+//   - Frontend precaches data on page load using localStorage/memory
+//   - Passes cachedData to chat-completion function
+//   - Problem: Data stored on client, exposed to users, duplicates backend logic
+//   - Imports: precacheStoreData, getCachedStoreData, getCacheStats (in storeDataCache.ts)
+//
+// NEW APPROACH (CURRENT - Database cache via usePrecacheStore hook):
+//   - Backend stores cache in Supabase database table (schema: cache)
+//   - usePrecacheStore() hook calls precache-store function when selectedStoreId changes
+//   - google-sheet function checks database cache before fetching Google Sheets
+//   - No cachedData passed from frontend to backend
+//   - Frontend is stateless regarding data storage
+//   - Cache expires via TTL (1 hour) automatically
+//
+// MIGRATION STATUS: In transition - hook added, old code still present for testing
+// ============================================================================
+
+import { usePrecacheStore } from "@/hooks/usePrecacheStore";
+
+// OLD IMPORTS (to be removed when deprecated)
 import { precacheStoreData, getCachedStoreData, getCacheStats } from "@/lib/storeDataCache";
 import { DebugPanel } from "@/components/debug/DebugPanel";
 // Test scenarios modal - shown when debug panel is open
@@ -56,6 +81,18 @@ export default function DebugChat() {
 
   // Store selector state (replaces URL param)
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+
+  // ============================================================================
+  // CACHE WARMING (NEW APPROACH - Database Cache)
+  // ============================================================================
+  // Called whenever selectedStoreId changes
+  // - Triggers precache-store function with action: 'precache'
+  // - Fetches services, products, hours via google-sheet function
+  // - Stores results in Supabase cache table
+  // - No data returned to frontend
+  // - Subsequent requests to google-sheet will hit cache automatically
+  // - Cache expires after 1 hour (TTL)
+  usePrecacheStore(selectedStoreId);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');

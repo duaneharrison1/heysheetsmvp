@@ -4,6 +4,9 @@ import { JWT } from 'npm:google-auth-library@9.0.0';
 // @ts-ignore: unresolved npm specifiers in this editor environment
 import { GoogleSpreadsheet } from 'npm:google-spreadsheet@5.0.2';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getMemoryCacheData, setMemoryCacheData } from './memoryCache.ts';
+import { getDatabaseCacheData, setDatabaseCacheData } from './databaseCache.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -39,10 +42,6 @@ wG8nlQHXMIMDHKhQZTKl4dnmgrYoC5YDBAvqrkFdAoGAcWlMGnmZ3rhRZzRMfr4S
 NIAmTGj+xT0A0FWZULXpbmyUXSYhEQ4nbTcX9wlRlX11ixxehPB3Ecj6DiCNhGNH
 x8o8OU+8ereiJ2yVcCTggUU=
 -----END PRIVATE KEY-----`;
-
-// Simple cache
-const cache = new Map();
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour for longer session-based caching
 
 // Logging helper with request ID
 function log(requestId: string | null, message: string, data?: any) {
@@ -148,9 +147,9 @@ serve(async (req)=>{
     });
   }
   try {
-    const body = await req.json();
-    const { operation, storeId, tabName, columns, data, sheetId: newSheetId } = body;
-    log(requestId, '📋 Operation:', { operation, storeId, tabName });
+     const body = await req.json();
+     const { operation, storeId, tabName, columns, data, sheetId: newSheetId, cacheType = 'database' } = body;
+     log(requestId, '📋 Operation:', { operation, storeId, tabName, cacheType });
     // ========================================
     // READ OPERATION - FULLY PUBLIC
     // ========================================
@@ -179,14 +178,20 @@ serve(async (req)=>{
           }
         });
       }
-      // Check cache
-      const cacheKey = `${sheetId}:${tabName}`;
-      const cached = cache.get(cacheKey);
-      if (cached && Date.now() < cached.expiry) {
-        log(requestId, '💾 Cache hit:', cacheKey);
+      // Check cache based on cacheType parameter
+      let cachedData = null;
+      if (cacheType === 'memory') {
+        const cacheKey = `${sheetId}:${tabName}`;
+        cachedData = getMemoryCacheData(cacheKey);
+      } else if (cacheType === 'database') {
+        cachedData = await getDatabaseCacheData(storeId, tabName);
+      }
+
+      if (cachedData) {
+        log(requestId, '💾 Cache hit (${cacheType}): ${tabName}');
         return new Response(JSON.stringify({
           success: true,
-          data: cached.data
+          data: cachedData
         }), {
           status: 200,
           headers: {
@@ -242,11 +247,14 @@ serve(async (req)=>{
         }
         return obj;
       });
-      // Cache result (cacheKey already defined above)
-      cache.set(cacheKey, {
-        data: result,
-        expiry: Date.now() + CACHE_TTL
-      });
+      // Save to cache based on cacheType parameter
+      if (cacheType === 'memory') {
+        const cacheKey = `${sheetId}:${tabName}`;
+        setMemoryCacheData(cacheKey, result);
+      } else if (cacheType === 'database') {
+        await setDatabaseCacheData(storeId, tabName, result);
+      }
+
       log(requestId, '✅ Read success:', `${result.length} rows from ${tabName}`);
       return new Response(JSON.stringify({
         success: true,

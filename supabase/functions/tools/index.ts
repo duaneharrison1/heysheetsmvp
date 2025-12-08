@@ -1,4 +1,5 @@
 import { FunctionContext, FunctionResult, StoreConfig } from '../_shared/types.ts';
+import { CACHING_STRATEGY } from '../_shared/caching-config.ts';
 import {
   validateParams,
   GetStoreInfoSchema,
@@ -1504,14 +1505,22 @@ async function loadTabDataWithTiming(
     headers['X-Request-ID'] = requestId;
   }
 
+  // Build request body based on caching strategy
+  const requestBody: any = {
+    operation: 'read',
+    storeId,
+    tabName
+  };
+
+  // If using database cache strategy, pass cacheType parameter
+  if (CACHING_STRATEGY === 'database') {
+    requestBody.cacheType = 'database';
+  }
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/google-sheet`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      operation: 'read',
-      storeId,
-      tabName
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {

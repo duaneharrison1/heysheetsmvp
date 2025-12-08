@@ -1,11 +1,64 @@
 /**
- * 2-Tier Cache for Store Data
+ * ============================================================================
+ * FILE: storeDataCache.ts
+ * CACHING APPROACH: OLD - DEPRECATED (Frontend/Browser Cache)
+ * STATUS: DEPRECATED - Use new database cache via usePrecacheStore hook instead
+ * ============================================================================
+ *
+ * 2-Tier Cache for Store Data (LEGACY)
  * Tier 1: Memory (Map) - fast, lost on refresh
  * Tier 2: localStorage - slower, survives refresh
  *
- * This cache is used to:
- * 1. Precache data when store page loads (before user sends message)
- * 2. Pass cached data to chat-completion to avoid refetching
+ * ORIGINAL PURPOSE:
+ *   1. Precache data when store page loads (before user sends message)
+ *   2. Pass cached data to chat-completion to avoid refetching
+ *
+ * ISSUES WITH THIS APPROACH:
+ *   ❌ Data stored on client-side (exposed to users via DevTools)
+ *   ❌ Redundant storage (data cached on frontend AND backend)
+ *   ❌ Frontend sends data blobs back to backend with each request
+ *   ❌ Complex cache invalidation logic duplicated in frontend
+ *   ❌ Inconsistent with backend cache (stale data possible)
+ *   ❌ Takes up browser storage quota
+ *   ❌ Lost on page refresh (localStorage fallback is slow)
+ *
+ * REPLACEMENT:
+ *   ✅ src/hooks/usePrecacheStore.ts - New hook-based approach
+ *   ✅ supabase/functions/precache-store/index.ts - Backend precacher
+ *   ✅ supabase/functions/lib/cache.ts - Database cache helpers
+ *   ✅ Cache stored in Supabase database (cache table)
+ *   ✅ TTL-based expiry (1 hour)
+ *   ✅ No data exposure to client
+ *
+ * MIGRATION INSTRUCTIONS:
+ *   1. Remove imports of precacheStoreData, getCachedStoreData, getCacheStats
+ *   2. Replace with usePrecacheStore hook call
+ *   3. Remove cachedData parameter from chat-completion requests
+ *   4. Test that caching still works via database
+ *   5. Delete this file when confident old approach not needed
+ *
+ * WHERE THIS FILE IS USED:
+ *   - src/pages/StorePage.tsx (line 23, marked deprecated)
+ *   - src/pages/DebugChat.tsx (line 20, marked deprecated)
+ *   - These imports are kept for now for backwards compatibility
+ *
+ * TIMELINE:
+ *   ✅ Implemented: New database cache approach created
+ *   ✅ Wired up: usePrecacheStore hook added to StorePage and DebugChat
+ *   ⏳ Testing: Verify caching works with new approach
+ *   📋 Cleanup: Remove old imports and delete this file
+ *
+ * RELATED FILES:
+ *   - NEW: src/hooks/usePrecacheStore.ts
+ *   - NEW: supabase/functions/precache-store/index.ts
+ *   - NEW: supabase/functions/lib/cache.ts
+ *   - NEW: supabase/functions/google-sheet/databaseCache.ts
+ *   - NEW: supabase/migrations/20250108_create_cache_table.sql
+ *   - UPDATED: supabase/functions/google-sheet/index.ts (added cacheType param)
+ *   - DEPRECATED: src/pages/StorePage.tsx (old imports still here)
+ *   - DEPRECATED: src/pages/DebugChat.tsx (old imports still here)
+ *
+ * ============================================================================
  */
 
 interface CacheEntry<T> {

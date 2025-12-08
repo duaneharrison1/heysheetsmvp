@@ -18,8 +18,32 @@ import {
   Phone, Mail, MapPin, Calendar, Store as StoreIcon, Tag, ExternalLink,
   MessageCircle, ShoppingBag, Sparkles, CheckCircle2, Search, Database, Info, X
 } from "lucide-react";
+// ============================================================================
+// CACHING STRATEGY: DATABASE CACHE (Backend/Supabase)
+// ============================================================================
+// 
+// OLD APPROACH (DEPRECATED - Still in imports, to be removed):
+//   - Frontend precaches data on page load using localStorage/memory
+//   - Passes cachedData to chat-completion function
+//   - Problem: Data stored on client, exposed to users, duplicates backend logic
+//   - Imports: precacheStoreData, getCachedStoreData, getCacheStats (in storeDataCache.ts)
+//
+// NEW APPROACH (CURRENT - Database cache via usePrecacheStore hook):
+//   - Backend stores cache in Supabase database table (schema: cache)
+//   - usePrecacheStore() hook calls precache-store function on page load
+//   - google-sheet function checks database cache before fetching Google Sheets
+//   - No cachedData passed from frontend to backend
+//   - Frontend is stateless regarding data storage
+//   - Cache expires via TTL (1 hour) automatically
+//
+// MIGRATION STATUS: In transition - hook added, old code still present for testing
+// ============================================================================
+
 // Debugging intentionally disabled on this page to avoid showing
 // the global debug panel or toggle here.
+import { usePrecacheStore } from "@/hooks/usePrecacheStore";
+
+// OLD IMPORTS (to be removed when deprecated)
 import { precacheStoreData, getCachedStoreData, getCacheStats } from "@/lib/storeDataCache";
 
 interface Message {
@@ -109,6 +133,18 @@ export default function StorePage() {
   const selectedModel: string | undefined = undefined;
   // A/B Test: Native tool calling mode (disabled here)
   const useNativeToolCalling = false;
+
+  // ============================================================================
+  // CACHE WARMING (NEW APPROACH - Database Cache)
+  // ============================================================================
+  // Called when component mounts with storeId
+  // - Triggers precache-store function with action: 'precache'
+  // - Fetches services, products, hours via google-sheet function
+  // - Stores results in Supabase cache table
+  // - No data returned to frontend
+  // - Subsequent requests to google-sheet will hit cache automatically
+  // - Cache expires after 1 hour (TTL)
+  usePrecacheStore(storeId);
 
   // Hide global debug UI elements while on the Store page (DOM-only, restored on unmount)
   useEffect(() => {

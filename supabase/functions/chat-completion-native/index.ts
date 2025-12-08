@@ -19,6 +19,7 @@ import {
 } from '../_shared/types.ts';
 import { slimForResponder } from '../_shared/slim.ts';
 import { getReasoningConfig } from '../_shared/model-config.ts';
+import { CACHING_STRATEGY } from '../_shared/caching-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -317,6 +318,18 @@ async function loadTab(
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
 
   try {
+    // Build request body based on caching strategy
+    const requestBody: any = { 
+      operation: 'read', 
+      storeId, 
+      tabName 
+    };
+
+    // If using database cache strategy, pass cacheType parameter
+    if (CACHING_STRATEGY === 'database') {
+      requestBody.cacheType = 'database';
+    }
+
     const response = await fetch(`${supabaseUrl}/functions/v1/google-sheet`, {
       method: 'POST',
       headers: {
@@ -325,11 +338,7 @@ async function loadTab(
         'apikey': authToken,
         'X-Request-ID': requestId,
       },
-      body: JSON.stringify({
-        operation: 'read',
-        storeId,
-        tabName
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {

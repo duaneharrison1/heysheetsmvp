@@ -21,6 +21,7 @@ import {
   getModelPricing,
   calculateCost,
 } from '../_shared/config.ts';
+import { CACHING_STRATEGY, logCachingStrategy } from '../_shared/caching-config.ts';
 import { classifyIntent } from '../classifier/index.ts';
 import { generateResponse } from '../responder/index.ts';
 import { executeFunction } from '../tools/index.ts';
@@ -97,10 +98,24 @@ async function loadTab(
     }
 
     const fetchStart = performance.now();
+    
+    // Build request body based on caching strategy
+    const requestBody: any = { 
+      operation: 'read', 
+      storeId, 
+      tabName 
+    };
+
+    // If using database cache strategy, pass cacheType parameter
+    if (CACHING_STRATEGY === 'database') {
+      requestBody.cacheType = 'database';
+    }
+    // If using legacy strategy, no cacheType - backend expects cachedData from frontend
+
     const response = await fetch(`${supabaseUrl}/functions/v1/google-sheet`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ operation: 'read', storeId, tabName }),
+      body: JSON.stringify(requestBody),
     });
     const fetchDuration = performance.now() - fetchStart;
 
@@ -143,11 +158,33 @@ async function loadStoreData(
   const timing: Record<string, number> = {};
   const storeData: StoreData = { services: [], products: [], hours: [] };
 
-  const hasCachedServices = cachedData?.services && cachedData.services.length > 0;
-  const hasCachedProducts = cachedData?.products && cachedData.products.length > 0;
-  const hasCachedHours = cachedData?.hours && cachedData.hours.length > 0;
+  // ============================================================================
+  // CACHING STRATEGY HANDLING
+  // ============================================================================
+  // 
+  // DATABASE STRATEGY: Backend caches in Supabase database
+  //   - loadTab() calls google-sheet with cacheType: 'database'
+  //   - google-sheet checks database cache first, fetches if miss
+  //   - cachedData from frontend is ignored
+  //   - No need to pass data back-and-forth
+  //
+  // LEGACY STRATEGY: Frontend caches in localStorage
+  //   - loadTab() calls google-sheet without cacheType
+  //   - google-sheet uses cachedData passed from frontend
+  //   - If hasCachedServices/Products/Hours, use frontend data
+  //   - Avoids refetch if frontend already has data
+  //
+  // CURRENT STRATEGY: database
+  //
+  // ============================================================================
 
-  if (hasCachedServices || hasCachedProducts || hasCachedHours) {
+  // Only use frontend cachedData if using LEGACY strategy
+  const useFrontendCache = CACHING_STRATEGY === 'legacy';
+  const hasCachedServices = useFrontendCache && cachedData?.services && cachedData.services.length > 0;
+  const hasCachedProducts = useFrontendCache && cachedData?.products && cachedData.products.length > 0;
+  const hasCachedHours = useFrontendCache && cachedData?.hours && cachedData.hours.length > 0;
+
+  if (useFrontendCache && (hasCachedServices || hasCachedProducts || hasCachedHours)) {
     logCachedDataUsage(
       requestId,
       cachedData?.services?.length || 0,
