@@ -1,13 +1,16 @@
+-- Drop existing cache table if it exists with wrong schema
+DROP TABLE IF EXISTS cache CASCADE;
+
 -- Create cache table for storing Google Sheets data
-CREATE TABLE IF NOT EXISTS cache (
+CREATE TABLE cache (
   key TEXT PRIMARY KEY,
   data JSONB NOT NULL,
-  expiresAt TIMESTAMP NOT NULL,
-  cachedAt TIMESTAMP DEFAULT now()
+  "expiresAt" TIMESTAMP NOT NULL,
+  "cachedAt" TIMESTAMP DEFAULT now()
 );
 
 -- Index for efficient expiry queries
-CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expiresAt);
+CREATE INDEX idx_cache_expires ON cache("expiresAt");
 
 -- Enable RLS
 ALTER TABLE cache ENABLE ROW LEVEL SECURITY;
