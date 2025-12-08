@@ -52,18 +52,20 @@
  */
 
 import { useEffect } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 export function usePrecacheStore(storeId: string | null | undefined) {
-  const supabase = useSupabaseClient();
-
   useEffect(() => {
     if (!storeId) return;
 
     const precacheData = async () => {
       try {
-        const supabaseUrl = supabase.supabaseUrl;
-        const anonKey = supabase.supabaseKey;
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !anonKey) {
+          console.warn('[usePrecacheStore] Missing Supabase environment variables');
+          return;
+        }
 
         const response = await fetch(
           `${supabaseUrl}/functions/v1/precache-store`,
@@ -99,5 +101,5 @@ export function usePrecacheStore(storeId: string | null | undefined) {
 
     precacheData();
     // No cleanup - cache persists via TTL
-  }, [storeId, supabase]);
+  }, [storeId]);
 }
