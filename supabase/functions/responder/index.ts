@@ -142,19 +142,31 @@ function parseResponse(result: Record<string, unknown>): ResponderResult {
   const choices = result.choices as Array<{ message: { content: string } }> | undefined;
   const rawContent = choices?.[0]?.message?.content || '';
 
-  let text = rawContent;
+  let text = '';
   let suggestions: string[] = [];
 
-  // Try JSON parse; extract from markdown fence if needed
+  // Try to extract JSON response object
   try {
+    // Match JSON object pattern - looks for { ... }
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      text = parsed.response || rawContent;
-      suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [];
+      // Extract response text and suggestions from parsed JSON
+      if (parsed.response) {
+        text = parsed.response;
+      }
+      if (Array.isArray(parsed.suggestions)) {
+        suggestions = parsed.suggestions.slice(0, 4);
+      }
     }
-  } catch {
-    // Use raw content as fallback
+  } catch (error) {
+    // JSON parsing failed, log for debugging
+    console.error('[Responder] Failed to parse response JSON:', error);
+  }
+
+  // Fallback: if no text extracted from JSON, use raw content
+  if (!text) {
+    text = rawContent || 'Unable to generate response';
   }
 
   const usage = (result.usage as { prompt_tokens?: number; completion_tokens?: number }) || {};
