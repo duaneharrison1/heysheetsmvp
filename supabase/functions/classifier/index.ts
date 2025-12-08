@@ -16,7 +16,8 @@ import {
   CLASSIFIER_TIMEOUT_MS,
   CLASSIFIER_MAX_CONTEXT_MESSAGES,
 } from '../_shared/config.ts';
-import { buildClassificationPrompt } from './CLASSIFIER_PROMPT.ts';
+import { buildClassificationPrompt, slimPrompt } from './prompt.ts';
+import { slimConversationHistory } from '../_shared/slim.ts';
 
 // ============================================================================
 // TYPES
@@ -33,12 +34,6 @@ export interface ClassifierResult {
   classification: Classification;
   usage: { input: number; output: number };
 }
-
-// ============================================================================
-// CLASSIFIER PROMPT
-// ============================================================================
-// Defined in CLASSIFIER_PROMPT.ts (single source of truth)
-// Edit prompt there directly - no code changes needed here
 
 // ============================================================================
 // RESPONSE PARSER
@@ -103,7 +98,7 @@ export async function classifyIntent(
   const promptBuildStart = performance.now();
   const lastMessage = messages[messages.length - 1]?.content || '';
   const recentMessages = messages.slice(-CLASSIFIER_MAX_CONTEXT_MESSAGES);
-  const conversationHistory = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+  const conversationHistory = slimConversationHistory(recentMessages);
 
   // Get date context
   const today = new Date();
@@ -112,9 +107,11 @@ export async function classifyIntent(
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-  // Build prompt from CLASSIFIER_PROMPT.ts
-  const prompt = buildClassificationPrompt(conversationHistory, lastMessage, todayStr, tomorrowStr);
+  // Build prompt (full version, then slim it for LLM)
+  const fullPrompt = buildClassificationPrompt(conversationHistory, lastMessage, todayStr, tomorrowStr);
+  const prompt = slimPrompt(fullPrompt);
   timing.promptBuild = performance.now() - promptBuildStart;
+
 
   // Call OpenRouter API (with timing)
   const controller = new AbortController();

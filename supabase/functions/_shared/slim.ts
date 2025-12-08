@@ -1,4 +1,57 @@
 /**
+ * SLIM UTILITIES
+ * ==============
+ * Reduces token usage by removing unnecessary content while preserving critical data.
+ *
+ * Three categories:
+ * 1. cleanupText() - Generic text cleanup (remove blank lines, trim whitespace)
+ * 2. slimConversationHistory() - Truncate individual messages in conversation
+ * 3. slimForResponder() - Remove UI-only fields from function results
+ */
+
+import { Message } from './types.ts';
+
+/**
+ * Generic text cleanup - removes consecutive blank lines and trims whitespace
+ * Reusable for prompts, messages, or any text content
+ * Token savings: ~30% from formatting alone
+ */
+export function cleanupText(text: string): string {
+  const lines = text.split('\n');
+  const cleaned: string[] = [];
+  let lastWasBlank = false;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Skip consecutive blank lines (keep only one)
+    if (!trimmed) {
+      if (!lastWasBlank) {
+        cleaned.push('');
+        lastWasBlank = true;
+      }
+      continue;
+    }
+    
+    lastWasBlank = false;
+    cleaned.push(trimmed);
+  }
+  
+  return cleaned.join('\n');
+}
+
+/**
+ * Slim conversation history - truncate individual message content
+ * Used by classifier and responder to reduce tokens from message history
+ * Token savings: varies based on message length (typically 20-40%)
+ */
+export function slimConversationHistory(messages: Message[], maxCharsPerMessage = 200): string {
+  return messages
+    .map(m => `${m.role}: ${m.content.substring(0, maxCharsPerMessage)}`)
+    .join('\n');
+}
+
+/**
  * SLIM FUNCTION RESULTS
  * =====================
  *

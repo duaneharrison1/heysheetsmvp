@@ -6,7 +6,7 @@
  */
 
 import { Classification, Message, FunctionResult, StoreConfig } from '../_shared/types.ts';
-import { slimForResponder } from '../_shared/slim.ts';
+import { slimForResponder, slimConversationHistory } from '../_shared/slim.ts';
 import {
   OPENROUTER_API_URL,
   DEFAULT_MODEL,
@@ -46,12 +46,10 @@ function buildStoreContext(store?: StoreConfig): string {
   return parts.join(' | ');
 }
 
-/** Build conversation history string (limited to recent messages) */
+/** Build conversation history string (limited to recent messages, slimmed) */
 function buildConversationHistory(messages: Message[]): string {
-  return messages
-    .slice(-RESPONDER_MAX_CONTEXT_MESSAGES)
-    .map(m => `${m.role}: ${m.content}`)
-    .join('\n');
+  const recentMessages = messages.slice(-RESPONDER_MAX_CONTEXT_MESSAGES);
+  return slimConversationHistory(recentMessages);
 }
 
 /** Build function result context for prompt */
