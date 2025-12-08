@@ -575,7 +575,8 @@ serve(async (req) => {
         totalDuration,
         model,
         totalDataLoadDuration > 0 ? totalDataLoadDuration : undefined,
-        dataLoadSource
+        dataLoadSource,
+        debugMode
       );
 
       logTimingBreakdown(
@@ -667,7 +668,8 @@ serve(async (req) => {
       reasoningEnabled,
       model,
       totalDataLoadDuration > 0 ? totalDataLoadDuration : undefined,
-      dataLoadSource
+      dataLoadSource,
+      debugMode
     );
 
     return new Response(JSON.stringify(response), {

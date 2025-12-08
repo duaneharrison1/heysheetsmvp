@@ -24,15 +24,19 @@ export function buildSkipResponderResponse(
   totalDuration: number,
   model?: string,
   dataLoadDuration?: number,
-  dataLoadSource?: 'orchestrator' | 'function' | 'both'
+  dataLoadSource?: 'orchestrator' | 'function' | 'both',
+  debugMode: boolean = false
 ): ChatCompletionResponse {
   const pricing = getModelPricing(model);
 
-  return {
+  const response: ChatCompletionResponse = {
     text: functionResult.message!,
     functionCalled: classification.function_to_call || undefined,
     functionResult,
-    debug: {
+  };
+
+  if (debugMode) {
+    response.debug = {
       intentDuration: classifyDuration,
       functionDuration,
       responseDuration: 0,
@@ -94,8 +98,10 @@ export function buildSkipResponderResponse(
           },
         },
       ],
-    },
-  };
+    };
+  }
+
+  return response;
 }
 
 /** Build full debug response with responder */
@@ -113,19 +119,23 @@ export function buildFullResponse(
   reasoningEnabled: boolean,
   model?: string,
   dataLoadDuration?: number,
-  dataLoadSource?: 'orchestrator' | 'function' | 'both'
+  dataLoadSource?: 'orchestrator' | 'function' | 'both',
+  debugMode: boolean = false
 ): ChatCompletionResponse {
   const pricing = getModelPricing(model);
   const totalInputTokens = classifyUsage.input + responseUsage.input;
   const totalOutputTokens = classifyUsage.output + responseUsage.output;
   const totalCost = calculateCost(totalInputTokens, totalOutputTokens, model);
 
-  return {
+  const response: ChatCompletionResponse = {
     text: responseText,
     functionCalled: classification.function_to_call || undefined,
     functionResult,
     suggestions,
-    debug: {
+  };
+
+  if (debugMode) {
+    response.debug = {
       endpoint: 'chat-completion',
       reasoningEnabled,
       intentDuration: classifyDuration,
@@ -199,6 +209,8 @@ export function buildFullResponse(
           },
         },
       ],
-    },
-  };
+    };
+  }
+
+  return response;
 }
